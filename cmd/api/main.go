@@ -38,7 +38,9 @@ func main() {
 	authSvc := auth.NewService(st, os.Getenv("LAUNCHPAD_BOOTSTRAP_TOKEN"))
 	appSvc := service.NewAppService(st)
 	releaseSvc := service.NewReleaseService(st, appSvc)
-	server := api.NewServer(appSvc, releaseSvc, authSvc, st)
+	scaleSvc := service.NewScaleService(st, appSvc)
+	changesetSvc := service.NewChangesetService(st, appSvc, releaseSvc)
+	server := api.NewServer(appSvc, releaseSvc, scaleSvc, changesetSvc, authSvc, st)
 
 	addr := envOr("LAUNCHPAD_API_ADDR", ":8080")
 	httpServer := &http.Server{Addr: addr, Handler: server.Routes()}

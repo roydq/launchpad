@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"github.com/launchpad/launchpad/internal/domain"
@@ -41,9 +39,6 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, appName string, inpu
 	if err != nil {
 		return nil, err
 	}
-	if app.ActiveDeploymentID != nil {
-		return nil, fmt.Errorf("%w: deployment already in progress", launchpad.ErrConflict)
-	}
 	if input.Source.Type != "image" {
 		return nil, fmt.Errorf("%w: only image source supported in v1", launchpad.ErrNotImplemented)
 	}
@@ -56,59 +51,39 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, appName string, inpu
 		return nil, err
 	}
 
-	var result CreateReleaseResult
-	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
-		version, err := s.store.NextReleaseVersion(ctx, tx, app.ID)
-		if err != nil {
-			return err
-		}
+	desc := input.Description
+	if desc == "" {
+		desc = fmt.Sprintf("Deploy %s", input.Source.Image)
+	}
 
-		release := &domain.Release{
-			AppID:          app.ID,
-			Version:        version,
-			ConfigSnapshot: config,
-			ImageRef:       input.Source.Image,
-			Status:         domain.ReleaseStatusPending,
-			Description:    input.Description,
-		}
-		if err := s.store.CreateRelease(ctx, tx, release); err != nil {
-			return err
-		}
-
-		deployment := &domain.Deployment{
-			AppID:     app.ID,
-			ReleaseID: release.ID,
-			Status:    domain.DeploymentPending,
-		}
-		if err := s.store.CreateDeployment(ctx, tx, deployment); err != nil {
-			return err
-		}
-		if err := s.store.SetActiveDeployment(ctx, tx, app.ID, deployment.ID); err != nil {
-			return err
-		}
-
-		payload, _ := json.Marshal(domain.DeployPayload{
-			DeploymentID: deployment.ID,
-			AppID:        app.ID,
-			ReleaseID:    release.ID,
-		})
-		job := &domain.Job{
-			Type:         domain.JobTypeDeploy,
-			ResourceType: "deployment",
-			ResourceID:   deployment.ID,
-			Payload:      payload,
-		}
-		if err := s.store.EnqueueJob(ctx, tx, job); err != nil {
-			return err
-		}
-
-		result = CreateReleaseResult{Release: *release, Deployment: *deployment, Job: *job}
-		return nil
+	return s.enqueueRelease(ctx, app, releasePlan{
+		ImageRef:    input.Source.Image,
+		Config:      config,
+		Description: desc,
+		JobType:     domain.JobTypeDeploy,
 	})
+}
+
+func (s *ReleaseService) RollbackRelease(ctx context.Context, appName string, version int) (*CreateReleaseResult, error) {
+	app, err := s.appService.GetApp(ctx, appName)
 	if err != nil {
 		return nil, err
 	}
-	return &result, nil
+	target, err := s.store.GetReleaseByVersion(ctx, app.ID, version)
+	if err != nil {
+		return nil, err
+	}
+	if target.Status != domain.ReleaseStatusSucceeded {
+		return nil, fmt.Errorf("%w: release v%d did not succeed", launchpad.ErrBadRequest, version)
+	}
+
+	return s.enqueueRelease(ctx, app, releasePlan{
+		ImageRef:     target.ImageRef,
+		Config:       target.ConfigSnapshot,
+		Description:  fmt.Sprintf("Rollback to v%d", version),
+		JobType:      domain.JobTypeRollback,
+		RollbackFrom: version,
+	})
 }
 
 func (s *ReleaseService) ListReleases(ctx context.Context, appName string) ([]domain.Release, error) {

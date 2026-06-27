@@ -33,6 +33,32 @@ Resources created per app:
 | Deployment (per process) | `launchpad-{app}-web` |
 | Service (web process) | `launchpad-{app}-web` |
 
+## Changeset workflow (git-like batching)
+
+Stage multiple changes, then push them as a single deploy:
+
+```bash
+# Stage config, scale, and image changes (like git add)
+launchpad changeset add PORT=3000 DATABASE_URL=postgres://...
+launchpad changeset add --scale web=3 --image myapp:v2
+
+# Review staged changes (like git status)
+launchpad changeset status
+
+# Apply everything in one release (like git push)
+launchpad changeset push --message "Scale web + update config"
+
+# Discard staging area (like git reset)
+launchpad changeset reset
+```
+
+Immediate operations (bypass staging):
+
+```bash
+launchpad scale web=3
+launchpad rollback 2
+```
+
 ## Quick start
 
 ```bash

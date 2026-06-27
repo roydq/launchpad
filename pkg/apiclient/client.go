@@ -65,12 +65,8 @@ type App struct {
 func (c *Client) CreateApp(ctx context.Context, name, team, namespace string) (*App, error) {
 	var app App
 	status, err := c.do(ctx, http.MethodPost, "/v1/apps", map[string]any{
-		"name": name,
-		"team": team,
-		"target": map[string]any{
-			"type":      "stub",
-			"namespace": namespace,
-		},
+		"name": name, "team": team,
+		"target": map[string]any{"type": "stub", "namespace": namespace},
 	}, &app)
 	if err != nil {
 		return nil, err
@@ -84,8 +80,7 @@ func (c *Client) CreateApp(ctx context.Context, name, team, namespace string) (*
 func (c *Client) Deploy(ctx context.Context, app, image, description string) (map[string]any, error) {
 	var result map[string]any
 	status, err := c.do(ctx, http.MethodPost, "/v1/apps/"+app+"/releases", map[string]any{
-		"source":      map[string]string{"type": "image", "image": image},
-		"description": description,
+		"source": map[string]string{"type": "image", "image": image}, "description": description,
 	}, &result)
 	if err != nil {
 		return nil, err
@@ -94,6 +89,72 @@ func (c *Client) Deploy(ctx context.Context, app, image, description string) (ma
 		return nil, fmt.Errorf("deploy: status %d", status)
 	}
 	return result, nil
+}
+
+func (c *Client) Scale(ctx context.Context, app, process string, quantity int) (map[string]any, error) {
+	var result map[string]any
+	status, err := c.do(ctx, http.MethodPatch, "/v1/apps/"+app+"/processes/"+process+"/scale",
+		map[string]int{"quantity": quantity}, &result)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusAccepted {
+		return nil, fmt.Errorf("scale: status %d", status)
+	}
+	return result, nil
+}
+
+func (c *Client) Rollback(ctx context.Context, app string, version int) (map[string]any, error) {
+	var result map[string]any
+	status, err := c.do(ctx, http.MethodPost, fmt.Sprintf("/v1/apps/%s/releases/%d/rollback", app, version), nil, &result)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusAccepted {
+		return nil, fmt.Errorf("rollback: status %d", status)
+	}
+	return result, nil
+}
+
+func (c *Client) GetChangeset(ctx context.Context, app string) (map[string]any, error) {
+	var result map[string]any
+	_, err := c.do(ctx, http.MethodGet, "/v1/apps/"+app+"/changeset", nil, &result)
+	return result, err
+}
+
+func (c *Client) StageChanges(ctx context.Context, app string, changes []map[string]any) (map[string]any, error) {
+	var result map[string]any
+	status, err := c.do(ctx, http.MethodPost, "/v1/apps/"+app+"/changeset/changes", map[string]any{"changes": changes}, &result)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("stage: status %d", status)
+	}
+	return result, nil
+}
+
+func (c *Client) PushChangeset(ctx context.Context, app, description string) (map[string]any, error) {
+	var result map[string]any
+	status, err := c.do(ctx, http.MethodPost, "/v1/apps/"+app+"/changeset/push", map[string]string{"description": description}, &result)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusAccepted {
+		return nil, fmt.Errorf("push: status %d", status)
+	}
+	return result, nil
+}
+
+func (c *Client) DiscardChangeset(ctx context.Context, app string) error {
+	status, err := c.do(ctx, http.MethodDelete, "/v1/apps/"+app+"/changeset", nil, nil)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNoContent {
+		return fmt.Errorf("discard changeset: status %d", status)
+	}
+	return nil
 }
 
 func (c *Client) GetJob(ctx context.Context, id string) (map[string]any, error) {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,30 @@ func (s *Store) ListConfigVars(ctx context.Context, appID uuid.UUID) (map[string
 		vars[key] = value
 	}
 	return vars, rows.Err()
+}
+
+func (s *Store) MergeConfigVarsTx(ctx context.Context, tx *sql.Tx, appID uuid.UUID, updates map[string]*string) error {
+	exec := s.exec(tx)
+	now := formatTime(s.driver, time.Now().UTC())
+	for key, value := range updates {
+		if value == nil {
+			if _, err := exec.ExecContext(ctx, s.q(`DELETE FROM config_vars WHERE app_id = ? AND key = ?`),
+				appID.String(), key); err != nil {
+				return err
+			}
+			continue
+		}
+		_, err := exec.ExecContext(ctx, s.q(`
+			INSERT INTO config_vars (app_id, key, value, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(app_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`),
+			appID.String(), key, *value, now, now,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) MergeConfigVars(ctx context.Context, appID uuid.UUID, updates map[string]*string) error {

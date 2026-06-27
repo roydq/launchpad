@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -16,14 +17,23 @@ import (
 )
 
 type Server struct {
-	apps     *service.AppService
-	releases *service.ReleaseService
-	tokens   *auth.Service
-	jobs     *store.Store
+	apps       *service.AppService
+	releases   *service.ReleaseService
+	scale      *service.ScaleService
+	changesets *service.ChangesetService
+	tokens     *auth.Service
+	jobs       *store.Store
 }
 
-func NewServer(apps *service.AppService, releases *service.ReleaseService, tokens *auth.Service, jobs *store.Store) *Server {
-	return &Server{apps: apps, releases: releases, tokens: tokens, jobs: jobs}
+func NewServer(
+	apps *service.AppService,
+	releases *service.ReleaseService,
+	scale *service.ScaleService,
+	changesets *service.ChangesetService,
+	tokens *auth.Service,
+	jobs *store.Store,
+) *Server {
+	return &Server{apps: apps, releases: releases, scale: scale, changesets: changesets, tokens: tokens, jobs: jobs}
 }
 
 func (s *Server) Routes() chi.Router {
@@ -46,9 +56,16 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("app:read")).Get("/apps/{app}/config-vars", s.getConfigVars)
 
 		r.With(auth.RequireScope("app:read")).Get("/apps/{app}/processes", s.listProcesses)
+		r.With(auth.RequireScope("scale")).Patch("/apps/{app}/processes/{process}/scale", s.scaleProcess)
 
 		r.With(auth.RequireScope("deploy")).Post("/apps/{app}/releases", s.createRelease)
 		r.With(auth.RequireScope("app:read")).Get("/apps/{app}/releases", s.listReleases)
+		r.With(auth.RequireScope("deploy")).Post("/apps/{app}/releases/{version}/rollback", s.rollbackRelease)
+
+		r.With(auth.RequireScope("app:read")).Get("/apps/{app}/changeset", s.getChangeset)
+		r.With(auth.RequireScope("app:write")).Post("/apps/{app}/changeset/changes", s.stageChanges)
+		r.With(auth.RequireScope("app:write")).Delete("/apps/{app}/changeset", s.discardChangeset)
+		r.With(auth.RequireScope("deploy")).Post("/apps/{app}/changeset/push", s.pushChangeset)
 
 		r.With(auth.RequireScope("app:read")).Get("/jobs/{id}", s.getJob)
 	})
@@ -123,6 +140,25 @@ func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, processes)
 }
 
+func (s *Server) scaleProcess(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Quantity int `json:"quantity"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	result, err := s.scale.ScaleProcess(r.Context(), chi.URLParam(r, "app"), chi.URLParam(r, "process"), input.Quantity)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"process": result.Process,
+		"job":     result.Job,
+	})
+}
+
 func (s *Server) createRelease(w http.ResponseWriter, r *http.Request) {
 	var input service.CreateReleaseInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -134,18 +170,21 @@ func (s *Server) createRelease(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{
-		"deployment": map[string]any{
-			"id":     result.Deployment.ID,
-			"status": result.Deployment.Status,
-			"release": map[string]any{"version": result.Release.Version},
-		},
-		"job": map[string]any{
-			"id":     result.Job.ID,
-			"type":   result.Job.Type,
-			"status": result.Job.Status,
-		},
-	})
+	writeJSON(w, http.StatusAccepted, releaseJobResponse(result))
+}
+
+func (s *Server) rollbackRelease(w http.ResponseWriter, r *http.Request) {
+	version, err := strconv.Atoi(chi.URLParam(r, "version"))
+	if err != nil {
+		problem.BadRequest(w, "invalid release version")
+		return
+	}
+	result, err := s.releases.RollbackRelease(r.Context(), chi.URLParam(r, "app"), version)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, releaseJobResponse(result))
 }
 
 func (s *Server) listReleases(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +194,51 @@ func (s *Server) listReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, releases)
+}
+
+func (s *Server) getChangeset(w http.ResponseWriter, r *http.Request) {
+	cs, err := s.changesets.GetChangeset(r.Context(), chi.URLParam(r, "app"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cs)
+}
+
+func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
+	var input service.StageChangesInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	cs, err := s.changesets.StageChanges(r.Context(), chi.URLParam(r, "app"), input)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cs)
+}
+
+func (s *Server) discardChangeset(w http.ResponseWriter, r *http.Request) {
+	if err := s.changesets.DiscardChangeset(r.Context(), chi.URLParam(r, "app")); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) pushChangeset(w http.ResponseWriter, r *http.Request) {
+	var input service.PushChangesetInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	result, err := s.changesets.PushChangeset(r.Context(), chi.URLParam(r, "app"), input)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, releaseJobResponse(result))
 }
 
 func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
@@ -190,12 +274,21 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":     token.ID,
-		"name":   token.Name,
-		"team":   input.Team,
-		"scopes": token.Scopes,
-		"token":  plaintext,
+		"id": token.ID, "name": token.Name, "team": input.Team,
+		"scopes": token.Scopes, "token": plaintext,
 	})
+}
+
+func releaseJobResponse(result *service.CreateReleaseResult) map[string]any {
+	return map[string]any{
+		"deployment": map[string]any{
+			"id": result.Deployment.ID, "status": result.Deployment.Status,
+			"release": map[string]any{"version": result.Release.Version},
+		},
+		"job": map[string]any{
+			"id": result.Job.ID, "type": result.Job.Type, "status": result.Job.Status,
+		},
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -221,10 +314,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 
 func appResponse(app *domain.App) map[string]any {
 	return map[string]any{
-		"id":          app.ID,
-		"name":        app.Name,
-		"status":      app.Status,
-		"target_type": app.TargetType,
-		"created_at":  app.CreatedAt,
+		"id": app.ID, "name": app.Name, "status": app.Status,
+		"target_type": app.TargetType, "created_at": app.CreatedAt,
 	}
 }

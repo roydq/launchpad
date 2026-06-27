@@ -111,6 +111,28 @@ func (s *Store) UpdateDeploymentStatus(ctx context.Context, tx *sql.Tx, id uuid.
 	return nil
 }
 
+func (s *Store) GetReleaseByID(ctx context.Context, id uuid.UUID) (*domain.Release, error) {
+	row := s.db.QueryRowContext(ctx, s.q(`
+		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
+		FROM releases WHERE id = ?`), id.String())
+	return scanRelease(row, s.driver)
+}
+
+func (s *Store) GetReleaseByVersion(ctx context.Context, appID uuid.UUID, version int) (*domain.Release, error) {
+	row := s.db.QueryRowContext(ctx, s.q(`
+		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
+		FROM releases WHERE app_id = ? AND version = ?`), appID.String(), version)
+	return scanRelease(row, s.driver)
+}
+
+func (s *Store) GetLatestSucceededRelease(ctx context.Context, appID uuid.UUID) (*domain.Release, error) {
+	row := s.db.QueryRowContext(ctx, s.q(`
+		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
+		FROM releases WHERE app_id = ? AND status = 'succeeded'
+		ORDER BY version DESC LIMIT 1`), appID.String())
+	return scanRelease(row, s.driver)
+}
+
 func (s *Store) ListReleases(ctx context.Context, appID uuid.UUID) ([]domain.Release, error) {
 	rows, err := s.db.QueryContext(ctx, s.q(`
 		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
@@ -172,6 +194,9 @@ func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domai
 	var buildID sql.NullString
 	var version int
 	if err := scanner.Scan(&id, &appID, &buildID, &version, &snapshot, &imageRef, &status, &description, &createdAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, launchpad.ErrNotFound
+		}
 		return nil, err
 	}
 	var config map[string]string

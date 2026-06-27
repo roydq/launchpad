@@ -44,3 +44,10 @@ type ScalePayload struct {
 	ProcessName string    `json:"process_name"`
 	Quantity    int       `json:"quantity"`
 }
+
+type RollbackPayload struct {
+	DeploymentID        uuid.UUID `json:"deployment_id"`
+	AppID               uuid.UUID `json:"app_id"`
+	ReleaseID           uuid.UUID `json:"release_id"`
+	TargetReleaseVersion int      `json:"target_release_version"`
+}
