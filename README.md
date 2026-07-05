@@ -74,6 +74,7 @@ curl -X POST http://localhost:8080/v1/tokens \
   -d '{"name":"cli","team":"default","scopes":["admin"]}'
 ```
 
-## Design document
+## Design documents
 
-See `/tmp/grok-design-doc-a62c6260.md` for the full system design, API spec, and PR plan.
+- **[Domain model](docs/DOMAIN.md)** — authoritative entity hierarchy, config layers, changeset/ReleaseSet semantics, and lifecycle invariants
+- **[System design](docs/DESIGN.md)** — control plane architecture, API, worker, targets, and implementation PR plan (entity sections superseded by DOMAIN.md)

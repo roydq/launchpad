@@ -4,8 +4,10 @@
 |-------|-------|
 | **Author** | TBD |
 | **Date** | 2026-06-26 |
-| **Status** | Draft (revision 3) |
+| **Status** | Draft (revision 3) — **entity model superseded** |
 | **Repository** | `/home/deck/Projects/launchpad` |
+
+> **Domain model:** The entity hierarchy, config layers, changeset/ReleaseSet semantics, and lifecycle invariants are now defined in [`docs/DOMAIN.md`](DOMAIN.md) (2026-07-04). Sections below that describe Apps, entity relationships, Heroku mapping, and the v1 domain types reflect the pre-migration model and should be read in light of the new spec.
 
 ---
 
