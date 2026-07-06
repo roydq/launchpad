@@ -12,13 +12,13 @@ import (
 	"github.com/launchpad/launchpad/internal/domain"
 )
 
-func streamPodLogs(ctx context.Context, client kubernetes.Interface, app domain.App, processName string) (io.ReadCloser, error) {
-	cfg, err := parseTargetConfig(app)
+func streamPodLogs(ctx context.Context, client kubernetes.Interface, project domain.Project, service domain.Service, env domain.Environment, processName string) (io.ReadCloser, error) {
+	cfg, err := parseTargetConfig(env)
 	if err != nil {
 		return nil, err
 	}
 
-	labels := appLabels(app.Name, processName)
+	labels := resourceLabels(project.Name, service.Name, processName)
 	pods, err := client.CoreV1().Pods(cfg.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: labels}),
 	})
@@ -38,9 +38,9 @@ func streamPodLogs(ctx context.Context, client kubernetes.Interface, app domain.
 	}
 
 	req := client.CoreV1().Pods(cfg.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
-		Container:  processName,
-		Follow:     false,
-		TailLines:  int64Ptr(200),
+		Container: processName,
+		Follow:    false,
+		TailLines: int64Ptr(200),
 	})
 	return req.Stream(ctx)
 }

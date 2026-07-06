@@ -78,6 +78,18 @@ func (s *Store) CreateDeployment(ctx context.Context, tx *sql.Tx, deployment *do
 	return err
 }
 
+func (s *Store) HasActiveDeployment(ctx context.Context, serviceID, environmentID uuid.UUID) (bool, error) {
+	row := s.db.QueryRowContext(ctx, s.q(`
+		SELECT COUNT(*) FROM deployments
+		WHERE service_id = ? AND environment_id = ? AND status IN ('pending', 'deploying')`),
+		serviceID.String(), environmentID.String())
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (s *Store) GetDeployment(ctx context.Context, id uuid.UUID) (*domain.Deployment, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
 		SELECT id, service_id, environment_id, release_id, status, version, target_ref, message, started_at, finished_at, created_at, updated_at

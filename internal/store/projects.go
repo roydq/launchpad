@@ -103,7 +103,11 @@ func (s *Store) ListProjectsByWorkspace(ctx context.Context, workspaceID uuid.UU
 }
 
 func (s *Store) UpdateProjectStatus(ctx context.Context, projectID uuid.UUID, status domain.ProjectStatus) error {
-	_, err := s.db.ExecContext(ctx, s.q(`
+	return s.UpdateProjectStatusTx(ctx, nil, projectID, status)
+}
+
+func (s *Store) UpdateProjectStatusTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, status domain.ProjectStatus) error {
+	_, err := s.exec(tx).ExecContext(ctx, s.q(`
 		UPDATE projects SET status = ?, updated_at = ? WHERE id = ?`),
 		string(status), formatTime(s.driver, time.Now().UTC()), projectID.String(),
 	)

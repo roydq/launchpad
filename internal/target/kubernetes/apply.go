@@ -53,9 +53,10 @@ func upsertService(ctx context.Context, client kubernetes.Interface, svc *corev1
 	return err
 }
 
-func deleteAppResources(ctx context.Context, client kubernetes.Interface, namespace, appName string) error {
-	prefix := resourcePrefix(appName) + "-"
-	listOpts := metav1.ListOptions{LabelSelector: labelApp + "=" + appName}
+func deleteServiceResources(ctx context.Context, client kubernetes.Interface, namespace, projectName, serviceName string) error {
+	listOpts := metav1.ListOptions{
+		LabelSelector: labelProject + "=" + projectName + "," + labelService + "=" + serviceName,
+	}
 
 	depList, err := client.AppsV1().Deployments(namespace).List(ctx, listOpts)
 	if err != nil {
@@ -77,12 +78,11 @@ func deleteAppResources(ctx context.Context, client kubernetes.Interface, namesp
 		}
 	}
 
-	secret := secretName(appName)
+	secret := secretName(projectName, serviceName)
 	if err := client.CoreV1().Secrets(namespace).Delete(ctx, secret, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	_ = prefix
 	return nil
 }
 

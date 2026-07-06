@@ -48,11 +48,11 @@ func (s *Service) GenerateToken() (string, error) {
 
 func (s *Service) Authenticate(ctx context.Context, rawToken string) (uuid.UUID, []string, error) {
 	if rawToken == s.bootstrapToken && s.bootstrapToken != "" {
-		team, err := s.store.GetTeamByName(ctx, "default")
+		workspace, err := s.store.GetWorkspaceByName(ctx, "default")
 		if err != nil {
 			return uuid.Nil, nil, err
 		}
-		return team.ID, []string{"admin"}, nil
+		return workspace.ID, []string{"admin"}, nil
 	}
 
 	token, err := s.store.GetTokenByHash(ctx, s.HashToken(rawToken))
@@ -65,11 +65,11 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (uuid.UUID,
 	if token.ExpiresAt != nil && token.ExpiresAt.Before(time.Now()) {
 		return uuid.Nil, nil, launchpad.ErrUnauthorized
 	}
-	return token.TeamID, token.Scopes, nil
+	return token.WorkspaceID, token.Scopes, nil
 }
 
-func (s *Service) CreateToken(ctx context.Context, teamName, name string, scopes []string) (string, *domain.APIToken, error) {
-	team, err := s.store.GetTeamByName(ctx, teamName)
+func (s *Service) CreateToken(ctx context.Context, workspaceName, name string, scopes []string) (string, *domain.APIToken, error) {
+	workspace, err := s.store.GetWorkspaceByName(ctx, workspaceName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -78,11 +78,11 @@ func (s *Service) CreateToken(ctx context.Context, teamName, name string, scopes
 		return "", nil, err
 	}
 	token := &domain.APIToken{
-		ID:        uuid.New(),
-		TeamID:    team.ID,
-		Name:      name,
-		TokenHash: s.HashToken(plaintext),
-		Scopes:    scopes,
+		ID:          uuid.New(),
+		WorkspaceID: workspace.ID,
+		Name:        name,
+		TokenHash:   s.HashToken(plaintext),
+		Scopes:      scopes,
 	}
 	if err := s.store.CreateToken(ctx, token); err != nil {
 		return "", nil, err

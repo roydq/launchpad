@@ -13,7 +13,7 @@ import (
 	"github.com/launchpad/launchpad/internal/target"
 )
 
-// Target deploys Launchpad apps to a Kubernetes cluster.
+// Target deploys Launchpad services to a Kubernetes cluster.
 type Target struct {
 	clientFactory func(contextName string) (kubernetes.Interface, error)
 	opts          Options
@@ -49,7 +49,7 @@ func NewFromEnv() (*Target, error) {
 func (t *Target) Type() string { return "kubernetes" }
 
 func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.DeployResult, error) {
-	cfg, err := parseTargetConfig(req.App)
+	cfg, err := parseTargetConfig(req.Environment)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 		return nil, err
 	}
 
-	if err := upsertSecret(ctx, client, buildSecret(req.App, req.Config)); err != nil {
+	if err := upsertSecret(ctx, client, buildSecret(req.Project, req.Service, req.Environment, req.Config)); err != nil {
 		return nil, fmt.Errorf("apply secret: %w", err)
 	}
 
@@ -67,14 +67,14 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 	processState := make(map[string]target.ProcessState)
 
 	for _, process := range processes {
-		dep, err := upsertDeployment(ctx, client, buildDeployment(req.App, req.Release, process, req.Config))
+		dep, err := upsertDeployment(ctx, client, buildDeployment(req.Project, req.Service, req.Environment, req.Release, process, req.Config))
 		if err != nil {
 			return nil, fmt.Errorf("apply deployment %s: %w", process.Name, err)
 		}
 		depNames = append(depNames, dep.Name)
 
-		if process.Name == "web" {
-			if err := upsertService(ctx, client, buildService(req.App, process, req.Config)); err != nil {
+		if process.Expose == "http" || process.Name == "web" {
+			if err := upsertService(ctx, client, buildService(req.Project, req.Service, req.Environment, process, req.Config)); err != nil {
 				return nil, fmt.Errorf("apply service: %w", err)
 			}
 		}
@@ -87,12 +87,12 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 
 	var targetRef string
 	for _, process := range processes {
-		dep := deployments[deploymentName(req.App.Name, process.Name)]
+		dep := deployments[deploymentName(req.Project.Name, req.Service.Name, process.Name)]
 		if dep == nil {
 			continue
 		}
 		processState[process.Name] = processStateFromDeployment(dep)
-		if process.Name == "web" || targetRef == "" {
+		if process.Expose == "http" || process.Name == "web" || targetRef == "" {
 			targetRef = deploymentTargetRef(dep)
 		}
 	}
@@ -104,7 +104,7 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 }
 
 func (t *Target) Scale(ctx context.Context, req target.ScaleRequest) error {
-	cfg, err := parseTargetConfig(req.App)
+	cfg, err := parseTargetConfig(req.Environment)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (t *Target) Scale(ctx context.Context, req target.ScaleRequest) error {
 		return err
 	}
 
-	name := deploymentName(req.App.Name, req.ProcessName)
+	name := deploymentName(req.Project.Name, req.Service.Name, req.ProcessName)
 	dep, err := client.AppsV1().Deployments(cfg.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("get deployment: %w", err)
@@ -125,7 +125,7 @@ func (t *Target) Scale(ctx context.Context, req target.ScaleRequest) error {
 }
 
 func (t *Target) Destroy(ctx context.Context, req target.DestroyRequest) error {
-	cfg, err := parseTargetConfig(req.App)
+	cfg, err := parseTargetConfig(req.Environment)
 	if err != nil {
 		return err
 	}
@@ -133,21 +133,22 @@ func (t *Target) Destroy(ctx context.Context, req target.DestroyRequest) error {
 	if err != nil {
 		return err
 	}
-	return deleteAppResources(ctx, client, cfg.Namespace, req.App.Name)
+	return deleteServiceResources(ctx, client, cfg.Namespace, req.Project.Name, req.Service.Name)
 }
 
 func (t *Target) Rollback(ctx context.Context, req target.RollbackRequest) (*target.DeployResult, error) {
 	return t.Deploy(ctx, target.DeployRequest{
-		App:       req.App,
-		Release:   req.Release,
-		Processes: req.Processes,
-		Config:    req.Config,
-		ImageRef:  req.Release.ImageRef,
+		Project:     req.Project,
+		Service:     req.Service,
+		Environment: req.Environment,
+		Release:     req.Release,
+		Processes:   req.Processes,
+		Config:      req.Config,
 	})
 }
 
 func (t *Target) Status(ctx context.Context, req target.StatusRequest) (*target.RuntimeStatus, error) {
-	cfg, err := parseTargetConfig(req.App)
+	cfg, err := parseTargetConfig(req.Environment)
 	if err != nil {
 		return nil, err
 	}
@@ -155,11 +156,11 @@ func (t *Target) Status(ctx context.Context, req target.StatusRequest) (*target.
 	if err != nil {
 		return nil, err
 	}
-	return collectRuntimeStatus(ctx, client, req.App, req.Processes)
+	return collectRuntimeStatus(ctx, client, req.Project, req.Service, req.Environment, req.Processes)
 }
 
 func (t *Target) Logs(ctx context.Context, req target.LogsRequest) (io.ReadCloser, error) {
-	cfg, err := parseTargetConfig(req.App)
+	cfg, err := parseTargetConfig(req.Environment)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +172,7 @@ func (t *Target) Logs(ctx context.Context, req target.LogsRequest) (io.ReadClose
 	if process == "" {
 		process = "web"
 	}
-	return streamPodLogs(ctx, client, req.App, process)
+	return streamPodLogs(ctx, client, req.Project, req.Service, req.Environment, process)
 }
 
 func (t *Target) clientFor(contextName string) (kubernetes.Interface, error) {

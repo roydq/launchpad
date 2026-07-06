@@ -58,8 +58,8 @@ func valueOrZero(v *int32) int32 {
 	return *v
 }
 
-func collectRuntimeStatus(ctx context.Context, client kubernetes.Interface, app domain.App, processes []domain.ProcessType) (*target.RuntimeStatus, error) {
-	cfg, err := parseTargetConfig(app)
+func collectRuntimeStatus(ctx context.Context, client kubernetes.Interface, project domain.Project, service domain.Service, env domain.Environment, processes []domain.Process) (*target.RuntimeStatus, error) {
+	cfg, err := parseTargetConfig(env)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func collectRuntimeStatus(ctx context.Context, client kubernetes.Interface, app 
 	var messages []string
 
 	for _, process := range processesOrDefault(processes) {
-		name := deploymentName(app.Name, process.Name)
+		name := deploymentName(project.Name, service.Name, process.Name)
 		dep, err := client.AppsV1().Deployments(cfg.Namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			ready = false
