@@ -68,6 +68,17 @@ Immediate deploy (bypasses changeset):
 launchpad deploy --image my-api:v1
 ```
 
+## Prerequisites
+
+Go is managed with [mise](https://mise.jdx.dev/). From the repo root:
+
+```bash
+mise trust          # first time only, if prompted
+mise install        # installs Go 1.26 per mise.toml
+```
+
+With mise activated in your shell (`mise activate`), `go` and `make build` work normally. Otherwise prefix commands with `mise exec --`, e.g. `mise exec -- make test`.
+
 ## Quick start
 
 ```bash
