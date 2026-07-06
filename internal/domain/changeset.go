@@ -10,9 +10,9 @@ import (
 type ChangesetStatus string
 
 const (
-	ChangesetOpen       ChangesetStatus = "open"
-	ChangesetCommitted  ChangesetStatus = "committed"
-	ChangesetDiscarded  ChangesetStatus = "discarded"
+	ChangesetOpen      ChangesetStatus = "open"
+	ChangesetCommitted ChangesetStatus = "committed"
+	ChangesetDiscarded ChangesetStatus = "discarded"
 )
 
 type ChangeType string
@@ -25,7 +25,7 @@ const (
 
 type Changeset struct {
 	ID          uuid.UUID
-	AppID       uuid.UUID
+	ProjectID   uuid.UUID
 	Status      ChangesetStatus
 	Description string
 	Changes     []ChangesetChange
@@ -36,6 +36,8 @@ type Changeset struct {
 type ChangesetChange struct {
 	ID          uuid.UUID
 	ChangesetID uuid.UUID
+	ServiceID   *uuid.UUID
+	ServiceName string
 	Type        ChangeType
 	Payload     json.RawMessage
 	CreatedAt   time.Time
@@ -52,5 +54,5 @@ type ScaleChangePayload struct {
 }
 
 type ImageChangePayload struct {
-	Image string `json:"image"`
+	ArtifactRef string `json:"artifact_ref"`
 }

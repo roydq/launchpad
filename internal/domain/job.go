@@ -10,10 +10,7 @@ import (
 type JobType string
 
 const (
-	JobTypeDeploy  JobType = "deploy"
-	JobTypeScale   JobType = "scale"
-	JobTypeDestroy JobType = "destroy"
-	JobTypeRollback JobType = "rollback"
+	JobTypeDeploy JobType = "deploy"
 )
 
 type Job struct {
@@ -34,20 +31,8 @@ type Job struct {
 }
 
 type DeployPayload struct {
-	DeploymentID uuid.UUID `json:"deployment_id"`
-	AppID        uuid.UUID `json:"app_id"`
-	ReleaseID    uuid.UUID `json:"release_id"`
-}
-
-type ScalePayload struct {
-	AppID       uuid.UUID `json:"app_id"`
-	ProcessName string    `json:"process_name"`
-	Quantity    int       `json:"quantity"`
-}
-
-type RollbackPayload struct {
-	DeploymentID        uuid.UUID `json:"deployment_id"`
-	AppID               uuid.UUID `json:"app_id"`
-	ReleaseID           uuid.UUID `json:"release_id"`
-	TargetReleaseVersion int      `json:"target_release_version"`
+	DeploymentID  uuid.UUID `json:"deployment_id"`
+	ServiceID     uuid.UUID `json:"service_id"`
+	EnvironmentID uuid.UUID `json:"environment_id"`
+	ReleaseID     uuid.UUID `json:"release_id"`
 }

@@ -12,9 +12,9 @@ import (
 	"github.com/launchpad/launchpad/pkg/launchpad"
 )
 
-func (s *Store) NextReleaseVersion(ctx context.Context, tx *sql.Tx, appID uuid.UUID) (int, error) {
+func (s *Store) NextReleaseVersion(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID) (int, error) {
 	exec := s.exec(tx)
-	row := exec.QueryRowContext(ctx, s.q(`SELECT COALESCE(MAX(version), 0) + 1 FROM releases WHERE app_id = ?`), appID.String())
+	row := exec.QueryRowContext(ctx, s.q(`SELECT COALESCE(MAX(version), 0) + 1 FROM releases WHERE service_id = ?`), serviceID.String())
 	var version int
 	if err := row.Scan(&version); err != nil {
 		return 0, err
@@ -30,20 +30,21 @@ func (s *Store) CreateRelease(ctx context.Context, tx *sql.Tx, release *domain.R
 	if release.Status == "" {
 		release.Status = domain.ReleaseStatusPending
 	}
-	snapshot, err := json.Marshal(release.ConfigSnapshot)
+	configResolved, err := json.Marshal(release.ConfigResolved)
 	if err != nil {
 		return err
 	}
-	var buildID any
-	if release.BuildID != nil {
-		buildID = release.BuildID.String()
+	processSnapshot, err := json.Marshal(release.ProcessSnapshot)
+	if err != nil {
+		return err
 	}
 	exec := s.exec(tx)
 	_, err = exec.ExecContext(ctx, s.q(`
-		INSERT INTO releases (id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at)
+		INSERT INTO releases (id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		release.ID.String(), release.AppID.String(), buildID, release.Version, string(snapshot),
-		release.ImageRef, string(release.Status), release.Description, formatTime(s.driver, release.CreatedAt),
+		release.ID.String(), release.ServiceID.String(), release.Version, release.ArtifactRef,
+		string(configResolved), string(processSnapshot), string(release.Status), release.Description,
+		formatTime(s.driver, release.CreatedAt),
 	)
 	return err
 }
@@ -66,10 +67,11 @@ func (s *Store) CreateDeployment(ctx context.Context, tx *sql.Tx, deployment *do
 	}
 	exec := s.exec(tx)
 	_, err := exec.ExecContext(ctx, s.q(`
-		INSERT INTO deployments (id, app_id, release_id, status, version, target_ref, message, started_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		deployment.ID.String(), deployment.AppID.String(), deployment.ReleaseID.String(),
-		string(deployment.Status), deployment.Version, deployment.TargetRef, deployment.Message,
+		INSERT INTO deployments (id, service_id, environment_id, release_id, status, version, target_ref, message, started_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		deployment.ID.String(), deployment.ServiceID.String(), deployment.EnvironmentID.String(),
+		deployment.ReleaseID.String(), string(deployment.Status), deployment.Version,
+		deployment.TargetRef, deployment.Message,
 		formatTime(s.driver, deployment.StartedAt), formatTime(s.driver, deployment.CreatedAt),
 		formatTime(s.driver, deployment.UpdatedAt),
 	)
@@ -78,7 +80,7 @@ func (s *Store) CreateDeployment(ctx context.Context, tx *sql.Tx, deployment *do
 
 func (s *Store) GetDeployment(ctx context.Context, id uuid.UUID) (*domain.Deployment, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, app_id, release_id, status, version, target_ref, message, started_at, finished_at, created_at, updated_at
+		SELECT id, service_id, environment_id, release_id, status, version, target_ref, message, started_at, finished_at, created_at, updated_at
 		FROM deployments WHERE id = ?`), id.String())
 	return scanDeployment(row, s.driver)
 }
@@ -113,30 +115,30 @@ func (s *Store) UpdateDeploymentStatus(ctx context.Context, tx *sql.Tx, id uuid.
 
 func (s *Store) GetReleaseByID(ctx context.Context, id uuid.UUID) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
+		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
 		FROM releases WHERE id = ?`), id.String())
 	return scanRelease(row, s.driver)
 }
 
-func (s *Store) GetReleaseByVersion(ctx context.Context, appID uuid.UUID, version int) (*domain.Release, error) {
+func (s *Store) GetReleaseByVersion(ctx context.Context, serviceID uuid.UUID, version int) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
-		FROM releases WHERE app_id = ? AND version = ?`), appID.String(), version)
+		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		FROM releases WHERE service_id = ? AND version = ?`), serviceID.String(), version)
 	return scanRelease(row, s.driver)
 }
 
-func (s *Store) GetLatestSucceededRelease(ctx context.Context, appID uuid.UUID) (*domain.Release, error) {
+func (s *Store) GetLatestSucceededRelease(ctx context.Context, serviceID uuid.UUID) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
-		FROM releases WHERE app_id = ? AND status = 'succeeded'
-		ORDER BY version DESC LIMIT 1`), appID.String())
+		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		FROM releases WHERE service_id = ? AND status = 'succeeded'
+		ORDER BY version DESC LIMIT 1`), serviceID.String())
 	return scanRelease(row, s.driver)
 }
 
-func (s *Store) ListReleases(ctx context.Context, appID uuid.UUID) ([]domain.Release, error) {
+func (s *Store) ListReleases(ctx context.Context, serviceID uuid.UUID) ([]domain.Release, error) {
 	rows, err := s.db.QueryContext(ctx, s.q(`
-		SELECT id, app_id, build_id, version, config_snapshot, image_ref, status, description, created_at
-		FROM releases WHERE app_id = ? ORDER BY version DESC`), appID.String())
+		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		FROM releases WHERE service_id = ? ORDER BY version DESC`), serviceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -160,10 +162,10 @@ func (s *Store) UpdateReleaseStatus(ctx context.Context, tx *sql.Tx, id uuid.UUI
 }
 
 func scanDeployment(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Deployment, error) {
-	var id, appID, releaseID, status, targetRef, message, startedAt, createdAt, updatedAt string
+	var id, serviceID, environmentID, releaseID, status, targetRef, message, startedAt, createdAt, updatedAt string
 	var version int
 	var finishedAt sql.NullString
-	if err := scanner.Scan(&id, &appID, &releaseID, &status, &version, &targetRef, &message,
+	if err := scanner.Scan(&id, &serviceID, &environmentID, &releaseID, &status, &version, &targetRef, &message,
 		&startedAt, &finishedAt, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
@@ -171,16 +173,17 @@ func scanDeployment(scanner interface{ Scan(...any) error }, driver Driver) (*do
 		return nil, err
 	}
 	d := &domain.Deployment{
-		ID:        uuid.MustParse(id),
-		AppID:     uuid.MustParse(appID),
-		ReleaseID: uuid.MustParse(releaseID),
-		Status:    domain.DeploymentStatus(status),
-		Version:   version,
-		TargetRef: targetRef,
-		Message:   message,
-		StartedAt: parseTime(driver, startedAt),
-		CreatedAt: parseTime(driver, createdAt),
-		UpdatedAt: parseTime(driver, updatedAt),
+		ID:            uuid.MustParse(id),
+		ServiceID:     uuid.MustParse(serviceID),
+		EnvironmentID: uuid.MustParse(environmentID),
+		ReleaseID:     uuid.MustParse(releaseID),
+		Status:        domain.DeploymentStatus(status),
+		Version:       version,
+		TargetRef:     targetRef,
+		Message:       message,
+		StartedAt:     parseTime(driver, startedAt),
+		CreatedAt:     parseTime(driver, createdAt),
+		UpdatedAt:     parseTime(driver, updatedAt),
 	}
 	if finishedAt.Valid {
 		t := parseTime(driver, finishedAt.String)
@@ -190,30 +193,28 @@ func scanDeployment(scanner interface{ Scan(...any) error }, driver Driver) (*do
 }
 
 func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Release, error) {
-	var id, appID, snapshot, imageRef, status, description, createdAt string
-	var buildID sql.NullString
+	var id, serviceID, artifactRef, configResolved, processSnapshot, status, description, createdAt string
 	var version int
-	if err := scanner.Scan(&id, &appID, &buildID, &version, &snapshot, &imageRef, &status, &description, &createdAt); err != nil {
+	if err := scanner.Scan(&id, &serviceID, &version, &artifactRef, &configResolved, &processSnapshot,
+		&status, &description, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
 		}
 		return nil, err
 	}
 	var config map[string]string
-	_ = json.Unmarshal([]byte(snapshot), &config)
-	r := &domain.Release{
-		ID:             uuid.MustParse(id),
-		AppID:          uuid.MustParse(appID),
-		Version:        version,
-		ConfigSnapshot: config,
-		ImageRef:       imageRef,
-		Status:         domain.ReleaseStatus(status),
-		Description:    description,
-		CreatedAt:      parseTime(driver, createdAt),
-	}
-	if buildID.Valid {
-		bid := uuid.MustParse(buildID.String)
-		r.BuildID = &bid
-	}
-	return r, nil
+	_ = json.Unmarshal([]byte(configResolved), &config)
+	var snapshot map[string]domain.ProcessSnapshot
+	_ = json.Unmarshal([]byte(processSnapshot), &snapshot)
+	return &domain.Release{
+		ID:              uuid.MustParse(id),
+		ServiceID:       uuid.MustParse(serviceID),
+		Version:         version,
+		ArtifactRef:     artifactRef,
+		ConfigResolved:  config,
+		ProcessSnapshot: snapshot,
+		Status:          domain.ReleaseStatus(status),
+		Description:     description,
+		CreatedAt:       parseTime(driver, createdAt),
+	}, nil
 }

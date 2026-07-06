@@ -11,7 +11,7 @@ import (
 	"github.com/launchpad/launchpad/internal/domain"
 )
 
-func TestAppAndJobQueue(t *testing.T) {
+func TestProjectBootstrapAndJobQueue(t *testing.T) {
 	ctx := context.Background()
 	db, driver, err := Open(ctx, ":memory:")
 	if err != nil {
@@ -23,41 +23,65 @@ func TestAppAndJobQueue(t *testing.T) {
 	}
 	s := New(db, driver)
 
-	teamID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	app := &domain.App{
-		TeamID:       teamID,
-		Name:         "demo",
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{
+		WorkspaceID: workspaceID,
+		Name:        "demo",
+	}
+	env := &domain.Environment{
 		TargetType:   "stub",
 		TargetConfig: json.RawMessage(`{"namespace":"default"}`),
 	}
-	if err := s.CreateApp(ctx, app); err != nil {
+	if err := s.CreateProject(ctx, project, env); err != nil {
 		t.Fatal(err)
 	}
 
+	svc, err := s.GetServiceByProjectAndName(ctx, project.ID, project.PrimaryService)
+	if err != nil {
+		t.Fatal(err)
+	}
+	devEnv, err := s.GetEnvironmentByProjectAndName(ctx, project.ID, "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	processes, err := s.ListProcesses(ctx, svc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(processes) != 1 || processes[0].Name != "web" {
+		t.Fatalf("expected default web process, got %+v", processes)
+	}
+
 	val := "8080"
-	if err := s.MergeConfigVars(ctx, app.ID, map[string]*string{"PORT": &val}); err != nil {
+	if err := s.MergeConfigVars(ctx, svc.ID, devEnv.ID, map[string]*string{"PORT": &val}); err != nil {
 		t.Fatal(err)
 	}
 
 	err = s.Transact(ctx, func(tx *sql.Tx) error {
 		release := &domain.Release{
-			AppID:          app.ID,
-			Version:        1,
-			ConfigSnapshot: map[string]string{"PORT": "8080"},
-			ImageRef:       "demo:v1",
-			Status:         domain.ReleaseStatusPending,
+			ServiceID:       svc.ID,
+			Version:         1,
+			ArtifactRef:     "demo:v1",
+			ConfigResolved:  map[string]string{"PORT": "8080"},
+			ProcessSnapshot: map[string]domain.ProcessSnapshot{"web": {Quantity: 1}},
+			Status:          domain.ReleaseStatusPending,
 		}
 		if err := s.CreateRelease(ctx, tx, release); err != nil {
 			return err
 		}
-		deployment := &domain.Deployment{AppID: app.ID, ReleaseID: release.ID}
+		deployment := &domain.Deployment{
+			ServiceID:     svc.ID,
+			EnvironmentID: devEnv.ID,
+			ReleaseID:     release.ID,
+		}
 		if err := s.CreateDeployment(ctx, tx, deployment); err != nil {
 			return err
 		}
 		payload, _ := json.Marshal(domain.DeployPayload{
-			DeploymentID: deployment.ID,
-			AppID:        app.ID,
-			ReleaseID:    release.ID,
+			DeploymentID:  deployment.ID,
+			ServiceID:     svc.ID,
+			EnvironmentID: devEnv.ID,
+			ReleaseID:     release.ID,
 		})
 		return s.EnqueueJob(ctx, tx, &domain.Job{
 			Type:         domain.JobTypeDeploy,
