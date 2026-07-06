@@ -36,11 +36,11 @@ func main() {
 
 	st := store.New(db, driver)
 	authSvc := auth.NewService(st, os.Getenv("LAUNCHPAD_BOOTSTRAP_TOKEN"))
-	appSvc := service.NewAppService(st)
-	releaseSvc := service.NewReleaseService(st, appSvc)
-	scaleSvc := service.NewScaleService(st, appSvc)
-	changesetSvc := service.NewChangesetService(st, appSvc, releaseSvc)
-	server := api.NewServer(appSvc, releaseSvc, scaleSvc, changesetSvc, authSvc, st)
+	projectSvc := service.NewProjectService(st)
+	configSvc := service.NewConfigService(st, projectSvc)
+	releaseSvc := service.NewReleaseService(st, projectSvc)
+	changesetSvc := service.NewChangesetService(st, projectSvc, releaseSvc)
+	server := api.NewServer(projectSvc, configSvc, releaseSvc, changesetSvc, authSvc, st)
 
 	addr := envOr("LAUNCHPAD_API_ADDR", ":8080")
 	httpServer := &http.Server{Addr: addr, Handler: server.Routes()}

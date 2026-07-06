@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -12,10 +13,13 @@ import (
 )
 
 type Config struct {
-	APIURL string
-	Token  string
-	Team   string
-	App    string
+	APIURL  string
+	Token   string
+	Project string
+}
+
+type localConfig struct {
+	Project string `json:"project"`
 }
 
 func NewRoot(cfg Config) *cobra.Command {
@@ -23,32 +27,100 @@ func NewRoot(cfg Config) *cobra.Command {
 
 	root := &cobra.Command{
 		Use:   "launchpad",
-		Short: "Manage applications on Launchpad",
+		Short: "Manage projects on Launchpad",
 	}
 
-	root.AddCommand(&cobra.Command{
-		Use:   "apps:create [name]",
-		Short: "Create a new application",
+	projectsCmd := &cobra.Command{Use: "projects", Short: "Manage projects"}
+	projectsCmd.AddCommand(&cobra.Command{
+		Use:   "create [name]",
+		Short: "Create a new project (bootstraps dev env + primary service)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := client.CreateApp(cmd.Context(), args[0], cfg.Team, "default")
+			targetType, _ := cmd.Flags().GetString("target")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			project, err := client.CreateProject(cmd.Context(), args[0], targetType, namespace)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("created app %s (%s)\n", app.Name, app.ID)
+			fmt.Printf("created project %s (%s)\n", project.Name, project.ID)
+			return nil
+		},
+	})
+	createFlags := projectsCmd.Commands()[0].Flags()
+	createFlags.String("target", "stub", "dev environment target type")
+	createFlags.String("namespace", "default", "dev environment namespace")
+	root.AddCommand(projectsCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "use [project]",
+		Short: "Set the active project in ~/.launchpad/config",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := saveLocalConfig(localConfig{Project: args[0]}); err != nil {
+				return err
+			}
+			fmt.Printf("using project %s\n", args[0])
 			return nil
 		},
 	})
 
+	configCmd := &cobra.Command{Use: "config", Short: "Manage service config in dev environment"}
+	configCmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Show config vars",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			vars, err := client.GetConfig(cmd.Context(), project)
+			if err != nil {
+				return err
+			}
+			b, _ := json.MarshalIndent(vars, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		},
+	})
+	configCmd.AddCommand(&cobra.Command{
+		Use:   "set [KEY=VALUE...]",
+		Short: "Set config vars",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			updates := make(map[string]*string, len(args))
+			for _, arg := range args {
+				parts := strings.SplitN(arg, "=", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("expected KEY=VALUE, got %q", arg)
+				}
+				val := parts[1]
+				updates[parts[0]] = &val
+			}
+			vars, err := client.PatchConfig(cmd.Context(), project, updates)
+			if err != nil {
+				return err
+			}
+			b, _ := json.MarshalIndent(vars, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		},
+	})
+	root.AddCommand(configCmd)
+
 	deployCmd := &cobra.Command{
 		Use:   "deploy",
-		Short: "Deploy an application image immediately",
+		Short: "Deploy an image immediately",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			image, _ := cmd.Flags().GetString("image")
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
 			}
-			result, err := client.Deploy(cmd.Context(), cfg.App, image, "cli deploy")
+			image, _ := cmd.Flags().GetString("image")
+			result, err := client.Deploy(cmd.Context(), project, image, "cli deploy")
 			if err != nil {
 				return err
 			}
@@ -60,64 +132,53 @@ func NewRoot(cfg Config) *cobra.Command {
 	_ = deployCmd.MarkFlagRequired("image")
 	root.AddCommand(deployCmd)
 
-	scaleCmd := &cobra.Command{
-		Use:   "scale [web=2]",
-		Short: "Scale a process immediately",
-		Args:  cobra.ExactArgs(1),
+	root.AddCommand(&cobra.Command{
+		Use:   "ps",
+		Short: "List processes for the active project",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
-			}
-			parts := strings.SplitN(args[0], "=", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("expected process=quantity, got %q", args[0])
-			}
-			qty, err := strconv.Atoi(parts[1])
+			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			result, err := client.Scale(cmd.Context(), cfg.App, parts[0], qty)
+			processes, err := client.ListProcesses(cmd.Context(), project)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("scale queued: %v\n", result)
+			b, _ := json.MarshalIndent(processes, "", "  ")
+			fmt.Println(string(b))
 			return nil
 		},
-	}
-	root.AddCommand(scaleCmd)
+	})
 
-	rollbackCmd := &cobra.Command{
-		Use:   "rollback [version]",
-		Short: "Rollback to a previous release version",
-		Args:  cobra.ExactArgs(1),
+	root.AddCommand(&cobra.Command{
+		Use:   "releases",
+		Short: "List releases for the active project",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
-			}
-			version, err := strconv.Atoi(args[0])
+			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			result, err := client.Rollback(cmd.Context(), cfg.App, version)
+			releases, err := client.ListReleases(cmd.Context(), project)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("rollback queued: %v\n", result)
+			b, _ := json.MarshalIndent(releases, "", "  ")
+			fmt.Println(string(b))
 			return nil
 		},
-	}
-	root.AddCommand(rollbackCmd)
+	})
 
 	changesetCmd := &cobra.Command{Use: "changeset", Short: "Stage changes before deploying (git-like workflow)"}
 
-	statusCmd := &cobra.Command{
+	changesetCmd.AddCommand(&cobra.Command{
 		Use:   "status",
 		Short: "Show staged changes",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
 			}
-			cs, err := client.GetChangeset(cmd.Context(), cfg.App)
+			cs, err := client.GetChangeset(cmd.Context(), project)
 			if err != nil {
 				return err
 			}
@@ -125,26 +186,28 @@ func NewRoot(cfg Config) *cobra.Command {
 			fmt.Println(string(b))
 			return nil
 		},
-	}
-	changesetCmd.AddCommand(statusCmd)
+	})
 
 	addCmd := &cobra.Command{
 		Use:   "add [KEY=VALUE...]",
 		Short: "Stage config, scale, or image changes",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
 			}
 			changes, err := parseStageArgs(args, cmd)
 			if err != nil {
 				return err
 			}
-			cs, err := client.StageChanges(cmd.Context(), cfg.App, changes)
+			cs, err := client.StageChanges(cmd.Context(), project, changes)
 			if err != nil {
 				return err
 			}
 			n := 0
 			if ch, ok := cs["Changes"].([]any); ok {
+				n = len(ch)
+			} else if ch, ok := cs["changes"].([]any); ok {
 				n = len(ch)
 			}
 			fmt.Printf("staged %d total change(s) in changeset\n", n)
@@ -159,10 +222,11 @@ func NewRoot(cfg Config) *cobra.Command {
 		Use:   "reset",
 		Short: "Discard all staged changes",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
 			}
-			if err := client.DiscardChangeset(cmd.Context(), cfg.App); err != nil {
+			if err := client.DiscardChangeset(cmd.Context(), project); err != nil {
 				return err
 			}
 			fmt.Println("changeset discarded")
@@ -174,11 +238,12 @@ func NewRoot(cfg Config) *cobra.Command {
 		Use:   "push",
 		Short: "Apply staged changes and deploy",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.App == "" {
-				return fmt.Errorf("set --app or LAUNCHPAD_APP")
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
 			}
 			desc, _ := cmd.Flags().GetString("message")
-			result, err := client.PushChangeset(cmd.Context(), cfg.App, desc)
+			result, err := client.PushChangeset(cmd.Context(), project, desc)
 			if err != nil {
 				return err
 			}
@@ -191,6 +256,13 @@ func NewRoot(cfg Config) *cobra.Command {
 	root.AddCommand(changesetCmd)
 
 	return root
+}
+
+func requireProject(cfg Config) (string, error) {
+	if cfg.Project == "" {
+		return "", fmt.Errorf("set project with `launchpad use <name>` or LAUNCHPAD_PROJECT")
+	}
+	return cfg.Project, nil
 }
 
 func parseStageArgs(args []string, cmd *cobra.Command) ([]map[string]any, error) {
@@ -223,6 +295,69 @@ func parseStageArgs(args []string, cmd *cobra.Command) ([]map[string]any, error)
 		return nil, fmt.Errorf("no changes to stage")
 	}
 	return changes, nil
+}
+
+func configPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".launchpad", "config"), nil
+}
+
+func loadLocalConfig() (localConfig, error) {
+	path, err := configPath()
+	if err != nil {
+		return localConfig{}, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return localConfig{}, nil
+		}
+		return localConfig{}, err
+	}
+	var cfg localConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return localConfig{}, err
+	}
+	return cfg, nil
+}
+
+func saveLocalConfig(cfg localConfig) error {
+	path, err := configPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func LoadConfig() Config {
+	cfg := Config{
+		APIURL: envOr("LAUNCHPAD_API_URL", "http://localhost:8080"),
+		Token:  os.Getenv("LAUNCHPAD_TOKEN"),
+	}
+	if local, err := loadLocalConfig(); err == nil {
+		cfg.Project = local.Project
+	}
+	if v := os.Getenv("LAUNCHPAD_PROJECT"); v != "" {
+		cfg.Project = v
+	}
+	return cfg
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func MustRun(cfg Config) {
