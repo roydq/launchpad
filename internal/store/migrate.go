@@ -16,11 +16,9 @@ var migrationFS embed.FS
 var migrationFiles = map[Driver][]string{
 	DriverSQLite: {
 		"001_initial.sqlite.up.sql",
-		"002_changesets.sqlite.up.sql",
 	},
 	DriverPostgres: {
 		"001_initial.postgres.up.sql",
-		"002_changesets.postgres.up.sql",
 	},
 }
 
@@ -75,8 +73,14 @@ func ensureSchemaMigrations(ctx context.Context, db *sql.DB, driver Driver) erro
 
 func bootstrapLegacyMigrations(ctx context.Context, db *sql.DB, driver Driver) error {
 	exists, err := tableExists(ctx, db, driver, "apps")
-	if err != nil || !exists {
+	if err != nil {
 		return err
+	}
+	if !exists {
+		exists, err = tableExists(ctx, db, driver, "projects")
+		if err != nil || !exists {
+			return err
+		}
 	}
 	files := migrationFiles[driver]
 	if len(files) == 0 {

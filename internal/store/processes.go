@@ -11,11 +11,62 @@ import (
 	"github.com/launchpad/launchpad/pkg/launchpad"
 )
 
-func (s *Store) UpdateProcessQuantity(ctx context.Context, tx *sql.Tx, appID uuid.UUID, name string, quantity int) error {
+func (s *Store) CreateProcess(ctx context.Context, process *domain.Process) error {
+	return s.createProcessTx(ctx, nil, process)
+}
+
+func (s *Store) createProcessTx(ctx context.Context, tx *sql.Tx, process *domain.Process) error {
+	if process.ID == uuid.Nil {
+		process.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	process.CreatedAt = now
+	process.UpdatedAt = now
+	if process.Expose == "" {
+		process.Expose = "none"
+	}
+	_, err := s.exec(tx).ExecContext(ctx, s.q(`
+		INSERT INTO processes (id, service_id, name, command, quantity, expose, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+		process.ID.String(), process.ServiceID.String(), process.Name, process.Command,
+		process.Quantity, process.Expose,
+		formatTime(s.driver, process.CreatedAt), formatTime(s.driver, process.UpdatedAt),
+	)
+	return err
+}
+
+func (s *Store) ListProcesses(ctx context.Context, serviceID uuid.UUID) ([]domain.Process, error) {
+	rows, err := s.db.QueryContext(ctx, s.q(`
+		SELECT id, service_id, name, command, quantity, expose, created_at, updated_at
+		FROM processes WHERE service_id = ? ORDER BY name`), serviceID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var processes []domain.Process
+	for rows.Next() {
+		p, err := scanProcess(rows, s.driver)
+		if err != nil {
+			return nil, err
+		}
+		processes = append(processes, *p)
+	}
+	return processes, rows.Err()
+}
+
+func (s *Store) GetProcess(ctx context.Context, serviceID uuid.UUID, name string) (*domain.Process, error) {
+	row := s.db.QueryRowContext(ctx, s.q(`
+		SELECT id, service_id, name, command, quantity, expose, created_at, updated_at
+		FROM processes WHERE service_id = ? AND name = ?`), serviceID.String(), name)
+	return scanProcess(row, s.driver)
+}
+
+func (s *Store) UpdateProcessQuantity(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID, name string, quantity int) error {
 	exec := s.exec(tx)
 	res, err := exec.ExecContext(ctx, s.q(`
-		UPDATE process_types SET quantity = ?, updated_at = ? WHERE app_id = ? AND name = ?`),
-		quantity, formatTime(s.driver, time.Now().UTC()), appID.String(), name,
+		UPDATE processes SET quantity = ?, updated_at = ? WHERE service_id = ? AND name = ?`),
+		quantity, formatTime(s.driver, time.Now().UTC()), serviceID.String(), name,
 	)
 	if err != nil {
 		return err
@@ -30,21 +81,23 @@ func (s *Store) UpdateProcessQuantity(ctx context.Context, tx *sql.Tx, appID uui
 	return nil
 }
 
-func (s *Store) GetProcessType(ctx context.Context, appID uuid.UUID, name string) (*domain.ProcessType, error) {
-	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, app_id, name, command, quantity, created_at, updated_at
-		FROM process_types WHERE app_id = ? AND name = ?`), appID.String(), name)
-	var pt domain.ProcessType
-	var id, aid, createdAt, updatedAt string
-	if err := row.Scan(&id, &aid, &pt.Name, &pt.Command, &pt.Quantity, &createdAt, &updatedAt); err != nil {
+func scanProcess(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Process, error) {
+	var id, serviceID, name, command, expose, createdAt, updatedAt string
+	var quantity int
+	if err := scanner.Scan(&id, &serviceID, &name, &command, &quantity, &expose, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
 		}
 		return nil, err
 	}
-	pt.ID = uuid.MustParse(id)
-	pt.AppID = uuid.MustParse(aid)
-	pt.CreatedAt = parseTime(s.driver, createdAt)
-	pt.UpdatedAt = parseTime(s.driver, updatedAt)
-	return &pt, nil
+	return &domain.Process{
+		ID:        uuid.MustParse(id),
+		ServiceID: uuid.MustParse(serviceID),
+		Name:      name,
+		Command:   command,
+		Quantity:  quantity,
+		Expose:    expose,
+		CreatedAt: parseTime(driver, createdAt),
+		UpdatedAt: parseTime(driver, updatedAt),
+	}, nil
 }

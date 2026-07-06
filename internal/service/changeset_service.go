@@ -12,13 +12,13 @@ import (
 )
 
 type ChangesetService struct {
-	store         *store.Store
-	appService    *AppService
+	store          *store.Store
+	projectService *ProjectService
 	releaseService *ReleaseService
 }
 
-func NewChangesetService(s *store.Store, appService *AppService, releaseService *ReleaseService) *ChangesetService {
-	return &ChangesetService{store: s, appService: appService, releaseService: releaseService}
+func NewChangesetService(s *store.Store, projectService *ProjectService, releaseService *ReleaseService) *ChangesetService {
+	return &ChangesetService{store: s, projectService: projectService, releaseService: releaseService}
 }
 
 type StageChangeInput struct {
@@ -31,6 +31,7 @@ type StageChangeInput struct {
 }
 
 type StageChangesInput struct {
+	Service string             `json:"service,omitempty"`
 	Changes []StageChangeInput `json:"changes"`
 }
 
@@ -38,32 +39,35 @@ type PushChangesetInput struct {
 	Description string `json:"description"`
 }
 
-func (s *ChangesetService) GetChangeset(ctx context.Context, appName string) (*domain.Changeset, error) {
-	app, err := s.appService.GetApp(ctx, appName)
+func (s *ChangesetService) GetChangeset(ctx context.Context, projectName string) (*domain.Changeset, error) {
+	project, err := s.projectService.GetProject(ctx, projectName)
 	if err != nil {
 		return nil, err
 	}
-	cs, err := s.store.GetOpenChangeset(ctx, app.ID)
+	cs, err := s.store.GetOpenChangeset(ctx, project.ID)
 	if err != nil {
 		if err == launchpad.ErrNotFound {
-			return &domain.Changeset{AppID: app.ID, Status: domain.ChangesetOpen, Changes: []domain.ChangesetChange{}}, nil
+			return &domain.Changeset{ProjectID: project.ID, Status: domain.ChangesetOpen, Changes: []domain.ChangesetChange{}}, nil
 		}
 		return nil, err
 	}
 	return cs, nil
 }
 
-func (s *ChangesetService) StageChanges(ctx context.Context, appName string, input StageChangesInput) (*domain.Changeset, error) {
+func (s *ChangesetService) StageChanges(ctx context.Context, projectName string, input StageChangesInput) (*domain.Changeset, error) {
 	if len(input.Changes) == 0 {
 		return nil, fmt.Errorf("%w: at least one change required", launchpad.ErrBadRequest)
 	}
-	app, err := s.appService.GetApp(ctx, appName)
+	project, svc, _, err := s.projectService.resolvePrimaryService(ctx, projectName)
 	if err != nil {
 		return nil, err
 	}
+	if input.Service != "" && input.Service != project.PrimaryService {
+		return nil, fmt.Errorf("%w: service must match primary service %q", launchpad.ErrBadRequest, project.PrimaryService)
+	}
 
 	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
-		open, err := s.store.GetOrCreateOpenChangeset(ctx, tx, app.ID)
+		open, err := s.store.GetOrCreateOpenChangeset(ctx, tx, project.ID)
 		if err != nil {
 			return err
 		}
@@ -74,6 +78,8 @@ func (s *ChangesetService) StageChanges(ctx context.Context, appName string, inp
 			if err != nil {
 				return err
 			}
+			change.ServiceID = &svc.ID
+			change.ServiceName = svc.Name
 			changes = append(changes, change)
 		}
 		return s.store.AddChangesetChanges(ctx, tx, open.ID, changes)
@@ -81,23 +87,23 @@ func (s *ChangesetService) StageChanges(ctx context.Context, appName string, inp
 	if err != nil {
 		return nil, err
 	}
-	return s.store.GetOpenChangeset(ctx, app.ID)
+	return s.store.GetOpenChangeset(ctx, project.ID)
 }
 
-func (s *ChangesetService) DiscardChangeset(ctx context.Context, appName string) error {
-	app, err := s.appService.GetApp(ctx, appName)
+func (s *ChangesetService) DiscardChangeset(ctx context.Context, projectName string) error {
+	project, err := s.projectService.GetProject(ctx, projectName)
 	if err != nil {
 		return err
 	}
-	return s.store.DiscardOpenChangeset(ctx, app.ID)
+	return s.store.DiscardOpenChangeset(ctx, project.ID)
 }
 
-func (s *ChangesetService) PushChangeset(ctx context.Context, appName string, input PushChangesetInput) (*CreateReleaseResult, error) {
-	app, err := s.appService.GetApp(ctx, appName)
+func (s *ChangesetService) PushChangeset(ctx context.Context, projectName string, input PushChangesetInput) (*CreateReleaseResult, error) {
+	project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName)
 	if err != nil {
 		return nil, err
 	}
-	cs, err := s.store.GetOpenChangeset(ctx, app.ID)
+	cs, err := s.store.GetOpenChangeset(ctx, project.ID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: no open changeset to push", launchpad.ErrNotFound)
 	}
@@ -105,12 +111,12 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, appName string, in
 		return nil, fmt.Errorf("%w: changeset is empty", launchpad.ErrBadRequest)
 	}
 
-	configUpdates, scales, image, err := materializeChanges(cs.Changes)
+	configUpdates, scales, artifactRef, err := materializeChanges(cs.Changes)
 	if err != nil {
 		return nil, err
 	}
 
-	liveConfig, err := s.store.ListConfigVars(ctx, app.ID)
+	liveConfig, err := s.store.ListConfigVars(ctx, svc.ID, env.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,31 +130,27 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, appName string, in
 
 	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
 		if len(configUpdates) > 0 {
-			if err := s.store.MergeConfigVarsTx(ctx, tx, app.ID, configUpdates); err != nil {
+			if err := s.store.MergeConfigVarsTx(ctx, tx, svc.ID, env.ID, configUpdates); err != nil {
 				return err
 			}
 		}
 		for process, qty := range scales {
-			if err := s.store.UpdateProcessQuantity(ctx, tx, app.ID, process, qty); err != nil {
+			if err := s.store.UpdateProcessQuantity(ctx, tx, svc.ID, process, qty); err != nil {
 				return err
 			}
 		}
-		if err := s.store.CommitChangeset(ctx, tx, cs.ID); err != nil {
-			return err
-		}
-		return nil
+		return s.store.CommitChangeset(ctx, tx, cs.ID)
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	imageRef := image
-	if imageRef == "" {
-		latest, err := s.store.GetLatestSucceededRelease(ctx, app.ID)
+	if artifactRef == "" {
+		latest, err := s.store.GetLatestSucceededRelease(ctx, svc.ID)
 		if err != nil {
 			return nil, fmt.Errorf("%w: no image staged and no previous release to redeploy", launchpad.ErrBadRequest)
 		}
-		imageRef = latest.ImageRef
+		artifactRef = latest.ArtifactRef
 	}
 
 	desc := input.Description
@@ -156,11 +158,10 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, appName string, in
 		desc = fmt.Sprintf("Push changeset (%d changes)", len(cs.Changes))
 	}
 
-	return s.releaseService.enqueueRelease(ctx, app, releasePlan{
-		ImageRef:    imageRef,
+	return s.releaseService.enqueueRelease(ctx, project, svc, env, releasePlan{
+		ArtifactRef: artifactRef,
 		Config:      liveConfig,
 		Description: desc,
-		JobType:     domain.JobTypeDeploy,
 	})
 }
 
@@ -182,7 +183,7 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 		if input.Image == "" {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: image change requires image", launchpad.ErrBadRequest)
 		}
-		payload, _ := json.Marshal(domain.ImageChangePayload{Image: input.Image})
+		payload, _ := json.Marshal(domain.ImageChangePayload{ArtifactRef: input.Image})
 		return domain.ChangesetChange{Type: domain.ChangeTypeImage, Payload: payload}, nil
 	default:
 		return domain.ChangesetChange{}, fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, input.Type)
@@ -192,7 +193,7 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 func materializeChanges(changes []domain.ChangesetChange) (map[string]*string, map[string]int, string, error) {
 	configUpdates := make(map[string]*string)
 	scales := make(map[string]int)
-	var image string
+	var artifactRef string
 
 	for _, c := range changes {
 		switch c.Type {
@@ -213,8 +214,8 @@ func materializeChanges(changes []domain.ChangesetChange) (map[string]*string, m
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
 				return nil, nil, "", err
 			}
-			image = p.Image
+			artifactRef = p.ArtifactRef
 		}
 	}
-	return configUpdates, scales, image, nil
+	return configUpdates, scales, artifactRef, nil
 }

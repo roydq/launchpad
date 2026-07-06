@@ -24,7 +24,7 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 	case <-time.After(500 * time.Millisecond):
 	}
 	return &target.DeployResult{
-		TargetRef: fmt.Sprintf("stub-%s-v%d", req.App.Name, req.Release.Version),
+		TargetRef: fmt.Sprintf("stub-%s-%s-v%d", req.Project.Name, req.Service.Name, req.Release.Version),
 		ProcessState: map[string]target.ProcessState{
 			"web": {Desired: 1, Ready: 1},
 		},
@@ -41,7 +41,12 @@ func (t *Target) Destroy(ctx context.Context, req target.DestroyRequest) error {
 
 func (t *Target) Rollback(ctx context.Context, req target.RollbackRequest) (*target.DeployResult, error) {
 	return t.Deploy(ctx, target.DeployRequest{
-		App: req.App, Release: req.Release, Processes: req.Processes, Config: req.Config, ImageRef: req.Release.ImageRef,
+		Project:     req.Project,
+		Service:     req.Service,
+		Environment: req.Environment,
+		Release:     req.Release,
+		Processes:   req.Processes,
+		Config:      req.Config,
 	})
 }
 

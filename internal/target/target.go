@@ -9,11 +9,12 @@ import (
 )
 
 type DeployRequest struct {
-	App       domain.App
-	Release   domain.Release
-	Processes []domain.ProcessType
-	Config    map[string]string
-	ImageRef  string
+	Project     domain.Project
+	Service     domain.Service
+	Environment domain.Environment
+	Release     domain.Release
+	Processes   []domain.Process
+	Config      map[string]string
 }
 
 type DeployResult struct {
@@ -27,29 +28,39 @@ type ProcessState struct {
 }
 
 type ScaleRequest struct {
-	App         domain.App
+	Project     domain.Project
+	Service     domain.Service
+	Environment domain.Environment
 	ProcessName string
 	Quantity    int
 }
 
 type DestroyRequest struct {
-	App domain.App
+	Project     domain.Project
+	Service     domain.Service
+	Environment domain.Environment
 }
 
 type RollbackRequest struct {
-	App       domain.App
-	Release   domain.Release
-	Processes []domain.ProcessType
-	Config    map[string]string
+	Project     domain.Project
+	Service     domain.Service
+	Environment domain.Environment
+	Release     domain.Release
+	Processes   []domain.Process
+	Config      map[string]string
 }
 
 type StatusRequest struct {
-	App       domain.App
-	Processes []domain.ProcessType
+	Project     domain.Project
+	Service     domain.Service
+	Environment domain.Environment
+	Processes   []domain.Process
 }
 
 type LogsRequest struct {
-	App         domain.App
+	Project     domain.Project
+	Service     domain.Service
+	Environment domain.Environment
 	ProcessName string
 }
 

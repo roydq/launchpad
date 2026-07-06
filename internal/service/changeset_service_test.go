@@ -14,7 +14,7 @@ import (
 func TestMaterializeChanges(t *testing.T) {
 	configPayload, _ := json.Marshal(domain.ConfigChangePayload{Key: "PORT", Value: strPtr("3000")})
 	scalePayload, _ := json.Marshal(domain.ScaleChangePayload{Process: "web", Quantity: 3})
-	imagePayload, _ := json.Marshal(domain.ImageChangePayload{Image: "app:v2"})
+	imagePayload, _ := json.Marshal(domain.ImageChangePayload{ArtifactRef: "app:v2"})
 
 	changes := []domain.ChangesetChange{
 		{Type: domain.ChangeTypeConfig, Payload: configPayload},
@@ -49,17 +49,24 @@ func TestChangesetStageAndPush(t *testing.T) {
 	}
 	st := store.New(db, driver)
 
-	teamID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	app := &domain.App{TeamID: teamID, Name: "batch-app", TargetType: "stub", TargetConfig: json.RawMessage(`{"namespace":"default"}`)}
-	if err := st.CreateApp(ctx, app); err != nil {
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{
+		WorkspaceID: workspaceID,
+		Name:        "batch-app",
+	}
+	env := &domain.Environment{
+		TargetType:   "stub",
+		TargetConfig: json.RawMessage(`{"namespace":"default"}`),
+	}
+	if err := st.CreateProject(ctx, project, env); err != nil {
 		t.Fatal(err)
 	}
 
-	appSvc := NewAppService(st)
-	releaseSvc := NewReleaseService(st, appSvc)
-	csSvc := NewChangesetService(st, appSvc, releaseSvc)
+	projectSvc := NewProjectService(st)
+	releaseSvc := NewReleaseService(st, projectSvc)
+	csSvc := NewChangesetService(st, projectSvc, releaseSvc)
 
-	ctx = context.WithValue(ctx, auth.ContextTeamID, teamID)
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
 
 	_, err = csSvc.StageChanges(ctx, "batch-app", StageChangesInput{Changes: []StageChangeInput{
 		{Type: "config", Key: "FOO", Value: strPtr("bar")},
@@ -85,12 +92,51 @@ func TestChangesetStageAndPush(t *testing.T) {
 		t.Fatalf("expected deploy job, got %s", result.Job.Type)
 	}
 
-	vars, err := st.ListConfigVars(ctx, app.ID)
+	svc, err := st.GetServiceByProjectAndName(ctx, project.ID, project.PrimaryService)
+	if err != nil {
+		t.Fatal(err)
+	}
+	devEnv, err := st.GetEnvironmentByProjectAndName(ctx, project.ID, devEnvironment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vars, err := st.ListConfigVars(ctx, svc.ID, devEnv.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if vars["FOO"] != "bar" {
 		t.Fatalf("config not applied: %+v", vars)
+	}
+}
+
+func TestStageChangesRejectsWrongService(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "my-api"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+
+	projectSvc := NewProjectService(st)
+	csSvc := NewChangesetService(st, projectSvc, NewReleaseService(st, projectSvc))
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+
+	_, err = csSvc.StageChanges(ctx, "my-api", StageChangesInput{
+		Service: "other-service",
+		Changes: []StageChangeInput{{Type: "config", Key: "X", Value: strPtr("1")}},
+	})
+	if err == nil {
+		t.Fatal("expected error for mismatched service")
 	}
 }
 

@@ -1,13 +1,13 @@
 package domain
 
-type AppStatus string
+type ProjectStatus string
 
 const (
-	AppStatusCreated     AppStatus = "created"
-	AppStatusDeploying   AppStatus = "deploying"
-	AppStatusRunning     AppStatus = "running"
-	AppStatusFailed      AppStatus = "failed"
-	AppStatusMaintenance AppStatus = "maintenance"
+	ProjectStatusCreated     ProjectStatus = "created"
+	ProjectStatusDeploying   ProjectStatus = "deploying"
+	ProjectStatusRunning     ProjectStatus = "running"
+	ProjectStatusFailed      ProjectStatus = "failed"
+	ProjectStatusMaintenance ProjectStatus = "maintenance"
 )
 
 type JobStatus string

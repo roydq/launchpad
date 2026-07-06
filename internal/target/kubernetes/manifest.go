@@ -12,18 +12,19 @@ import (
 	"github.com/launchpad/launchpad/internal/target"
 )
 
-func buildSecret(app domain.App, config map[string]string) *corev1.Secret {
+func buildSecret(project domain.Project, service domain.Service, env domain.Environment, config map[string]string) *corev1.Secret {
 	data := make(map[string][]byte, len(config))
 	for k, v := range config {
 		data[k] = []byte(v)
 	}
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName(app.Name),
-			Namespace: mustNamespace(app),
-			Labels:    appLabels(app.Name, "config"),
+			Name:      secretName(project.Name, service.Name),
+			Namespace: mustNamespace(env),
+			Labels:    resourceLabels(project.Name, service.Name, "config"),
 			Annotations: map[string]string{
-				annotationAppName: app.Name,
+				annotationProjectName: project.Name,
+				annotationServiceName: service.Name,
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -31,22 +32,23 @@ func buildSecret(app domain.App, config map[string]string) *corev1.Secret {
 	}
 }
 
-func buildDeployment(app domain.App, release domain.Release, process domain.ProcessType, config map[string]string) *appsv1.Deployment {
+func buildDeployment(project domain.Project, service domain.Service, env domain.Environment, release domain.Release, process domain.Process, config map[string]string) *appsv1.Deployment {
 	replicas := int32(process.Quantity)
 	if replicas < 1 {
 		replicas = 1
 	}
 	port := containerPort(config)
-	labels := appLabels(app.Name, process.Name)
+	labels := resourceLabels(project.Name, service.Name, process.Name)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      deploymentName(app.Name, process.Name),
-			Namespace: mustNamespace(app),
+			Name:      deploymentName(project.Name, service.Name, process.Name),
+			Namespace: mustNamespace(env),
 			Labels:    labels,
 			Annotations: map[string]string{
-				annotationAppName:          app.Name,
-				annotationReleaseVersion:   strconv.Itoa(release.Version),
+				annotationProjectName:    project.Name,
+				annotationServiceName:    service.Name,
+				annotationReleaseVersion: strconv.Itoa(release.Version),
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -65,7 +67,7 @@ func buildDeployment(app domain.App, release domain.Release, process domain.Proc
 					Containers: []corev1.Container{
 						{
 							Name:  process.Name,
-							Image: release.ImageRef,
+							Image: release.ArtifactRef,
 							Ports: []corev1.ContainerPort{
 								{Name: "http", ContainerPort: port, Protocol: corev1.ProtocolTCP},
 							},
@@ -73,7 +75,7 @@ func buildDeployment(app domain.App, release domain.Release, process domain.Proc
 								{
 									SecretRef: &corev1.SecretEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: secretName(app.Name),
+											Name: secretName(project.Name, service.Name),
 										},
 									},
 								},
@@ -86,16 +88,17 @@ func buildDeployment(app domain.App, release domain.Release, process domain.Proc
 	}
 }
 
-func buildService(app domain.App, process domain.ProcessType, config map[string]string) *corev1.Service {
+func buildService(project domain.Project, service domain.Service, env domain.Environment, process domain.Process, config map[string]string) *corev1.Service {
 	port := containerPort(config)
-	labels := appLabels(app.Name, process.Name)
+	labels := resourceLabels(project.Name, service.Name, process.Name)
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceName(app.Name, process.Name),
-			Namespace: mustNamespace(app),
+			Name:      serviceName(project.Name, service.Name, process.Name),
+			Namespace: mustNamespace(env),
 			Labels:    labels,
 			Annotations: map[string]string{
-				annotationAppName: app.Name,
+				annotationProjectName: project.Name,
+				annotationServiceName: service.Name,
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -113,17 +116,17 @@ func buildService(app domain.App, process domain.ProcessType, config map[string]
 	}
 }
 
-func mustNamespace(app domain.App) string {
-	cfg, err := parseTargetConfig(app)
+func mustNamespace(env domain.Environment) string {
+	cfg, err := parseTargetConfig(env)
 	if err != nil {
 		return "default"
 	}
 	return cfg.Namespace
 }
 
-func processesOrDefault(processes []domain.ProcessType) []domain.ProcessType {
+func processesOrDefault(processes []domain.Process) []domain.Process {
 	if len(processes) == 0 {
-		return []domain.ProcessType{{Name: "web", Quantity: 1}}
+		return []domain.Process{{Name: "web", Quantity: 1, Expose: "http"}}
 	}
 	return processes
 }

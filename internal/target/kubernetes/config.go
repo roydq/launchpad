@@ -10,8 +10,10 @@ import (
 
 const (
 	annotationReleaseVersion = "launchpad.dev/release-version"
-	annotationAppName          = "launchpad.dev/app"
-	labelApp                   = "launchpad.dev/app"
+	annotationProjectName    = "launchpad.dev/project"
+	annotationServiceName      = "launchpad.dev/service"
+	labelProject               = "launchpad.dev/project"
+	labelService               = "launchpad.dev/service"
 	labelComponent             = "launchpad.dev/component"
 	labelManagedBy             = "app.kubernetes.io/managed-by"
 
@@ -30,12 +32,12 @@ type targetConfig struct {
 	Cluster   string `json:"cluster"`
 }
 
-func parseTargetConfig(app domain.App) (targetConfig, error) {
+func parseTargetConfig(env domain.Environment) (targetConfig, error) {
 	var cfg targetConfig
-	if len(app.TargetConfig) == 0 {
+	if len(env.TargetConfig) == 0 {
 		return cfg, fmt.Errorf("target_config is required")
 	}
-	if err := json.Unmarshal(app.TargetConfig, &cfg); err != nil {
+	if err := json.Unmarshal(env.TargetConfig, &cfg); err != nil {
 		return cfg, fmt.Errorf("parse target_config: %w", err)
 	}
 	if cfg.Namespace == "" {
@@ -44,25 +46,26 @@ func parseTargetConfig(app domain.App) (targetConfig, error) {
 	return cfg, nil
 }
 
-func resourcePrefix(appName string) string {
-	return "launchpad-" + appName
+func resourcePrefix(projectName, serviceName string) string {
+	return "launchpad-" + projectName + "-" + serviceName
 }
 
-func deploymentName(appName, process string) string {
-	return resourcePrefix(appName) + "-" + process
+func deploymentName(projectName, serviceName, process string) string {
+	return resourcePrefix(projectName, serviceName) + "-" + process
 }
 
-func secretName(appName string) string {
-	return resourcePrefix(appName) + "-config"
+func secretName(projectName, serviceName string) string {
+	return resourcePrefix(projectName, serviceName) + "-config"
 }
 
-func serviceName(appName, process string) string {
-	return resourcePrefix(appName) + "-" + process
+func serviceName(projectName, serviceName, process string) string {
+	return resourcePrefix(projectName, serviceName) + "-" + process
 }
 
-func appLabels(appName, component string) map[string]string {
+func resourceLabels(projectName, serviceName, component string) map[string]string {
 	return map[string]string{
-		labelApp:       appName,
+		labelProject:   projectName,
+		labelService:   serviceName,
 		labelComponent: component,
 		labelManagedBy: managedByValue,
 	}
