@@ -15,7 +15,7 @@ Launchpad is a self-hosted deployment control plane: Heroku-style developer expe
 | 1 | `docs/DOMAIN.md` | Any entity, API shape, lifecycle, or invariant question |
 | 2 | `docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md` | Current MVP scope and what's deferred |
 | 3 | `README.md` | Running locally, CLI examples |
-| 4 | `docs/DESIGN.md` | Control-plane patterns only — **entity sections are superseded** |
+| 4 | `docs/DESIGN.md` | Control-plane architecture, jobs, auth, roadmap |
 
 Do not reintroduce the old `App` model, `/v1/apps` routes, or per-environment duplicate apps.
 

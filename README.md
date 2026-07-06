@@ -136,6 +136,6 @@ See **[AGENTS.md](AGENTS.md)** for domain conventions, toolchain, MVP scope, and
 
 ## Design documents
 
-- **[Domain model](docs/DOMAIN.md)** — entity hierarchy, config layers, changeset semantics
-- **[MVP greenfield spec](docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md)** — approved MVP scope and file plan
-- **[System design](docs/DESIGN.md)** — control plane architecture (entity sections superseded by DOMAIN.md)
+- **[Domain model](docs/DOMAIN.md)** — entity hierarchy, invariants, roadmap
+- **[System design](docs/DESIGN.md)** — control plane architecture, API, storage, jobs
+- **[AGENTS.md](AGENTS.md)** — contributor and AI agent conventions

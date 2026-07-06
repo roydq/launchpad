@@ -2,10 +2,9 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft (revision 1) |
+| **Status** | Active (revision 2) |
 | **Date** | 2026-07-04 |
-| **Supersedes** | Entity model in `docs/DESIGN.md` (revision 3) |
-| **Related** | `docs/DESIGN.md` — control plane, API, worker, and target implementation details |
+| **Related** | `docs/DESIGN.md` — control plane architecture and operational design |
 
 ---
 
@@ -489,45 +488,62 @@ Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` with
 
 ## API Conventions
 
-### Canonical paths
+### Shipped paths (MVP)
+
+Workspace is implicit from the auth token. Environment is `dev`; service is the project's `primary_service`.
 
 ```
-/v1/workspaces/{workspace}/projects
-/v1/workspaces/{workspace}/projects/{project}
-/v1/workspaces/{workspace}/projects/{project}/environments
-/v1/workspaces/{workspace}/projects/{project}/environments/{env}
-/v1/workspaces/{workspace}/projects/{project}/environments/{env}/services
-/v1/workspaces/{workspace}/projects/{project}/environments/{env}/services/{service}/releases
-/v1/workspaces/{workspace}/projects/{project}/environments/{env}/services/{service}/processes
-/v1/workspaces/{workspace}/projects/{project}/environments/{env}/services/{service}/deployments
-/v1/workspaces/{workspace}/projects/{project}/changeset
-/v1/workspaces/{workspace}/projects/{project}/changeset/push
-/v1/workspaces/{workspace}/projects/{project}/promote
+POST   /v1/projects
+GET    /v1/projects
+GET    /v1/projects/{project}
+GET    /v1/projects/{project}/config
+PATCH  /v1/projects/{project}/config
+GET    /v1/projects/{project}/processes
+POST   /v1/projects/{project}/releases
+GET    /v1/projects/{project}/releases
+GET    /v1/projects/{project}/changeset
+POST   /v1/projects/{project}/changeset/changes
+DELETE /v1/projects/{project}/changeset
+POST   /v1/projects/{project}/changeset/push
+GET    /v1/jobs/{id}
+POST   /v1/tokens
+GET    /healthz
 ```
 
-### Convenience aliases (solo-dev ergonomics)
-
-When `workspace` is implicit from the auth token and `environment` from the `X-Launchpad-Environment` header (default: `dev`):
+### Planned paths
 
 ```
-/v1/projects/{project}/...
-/v1/projects/{project}/services/{service}/releases
-/v1/projects/{project}/changeset/push
+/v1/workspaces/{workspace}/projects/{project}/environments/{env}/...
+/v1/projects/{project}/promote
+/v1/projects/{project}/environments
+Idempotency-Key header on mutating POSTs
 ```
 
-Legacy `/v1/apps/{app}/...` routes MAY be supported as aliases resolving to `{project}` + `primary_service` + current environment during a deprecation window.
-
-### Headers
+### Headers (planned)
 
 | Header | Purpose |
 |--------|---------|
-| `X-Launchpad-Environment` | Target environment (default: `dev`) |
-| `X-Launchpad-Service` | Target service (default: project's `primary_service`) |
+| `X-Launchpad-Environment` | Target environment (default: `dev` today) |
+| `X-Launchpad-Service` | Target service (default: `primary_service`) |
 | `Idempotency-Key` | Dedup on mutating POSTs |
 
 ---
 
-## CLI Commands (target state)
+## CLI Commands
+
+### Shipped (MVP)
+
+| Command | Notes |
+|---------|-------|
+| `launchpad projects create` | Bootstraps project + `dev` + primary service + `web` |
+| `launchpad use <project>` | Persists context to `~/.launchpad/config` |
+| `launchpad config get/set` | Service config in `dev` |
+| `launchpad changeset add/status/push/reset` | Git-like staging |
+| `launchpad deploy --image` | Immediate release |
+| `launchpad ps` | Process list |
+| `launchpad releases` | Release history |
+
+### Planned
 
 | Command | Action |
 |---------|--------|
@@ -550,35 +566,14 @@ Legacy `/v1/apps/{app}/...` routes MAY be supported as aliases resolving to `{pr
 | `launchpad promote --service <s> --from <env> --to <env> --release <v>` | Promote release |
 | `launchpad logs --service <s> --process <p>` | Stream logs |
 
----
-
-## Schema Migration from Current Model
-
-The existing codebase uses a flat `App` entity. Migration path:
-
-| Current | New | Notes |
-|---------|-----|-------|
-| `teams` | `workspaces` | Rename table or alias |
-| `apps` | `projects` + `services` | Split each app into project + default service |
-| — | `environments` | Create `dev` env per project; move `target_*` from app |
-| `process_types.app_id` | `processes.service_id` | Repoint FK |
-| `config_vars.app_id` | `config_entries` with `scope` | Add `scope` enum: `workspace`, `shared`, `service` |
-| `releases.app_id` | `releases.service_id` | Repoint FK |
-| `deployments.app_id` | `deployments.service_id` + `environment_id` | Add environment FK |
-| `changesets.app_id` | `changesets.project_id` | Repoint FK; add `service` to changes |
-| `apps.active_deployment_id` | `deployments` partial unique index | Per (service, environment) |
-| — | `release_sets` | New table |
-| — | `bindings` | New table or embedded in config as ref strings |
-
 ### Bootstrap defaults
 
-On `POST /v1/projects` (or `launchpad init`):
+On `POST /v1/projects`:
 
 1. Create project with `primary_service` = project name.
 2. Create environment `dev` with supplied target config.
 3. Create service (same name as project).
 4. Create process `web` (quantity=1, expose=http).
-5. Return project with context hints for CLI.
 
 ---
 
@@ -601,16 +596,16 @@ On `POST /v1/projects` (or `launchpad init`):
 
 ## Phased Implementation
 
-| Phase | Domain changes | DX unlocked |
-|-------|----------------|-------------|
-| **1** | Project / Environment / Service split; migration; bootstrap defaults | Multi-env without duplicate apps |
-| **2** | Layered config (workspace, shared, service) | Shared settings per environment |
-| **3** | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
-| **4** | Bindings and ref resolution | Service linking |
-| **5** | Promotion API | staging → production flow |
-| **6** | `launchpad.yaml` import/export | CI, agent, and tool integration |
+| Phase | Status | Domain changes | DX unlocked |
+|-------|--------|----------------|-------------|
+| **1 — MVP core** | **Done** | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
+| **2** | Planned | Layered config (workspace, shared, service); multi-env | `staging`/`prod`, shared settings |
+| **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
+| **4** | Planned | Bindings and ref resolution | Service linking |
+| **5** | Planned | Promotion API | staging → production flow |
+| **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
 
-Each phase updates API, store, worker, CLI, and target interface together. Targets adapt in phase 1 (naming and request shape).
+Each phase updates API, store, worker, CLI, and target interface together.
 
 ---
 
