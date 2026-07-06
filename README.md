@@ -130,6 +130,10 @@ POST   /v1/tokens
 GET    /healthz
 ```
 
+## For AI agents
+
+See **[AGENTS.md](AGENTS.md)** for domain conventions, toolchain, MVP scope, and project skills (`launchpad-domain`, `launchpad-dev`).
+
 ## Design documents
 
 - **[Domain model](docs/DOMAIN.md)** — entity hierarchy, config layers, changeset semantics
