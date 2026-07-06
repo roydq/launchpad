@@ -2,16 +2,16 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Approved for implementation |
+| **Status** | Completed (merged 2026-07) |
 | **Date** | 2026-07-04 |
 | **Domain spec** | `docs/DOMAIN.md` |
-| **Scope** | MVP core only — no migration from spike |
+| **Scope** | MVP core — greenfield rewrite of spike |
 
 ---
 
 ## Goal
 
-Rebuild Launchpad on the new domain model from scratch. The existing spike code is disposable. Deliver a working solo-engineer loop:
+Rebuilt Launchpad on the new domain model from scratch. Delivered a working solo-engineer loop:
 
 ```bash
 launchpad projects create my-api

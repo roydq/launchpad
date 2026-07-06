@@ -1,8 +1,8 @@
 # MVP Core Greenfield Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: Completed** — merged to `main`. This plan is kept as a historical record of the greenfield rewrite.
 
-**Goal:** Rebuild Launchpad on the Project/Environment/Service domain model from scratch, removing spike code.
+**Goal:** Rebuilt Launchpad on the Project/Environment/Service domain model from scratch, removing spike code.
 
 **Architecture:** Layer-by-layer rewrite on `feat/mvp-core-greenfield` — domain types, single SQL migration, store repos, services, updated target interface, deploy worker, REST API, CLI. MVP hardcodes `dev` environment and single primary service.
 
