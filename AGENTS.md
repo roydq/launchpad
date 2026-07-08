@@ -16,6 +16,7 @@ Launchpad is a self-hosted deployment control plane: Heroku-style developer expe
 | 2 | `docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md` | Current MVP scope and what's deferred |
 | 3 | `README.md` | Running locally, CLI examples |
 | 4 | `docs/DESIGN.md` | Control-plane architecture, jobs, auth, roadmap |
+| 5 | `docs/FEATURE-DEVELOPMENT.md` | Starting a feature, branching, specs, plans, commits, PRs |
 
 Do not reintroduce the old `App` model, `/v1/apps` routes, or per-environment duplicate apps.
 
@@ -87,14 +88,27 @@ For behavioral changes touching deploy flow, also run the stub-target smoke path
 
 If a task crosses a deferred boundary, update `docs/DOMAIN.md` or write a new spec in `docs/superpowers/specs/` first.
 
+## Feature development workflow
+
+For new features or multi-session work, follow `docs/FEATURE-DEVELOPMENT.md`:
+
+1. **Spec** → `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` (templates in `docs/superpowers/templates/`)
+2. **Plan** → `docs/superpowers/plans/YYYY-MM-DD-<name>.md`
+3. **Branch** → `feat/<name>` (optionally in `.worktrees/` — gitignored)
+4. **Implement** → one Go layer per commit; verify with `mise exec -- make test`
+5. **PR** → link spec in description; keep worktree until review completes
+
+Invoke `/launchpad-feature` at the start of agent-driven feature work.
+
 ## Project skills
 
 | Skill | When to use |
 |-------|-------------|
+| `launchpad-feature` | New features, specs, plans, branching, long-horizon tasks |
 | `launchpad-domain` | Entity changes, API design, invariants |
 | `launchpad-dev` | Build, test, local API/worker, smoke deploy |
 
-Invoke via `/launchpad-domain`, `/launchpad-dev`, or let auto-invocation match the skill description.
+Invoke via `/launchpad-feature`, `/launchpad-domain`, `/launchpad-dev`, or let auto-invocation match the skill description.
 
 ## Suggested future tooling (not yet implemented)
 
