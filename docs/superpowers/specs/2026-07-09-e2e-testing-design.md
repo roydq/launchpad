@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft (design approved in brainstorm; awaiting file review) |
+| **Status** | Approved |
 | **Date** | 2026-07-09 |
 | **Domain spec** | `docs/DOMAIN.md` (no entity changes) |
 | **Branch** | `feat/e2e-testing` |
