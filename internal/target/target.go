@@ -8,11 +8,14 @@ import (
 	"github.com/launchpad/launchpad/internal/domain"
 )
 
+// DeployRequest carries identity plus desired state for a deploy.
+// Processes and Config MUST be derived from Release by the caller (worker);
+// do not load them from live process/config tables at deploy time.
 type DeployRequest struct {
 	Project     domain.Project
 	Service     domain.Service
 	Environment domain.Environment
-	Release     domain.Release
+	Release     domain.Release // source of truth for artifact + snapshots
 	Processes   []domain.Process
 	Config      map[string]string
 }

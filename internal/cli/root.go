@@ -204,13 +204,7 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			n := 0
-			if ch, ok := cs["Changes"].([]any); ok {
-				n = len(ch)
-			} else if ch, ok := cs["changes"].([]any); ok {
-				n = len(ch)
-			}
-			fmt.Printf("staged %d total change(s) in changeset\n", n)
+			fmt.Printf("staged %d total change(s) in changeset\n", len(cs.Changes))
 			return nil
 		},
 	}

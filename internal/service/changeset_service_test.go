@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -106,6 +107,119 @@ func TestChangesetStageAndPush(t *testing.T) {
 	}
 	if vars["FOO"] != "bar" {
 		t.Fatalf("config not applied: %+v", vars)
+	}
+}
+
+func TestPushAtomicOnActiveDeploy(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "atomic-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := st.GetServiceByProjectAndName(ctx, project.ID, project.PrimaryService)
+	if err != nil {
+		t.Fatal(err)
+	}
+	devEnv, err := st.GetEnvironmentByProjectAndName(ctx, project.ID, "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Block deploys with an existing active deployment.
+	err = st.Transact(ctx, func(tx *sql.Tx) error {
+		r := &domain.Release{
+			ServiceID: svc.ID, Version: 1, ArtifactRef: "block:v1",
+			ConfigResolved:  map[string]string{},
+			ProcessSnapshot: map[string]domain.ProcessSnapshot{"web": {Quantity: 1, Expose: "http"}},
+		}
+		if err := st.CreateRelease(ctx, tx, r); err != nil {
+			return err
+		}
+		return st.CreateDeployment(ctx, tx, &domain.Deployment{
+			ServiceID: svc.ID, EnvironmentID: devEnv.ID, ReleaseID: r.ID,
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	projectSvc := NewProjectService(st)
+	csSvc := NewChangesetService(st, projectSvc, NewReleaseService(st, projectSvc))
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+
+	_, err = csSvc.StageChanges(ctx, "atomic-app", StageChangesInput{Changes: []StageChangeInput{
+		{Type: "config", Key: "FOO", Value: strPtr("bar")},
+		{Type: "image", Image: "demo:v2"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = csSvc.PushChangeset(ctx, "atomic-app", PushChangesetInput{})
+	if err == nil {
+		t.Fatal("expected push to fail while deployment active")
+	}
+
+	vars, err := st.ListConfigVars(ctx, svc.ID, devEnv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := vars["FOO"]; ok {
+		t.Fatalf("config should roll back on failed push, got %+v", vars)
+	}
+	open, err := csSvc.GetChangeset(ctx, "atomic-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if open.Status != domain.ChangesetOpen || len(open.Changes) != 2 {
+		t.Fatalf("changeset should remain open with staged changes, got status=%s n=%d", open.Status, len(open.Changes))
+	}
+}
+
+func TestProcessSnapshotIncludesCommandAndExpose(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "snap-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+
+	projectSvc := NewProjectService(st)
+	releaseSvc := NewReleaseService(st, projectSvc)
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+
+	result, err := releaseSvc.CreateRelease(ctx, "snap-app", CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "snap:v1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	web, ok := result.Release.ProcessSnapshot["web"]
+	if !ok {
+		t.Fatal("missing web snapshot")
+	}
+	if web.Quantity != 1 || web.Expose != "http" {
+		t.Fatalf("unexpected snapshot: %+v", web)
 	}
 }
 

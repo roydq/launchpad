@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/launchpad/launchpad/internal/domain"
@@ -46,7 +47,7 @@ func (s *ChangesetService) GetChangeset(ctx context.Context, projectName string)
 	}
 	cs, err := s.store.GetOpenChangeset(ctx, project.ID)
 	if err != nil {
-		if err == launchpad.ErrNotFound {
+		if errors.Is(err, launchpad.ErrNotFound) {
 			return &domain.Changeset{ProjectID: project.ID, Status: domain.ChangesetOpen, Changes: []domain.ChangesetChange{}}, nil
 		}
 		return nil, err
@@ -116,18 +117,12 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName string
 		return nil, err
 	}
 
-	liveConfig, err := s.store.ListConfigVars(ctx, svc.ID, env.ID)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range configUpdates {
-		if v == nil {
-			delete(liveConfig, k)
-		} else {
-			liveConfig[k] = *v
-		}
+	desc := input.Description
+	if desc == "" {
+		desc = fmt.Sprintf("Push changeset (%d changes)", len(cs.Changes))
 	}
 
+	var result CreateReleaseResult
 	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
 		if len(configUpdates) > 0 {
 			if err := s.store.MergeConfigVarsTx(ctx, tx, svc.ID, env.ID, configUpdates); err != nil {
@@ -139,30 +134,40 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName string
 				return err
 			}
 		}
+
+		resolvedArtifact := artifactRef
+		if resolvedArtifact == "" {
+			latest, err := s.store.GetLatestSucceededRelease(ctx, svc.ID)
+			if err != nil {
+				return fmt.Errorf("%w: no image staged and no previous release to redeploy", launchpad.ErrBadRequest)
+			}
+			resolvedArtifact = latest.ArtifactRef
+		}
+
+		config, err := s.store.ListConfigVarsTx(ctx, tx, svc.ID, env.ID)
+		if err != nil {
+			return err
+		}
+		processSnapshot, err := s.releaseService.buildProcessSnapshotTx(ctx, tx, svc.ID)
+		if err != nil {
+			return err
+		}
+
+		result, err = s.releaseService.enqueueReleaseTx(ctx, tx, project, svc, env, releasePlan{
+			ArtifactRef:     resolvedArtifact,
+			Config:          config,
+			ProcessSnapshot: processSnapshot,
+			Description:     desc,
+		})
+		if err != nil {
+			return err
+		}
 		return s.store.CommitChangeset(ctx, tx, cs.ID)
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	if artifactRef == "" {
-		latest, err := s.store.GetLatestSucceededRelease(ctx, svc.ID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: no image staged and no previous release to redeploy", launchpad.ErrBadRequest)
-		}
-		artifactRef = latest.ArtifactRef
-	}
-
-	desc := input.Description
-	if desc == "" {
-		desc = fmt.Sprintf("Push changeset (%d changes)", len(cs.Changes))
-	}
-
-	return s.releaseService.enqueueRelease(ctx, project, svc, env, releasePlan{
-		ArtifactRef: artifactRef,
-		Config:      liveConfig,
-		Description: desc,
-	})
+	return &result, nil
 }
 
 func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
@@ -171,19 +176,28 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 		if input.Key == "" {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: config change requires key", launchpad.ErrBadRequest)
 		}
-		payload, _ := json.Marshal(domain.ConfigChangePayload{Key: input.Key, Value: input.Value})
+		payload, err := json.Marshal(domain.ConfigChangePayload{Key: input.Key, Value: input.Value})
+		if err != nil {
+			return domain.ChangesetChange{}, err
+		}
 		return domain.ChangesetChange{Type: domain.ChangeTypeConfig, Payload: payload}, nil
 	case domain.ChangeTypeScale:
 		if input.Process == "" || input.Quantity == nil {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: scale change requires process and quantity", launchpad.ErrBadRequest)
 		}
-		payload, _ := json.Marshal(domain.ScaleChangePayload{Process: input.Process, Quantity: *input.Quantity})
+		payload, err := json.Marshal(domain.ScaleChangePayload{Process: input.Process, Quantity: *input.Quantity})
+		if err != nil {
+			return domain.ChangesetChange{}, err
+		}
 		return domain.ChangesetChange{Type: domain.ChangeTypeScale, Payload: payload}, nil
 	case domain.ChangeTypeImage:
 		if input.Image == "" {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: image change requires image", launchpad.ErrBadRequest)
 		}
-		payload, _ := json.Marshal(domain.ImageChangePayload{ArtifactRef: input.Image})
+		payload, err := json.Marshal(domain.ImageChangePayload{ArtifactRef: input.Image})
+		if err != nil {
+			return domain.ChangesetChange{}, err
+		}
 		return domain.ChangesetChange{Type: domain.ChangeTypeImage, Payload: payload}, nil
 	default:
 		return domain.ChangesetChange{}, fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, input.Type)
@@ -215,6 +229,8 @@ func materializeChanges(changes []domain.ChangesetChange) (map[string]*string, m
 				return nil, nil, "", err
 			}
 			artifactRef = p.ArtifactRef
+		default:
+			return nil, nil, "", fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, c.Type)
 		}
 	}
 	return configUpdates, scales, artifactRef, nil

@@ -38,9 +38,10 @@ type CreateReleaseResult struct {
 }
 
 type releasePlan struct {
-	ArtifactRef string
-	Config      map[string]string
-	Description string
+	ArtifactRef     string
+	Config          map[string]string
+	ProcessSnapshot map[string]domain.ProcessSnapshot
+	Description     string
 }
 
 func (s *ReleaseService) CreateRelease(ctx context.Context, projectName string, input CreateReleaseInput) (*CreateReleaseResult, error) {
@@ -81,74 +82,11 @@ func (s *ReleaseService) ListReleases(ctx context.Context, projectName string) (
 }
 
 func (s *ReleaseService) enqueueRelease(ctx context.Context, project *domain.Project, svc *domain.Service, env *domain.Environment, plan releasePlan) (*CreateReleaseResult, error) {
-	active, err := s.store.HasActiveDeployment(ctx, svc.ID, env.ID)
-	if err != nil {
-		return nil, err
-	}
-	if active {
-		return nil, fmt.Errorf("%w: deployment already in progress", launchpad.ErrConflict)
-	}
-	if plan.ArtifactRef == "" {
-		return nil, fmt.Errorf("%w: artifact is required", launchpad.ErrBadRequest)
-	}
-
-	processSnapshot, err := s.buildProcessSnapshot(ctx, svc.ID)
-	if err != nil {
-		return nil, err
-	}
-
 	var result CreateReleaseResult
-	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
-		version, err := s.store.NextReleaseVersion(ctx, tx, svc.ID)
-		if err != nil {
-			return err
-		}
-
-		release := &domain.Release{
-			ServiceID:       svc.ID,
-			Version:         version,
-			ArtifactRef:     plan.ArtifactRef,
-			ConfigResolved:  plan.Config,
-			ProcessSnapshot: processSnapshot,
-			Status:          domain.ReleaseStatusPending,
-			Description:     plan.Description,
-		}
-		if err := s.store.CreateRelease(ctx, tx, release); err != nil {
-			return err
-		}
-
-		deployment := &domain.Deployment{
-			ServiceID:     svc.ID,
-			EnvironmentID: env.ID,
-			ReleaseID:     release.ID,
-			Status:        domain.DeploymentPending,
-		}
-		if err := s.store.CreateDeployment(ctx, tx, deployment); err != nil {
-			return err
-		}
-
-		payload, _ := json.Marshal(domain.DeployPayload{
-			DeploymentID:  deployment.ID,
-			ServiceID:     svc.ID,
-			EnvironmentID: env.ID,
-			ReleaseID:     release.ID,
-		})
-		job := &domain.Job{
-			Type:         domain.JobTypeDeploy,
-			ResourceType: "deployment",
-			ResourceID:   deployment.ID,
-			Payload:      payload,
-		}
-		if err := s.store.EnqueueJob(ctx, tx, job); err != nil {
-			return err
-		}
-
-		if err := s.updateProjectStatusTx(ctx, tx, project.ID, domain.ProjectStatusDeploying); err != nil {
-			return err
-		}
-
-		result = CreateReleaseResult{Release: *release, Deployment: *deployment, Job: *job}
-		return nil
+	err := s.store.Transact(ctx, func(tx *sql.Tx) error {
+		var err error
+		result, err = s.enqueueReleaseTx(ctx, tx, project, svc, env, plan)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -156,18 +94,103 @@ func (s *ReleaseService) enqueueRelease(ctx context.Context, project *domain.Pro
 	return &result, nil
 }
 
+func (s *ReleaseService) enqueueReleaseTx(ctx context.Context, tx *sql.Tx, project *domain.Project, svc *domain.Service, env *domain.Environment, plan releasePlan) (CreateReleaseResult, error) {
+	var zero CreateReleaseResult
+
+	active, err := s.store.HasActiveDeploymentTx(ctx, tx, svc.ID, env.ID)
+	if err != nil {
+		return zero, err
+	}
+	if active {
+		return zero, fmt.Errorf("%w: deployment already in progress", launchpad.ErrConflict)
+	}
+	if plan.ArtifactRef == "" {
+		return zero, fmt.Errorf("%w: artifact is required", launchpad.ErrBadRequest)
+	}
+
+	processSnapshot := plan.ProcessSnapshot
+	if processSnapshot == nil {
+		processSnapshot, err = s.buildProcessSnapshotTx(ctx, tx, svc.ID)
+		if err != nil {
+			return zero, err
+		}
+	}
+
+	config := plan.Config
+	if config == nil {
+		config = map[string]string{}
+	}
+
+	version, err := s.store.NextReleaseVersion(ctx, tx, svc.ID)
+	if err != nil {
+		return zero, err
+	}
+
+	release := &domain.Release{
+		ServiceID:       svc.ID,
+		Version:         version,
+		ArtifactRef:     plan.ArtifactRef,
+		ConfigResolved:  config,
+		ProcessSnapshot: processSnapshot,
+		Status:          domain.ReleaseStatusPending,
+		Description:     plan.Description,
+	}
+	if err := s.store.CreateRelease(ctx, tx, release); err != nil {
+		return zero, err
+	}
+
+	deployment := &domain.Deployment{
+		ServiceID:     svc.ID,
+		EnvironmentID: env.ID,
+		ReleaseID:     release.ID,
+		Status:        domain.DeploymentPending,
+	}
+	if err := s.store.CreateDeployment(ctx, tx, deployment); err != nil {
+		return zero, err
+	}
+
+	payload, err := json.Marshal(domain.DeployPayload{
+		DeploymentID:  deployment.ID,
+		ServiceID:     svc.ID,
+		EnvironmentID: env.ID,
+		ReleaseID:     release.ID,
+	})
+	if err != nil {
+		return zero, err
+	}
+	job := &domain.Job{
+		Type:         domain.JobTypeDeploy,
+		ResourceType: "deployment",
+		ResourceID:   deployment.ID,
+		Payload:      payload,
+	}
+	if err := s.store.EnqueueJob(ctx, tx, job); err != nil {
+		return zero, err
+	}
+
+	if err := s.store.UpdateProjectStatusTx(ctx, tx, project.ID, domain.ProjectStatusDeploying); err != nil {
+		return zero, err
+	}
+
+	return CreateReleaseResult{Release: *release, Deployment: *deployment, Job: *job}, nil
+}
+
 func (s *ReleaseService) buildProcessSnapshot(ctx context.Context, serviceID uuid.UUID) (map[string]domain.ProcessSnapshot, error) {
-	processes, err := s.store.ListProcesses(ctx, serviceID)
+	return s.buildProcessSnapshotTx(ctx, nil, serviceID)
+}
+
+func (s *ReleaseService) buildProcessSnapshotTx(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID) (map[string]domain.ProcessSnapshot, error) {
+	processes, err := s.store.ListProcessesTx(ctx, tx, serviceID)
 	if err != nil {
 		return nil, err
 	}
 	snapshot := make(map[string]domain.ProcessSnapshot, len(processes))
 	for _, p := range processes {
-		snapshot[p.Name] = domain.ProcessSnapshot{Quantity: p.Quantity}
+		snapshot[p.Name] = domain.ProcessSnapshot{
+			Command:  p.Command,
+			Quantity: p.Quantity,
+			Expose:   p.Expose,
+		}
 	}
 	return snapshot, nil
-}
-
-func (s *ReleaseService) updateProjectStatusTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, status domain.ProjectStatus) error {
-	return s.store.UpdateProjectStatusTx(ctx, tx, projectID, status)
 }

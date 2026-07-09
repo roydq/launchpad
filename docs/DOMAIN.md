@@ -2,9 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Active (revision 2) |
-| **Date** | 2026-07-04 |
+| **Status** | Active (revision 3) |
+| **Date** | 2026-07-09 |
 | **Related** | `docs/DESIGN.md` — control plane architecture and operational design |
+| **In-flight** | `docs/superpowers/specs/2026-07-09-release-invariants-design.md` — snapshot deploy + atomic push |
 
 ---
 
@@ -16,17 +17,27 @@ Design principle: **start from the developer experience, then adapt every layer 
 
 Launchpad aims to be the **mise of runtime application management**: zero ceremony for a solo engineer, composable depth for large distributed systems.
 
+### Reading guide
+
+| Section focus | Binding on current code? |
+|---------------|--------------------------|
+| Design principles, entities, **Key Invariants** | **Yes** — product truth |
+| **MVP (phase 1)** subsection and shipped API/CLI | **Yes** — what runs today / on `feat/release-invariants` |
+| Multi-env, multi-service, bindings, promotion, full Target surface | **Planned** — do not half-implement |
+| Phased implementation table | Roadmap; see “Known invariant debt” until closed |
+
 ---
 
 ## Design Principles
 
 1. **Separate what, where, and how.** A *project* is what you build. An *environment* is where it runs. A *service* is what deploys. A *process* is how it runs.
-2. **Releases are immutable.** Never edit a release. Rollback creates a new release with a prior artifact.
-3. **Config resolves at release time.** A release snapshot records the exact resolved config used for that deploy.
-4. **Changesets stage intent.** Config, scale, and image changes stage by default; push materializes releases.
-5. **Composition via refs, not inheritance.** Services link through typed bindings, not parent/child app trees.
-6. **Environments own targets.** Projects own logic; environments own infrastructure bindings.
-7. **Parallel by default, explicit when multi-service.** Single-service pushes deploy in parallel mode automatically. Pushes touching two or more services require an explicit coordination mode.
+2. **Releases are immutable.** Never edit a release. Rollback creates a new release with a prior artifact (and process snapshot).
+3. **Config resolves at release time.** A release snapshot records the exact resolved config used for that deploy. **Deploy never re-reads live config tables.**
+4. **The release is the deploy source of truth.** Targets receive desired state derived only from the release (artifact, `config_resolved`, `process_snapshot`). Live config/process rows are the **staging ground for the next release**, not what the worker applies.
+5. **Changesets stage intent.** Config, scale, and image changes stage by default; push materializes releases **atomically** with job enqueue.
+6. **Composition via refs, not inheritance.** Services link through typed bindings, not parent/child app trees.
+7. **Environments own targets.** Projects own logic; environments own infrastructure bindings.
+8. **Parallel by default, explicit when multi-service.** Single-service pushes deploy in parallel mode automatically. Pushes touching two or more services require an explicit coordination mode.
 
 ---
 
@@ -85,7 +96,7 @@ erDiagram
     Deployment ||--o{ DeploymentEvent : logs
     Changeset ||--o{ ChangesetChange : contains
     ReleaseSet ||--o{ Release : groups
-    ReleaseSet ||--o| Job : enqueues
+    Release ||--o{ Job : "deploy (via deployment)"
 
     Workspace {
         uuid id PK
@@ -158,7 +169,7 @@ erDiagram
 
 ### Workspace
 
-Isolation and authentication boundary. Maps to the existing `teams` table internally; exposed as `workspace` in user-facing interfaces.
+Isolation and authentication boundary. Stored in the `workspaces` table. (Some auth context keys still use legacy `team_id` naming; user-facing term is always **workspace**.)
 
 - Owns projects and workspace-scoped config.
 - API tokens are scoped to a workspace.
@@ -171,7 +182,7 @@ The name in conversation: **"my-api"**, **"billing"**, **"commerce"**.
 |-------|-------------|
 | `name` | DNS-label safe, unique per workspace. Immutable in v1. |
 | `primary_service` | Default service for commands that omit `--service`. |
-| `status` | Aggregate health (derived from deployments). |
+| `status` | **Cached aggregate** health stored on the project row; updated when deploys are enqueued or reach a terminal state (not a pure live query). |
 
 A project contains services, environments, shared config, and at most one open changeset. **Projects do not deploy directly.**
 
@@ -231,15 +242,27 @@ Immutable snapshot of desired state for a **service**. Versioned monotonically p
 |-------|-------------|
 | `artifact_ref` | Container image reference (digest-pinned when possible). |
 | `config_resolved` | Fully resolved config at snapshot time (all layers + bindings). |
-| `process_snapshot` | `{ "web": { "quantity": 2 }, "worker": { "quantity": 1 } }`. |
-| `status` | `pending`, `succeeded`, `failed`. Coupled to deployment terminal state. |
+| `process_snapshot` | Full process topology at snapshot time (see below). |
+| `status` | `pending`, `succeeded`, `failed`. For MVP: coupled to the deployment created with this release. Multi-env meaning is deferred (phase 2+). |
 | `description` | Human-readable label. |
+
+**`process_snapshot` shape** (map of process name → snapshot):
+
+```json
+{
+  "web": { "command": "", "quantity": 2, "expose": "http" },
+  "worker": { "command": "run-worker", "quantity": 1, "expose": "none" }
+}
+```
+
+Empty `command` means image entrypoint/CMD. Snapshot must be sufficient to build target process specs **without** reading the live `processes` table.
 
 **Invariants:**
 
 1. Releases are immutable once created.
 2. Release version is monotonically increasing per service.
-3. `config_resolved` is computed at release creation, not at runtime.
+3. `config_resolved` and `process_snapshot` are computed at release creation, not at deploy time.
+4. Workers and targets must not re-load live config/process rows for desired state.
 
 ### Deployment
 
@@ -249,9 +272,11 @@ Async application of a release to a **service × environment** pair.
 |-------|-------------|
 | `status` | See [Deployment State Machine](#deployment-state-machine). |
 | `target_ref` | Opaque backend reference (e.g. K8s deployment names). |
-| `active` | At most one non-terminal deployment per (service, environment). |
+| `active` | At most one non-terminal (`pending` / `deploying`) deployment per (service, environment). |
 
-**Concurrency:** enforced by partial unique index on `(service_id, environment_id)` where status ∈ (`pending`, `deploying`).
+**Concurrency:** enforced by partial unique index on `(service_id, environment_id)` where status ∈ (`pending`, `deploying`). Application code maps violations to `409 Conflict`.
+
+**Supersede:** When a deployment transitions to `deploying`, any previous `running` deployment for the same (service, environment) is marked `superseded` in the same transaction (worker-owned).
 
 ### Changeset
 
@@ -260,7 +285,7 @@ Project-scoped staging area for pending mutations. At most one open changeset pe
 | Status | Meaning |
 |--------|---------|
 | `open` | Accepting changes. |
-| `committed` | Pushed; linked to a ReleaseSet. |
+| `committed` | Successfully materialized into release(s) + deploy job(s). Phase 3+: also linked to a ReleaseSet. |
 | `discarded` | Reset by user. |
 
 #### ChangesetChange
@@ -381,24 +406,30 @@ launchpad changeset push --mode atomic --message "Coordinated rollout"
 launchpad changeset reset
 ```
 
-**Push flow:**
+**Push flow (single database transaction for MVP single-service):**
 
 1. Validate changeset is non-empty and open.
-2. Determine affected services.
-3. If 2+ services and no `--mode`, reject.
-4. Apply config/scale mutations to live state (within transaction).
-5. Create one release per affected service (with resolved config + artifact).
-6. Create ReleaseSet linking releases.
-7. Enqueue deploy jobs (one per release).
+2. Determine affected services (MVP: primary service only).
+3. If 2+ services and no `--mode`, reject (phase 3+).
+4. Apply config/scale mutations to live tables (staging ground for the snapshot).
+5. Resolve artifact (from staged image change, or latest succeeded release).
+6. Create one release per affected service (`config_resolved` + full `process_snapshot` + artifact).
+7. Create deployment(s) and enqueue deploy job(s).
 8. Mark changeset `committed`.
+9. **Commit transaction.** On any failure before commit: no live mutations, changeset remains `open`, no job.
 
-Immediate operations (bypass staging):
+Phase 3+: step 6–7 also create a **ReleaseSet** and honor coordination mode. Still one logical transaction.
+
+**Immediate operations** (bypass staging; still create a **new release** — runtime changes do not skip the snapshot model):
 
 ```bash
 launchpad deploy --service api --image api:v2 --now
-launchpad scale --service api web=3 --now
-launchpad rollback --service api 4 --now
+# Future:
+launchpad scale --service api web=3 --now     # creates release from latest artifact + new process snapshot
+launchpad rollback --service api 4 --now      # new release copying artifact + process_snapshot from v4
 ```
+
+There is **no** MVP control-plane path that mutates runtime desired state without a release.
 
 ### Deployment state machine
 
@@ -425,22 +456,22 @@ stateDiagram-v2
 | `running` | `superseded` | New deployment for same service+env reaches `deploying` |
 | `pending`, `deploying` | `cancelled` | User cancel |
 
-Release status is coupled to deployment terminal state: `pending` → `succeeded` | `failed`.
+Release status (MVP): coupled to the deployment created with that release: `pending` → `succeeded` | `failed`. Under multi-env, environment-specific outcomes live on **Deployment**; release status semantics will be refined in phase 2.
 
 ### Rollback
 
-Rollback creates a **new release** (version N+1) with the artifact and process snapshot from a prior succeeded release, then enqueues a deployment.
+Rollback creates a **new release** (version N+1) with the **artifact and process_snapshot** from a prior succeeded release, then enqueues a deployment. Config is re-resolved for the target environment at rollback time (same as a new deploy of that topology), unless product policy later freezes config — default: re-resolve config, copy process topology + artifact.
 
 ```bash
 launchpad rollback --service api 4
 # Creates release v(N+1) with description "Rollback to v4"
 ```
 
-On failure, deployment → `failed`; the previous running deployment remains live.
+On failure, deployment → `failed`; the previous running deployment remains live (until a later deploy supersedes it).
 
 ### Promotion
 
-Promote a succeeded release from one environment to another. The artifact stays identical; config is re-resolved against the target environment's layers.
+Promote a succeeded release from one environment to another. The artifact and process topology stay identical; **all config layers are re-resolved** in the target environment. Do **not** copy `config_resolved` from the source release.
 
 ```bash
 launchpad promote --service api --from staging --to production --release 12
@@ -448,12 +479,10 @@ launchpad promote --service api --from staging --to production --release 12
 
 **Promotion flow:**
 
-1. Read source release (artifact, process snapshot, non-env-specific config).
-2. Re-resolve config against target environment's shared + service layers + bindings.
-3. Create new release in target environment context (new version for that service).
+1. Read source release (`artifact_ref`, `process_snapshot` only for portable desired topology).
+2. Re-resolve config against target environment's layers + bindings.
+3. Create new release (new monotonic version for that service) with re-resolved config.
 4. Enqueue deployment to target environment.
-
-Promotion does **not** copy environment-specific secrets or overrides — only the portable artifact and process topology.
 
 ---
 
@@ -461,26 +490,31 @@ Promotion does **not** copy environment-specific secrets or overrides — only t
 
 Targets implement runtime operations for a **service in an environment**. The domain model is target-agnostic; targets adapt.
 
+### Deploy contract (normative)
+
+Desired state for deploy comes **only** from the release. Callers (worker) may expand the release into process/config fields for backend convenience:
+
 ```go
 type DeployRequest struct {
     Project     Project
     Service     Service
     Environment Environment
-    Release     Release
-    Processes   []Process
-    Config      map[string]string // resolved
-}
-
-type Target interface {
-    Type() string
-    Deploy(ctx context.Context, req DeployRequest) (*DeployResult, error)
-    Scale(ctx context.Context, req ScaleRequest) error
-    Destroy(ctx context.Context, req DestroyRequest) error
-    Rollback(ctx context.Context, req RollbackRequest) (*DeployResult, error)
-    Status(ctx context.Context, req StatusRequest) (*RuntimeStatus, error)
-    Logs(ctx context.Context, req LogsRequest) (io.ReadCloser, error)
+    Release     Release                 // source of truth
+    Processes   []Process               // MUST be derived from release.ProcessSnapshot
+    Config      map[string]string       // MUST be derived from release.ConfigResolved
 }
 ```
+
+Workers **must not** populate `Processes` / `Config` from live `processes` or `config_vars` tables.
+
+### MVP surface vs planned capabilities
+
+| Capability | MVP control plane | Target implementations today |
+|------------|-------------------|------------------------------|
+| `Deploy` | **Used** | Required |
+| `Scale` / `Destroy` / `Rollback` / `Status` / `Logs` | **Not exposed** via API/worker jobs | May exist as stubs or helpers for later phases |
+
+Do not grow control-plane callers for Scale/Logs until those features are in-scope. Optional interface split can follow then.
 
 Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` within the environment's namespace.
 
@@ -488,9 +522,16 @@ Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` with
 
 ## API Conventions
 
+### Serialization
+
+- JSON field names are **snake_case**.
+- Domain structs are **not** the wire schema; handlers use explicit response DTOs (or tagged view types).
+- Errors: RFC 7807 `application/problem+json` (including auth failures).
+- Long operations return `202 Accepted` with deployment + job identifiers.
+
 ### Shipped paths (MVP)
 
-Workspace is implicit from the auth token. Environment is `dev`; service is the project's `primary_service`.
+Workspace is implicit from the auth token. Environment is hardcoded `dev`; service is the project's `primary_service`. Context headers are **not** accepted in MVP (avoid partial multi-env).
 
 ```
 POST   /v1/projects
@@ -510,22 +551,19 @@ POST   /v1/tokens
 GET    /healthz
 ```
 
-### Planned paths
+### Planned paths and headers
 
 ```
 /v1/workspaces/{workspace}/projects/{project}/environments/{env}/...
 /v1/projects/{project}/promote
 /v1/projects/{project}/environments
-Idempotency-Key header on mutating POSTs
 ```
 
-### Headers (planned)
-
-| Header | Purpose |
-|--------|---------|
-| `X-Launchpad-Environment` | Target environment (default: `dev` today) |
-| `X-Launchpad-Service` | Target service (default: `primary_service`) |
-| `Idempotency-Key` | Dedup on mutating POSTs |
+| Header | Purpose | Status |
+|--------|---------|--------|
+| `X-Launchpad-Environment` | Target environment (default `dev`) | Planned (phase 2) |
+| `X-Launchpad-Service` | Target service (default `primary_service`) | Planned (phase 3) |
+| `Idempotency-Key` | Dedup on mutating POSTs | Planned |
 
 ---
 
@@ -543,28 +581,15 @@ Idempotency-Key header on mutating POSTs
 | `launchpad ps` | Process list |
 | `launchpad releases` | Release history |
 
-### Planned
+### Planned (deltas from shipped)
 
 | Command | Action |
 |---------|--------|
-| `launchpad use <project>` | Set project context |
-| `launchpad env use <env>` | Set environment context |
-| `launchpad env list` | List environments |
-| `launchpad env create <name> [--from <env>]` | Create environment |
-| `launchpad services list` | List services in project |
-| `launchpad config set [--shared\|--workspace] KEY=VAL` | Set config at layer |
-| `launchpad config get` | Show resolved config for service+env |
-| `launchpad changeset add --service <s> ...` | Stage changes |
-| `launchpad changeset status` | Show staged changes |
-| `launchpad changeset push [--mode parallel\|atomic]` | Push changeset |
-| `launchpad changeset reset` | Discard changeset |
-| `launchpad deploy --service <s> --image <ref> [--now]` | Deploy immediately |
-| `launchpad releases [--service <s>]` | List releases |
-| `launchpad ps [--service <s>]` | Process status |
-| `launchpad scale --service <s> <process>=<n> [--now]` | Scale immediately |
-| `launchpad rollback --service <s> <version> [--now]` | Rollback |
-| `launchpad promote --service <s> --from <env> --to <env> --release <v>` | Promote release |
-| `launchpad logs --service <s> --process <p>` | Stream logs |
+| `launchpad env use / list / create` | Multi-environment context |
+| `launchpad services list` | Multi-service projects |
+| `launchpad config set [--shared\|--workspace]` | Layered config |
+| `launchpad changeset add --service` / `push --mode` | Multi-service + coordination |
+| `launchpad scale / rollback / promote / logs` | Deferred ops (still release-backed where they change runtime) |
 
 ### Bootstrap defaults
 
@@ -585,12 +610,13 @@ On `POST /v1/projects`:
 4. Process names are unique per service.
 5. Release versions are monotonically increasing per service.
 6. At most one open changeset per project.
-7. At most one active deployment per (service, environment).
-8. Releases are immutable.
-9. `config_resolved` on a release is a complete snapshot — no lazy resolution at deploy time.
-10. Multi-service changeset push requires explicit `coordination` mode.
-11. Binding circular dependencies are rejected at release creation.
-12. Promotion preserves artifact identity; only config is re-resolved.
+7. At most one active (`pending`/`deploying`) deployment per (service, environment).
+8. Releases are immutable after create.
+9. `config_resolved` and `process_snapshot` are complete at release creation — **no live-table reload at deploy time**.
+10. Push materialization (config/scale + release + deployment + job + changeset commit) is **one transaction**.
+11. Multi-service changeset push requires explicit `coordination` mode (phase 3+).
+12. Binding circular dependencies are rejected at release creation (phase 4+).
+13. Promotion preserves artifact + process topology; config is fully re-resolved (phase 5+).
 
 ---
 
@@ -598,7 +624,8 @@ On `POST /v1/projects`:
 
 | Phase | Status | Domain changes | DX unlocked |
 |-------|--------|----------------|-------------|
-| **1 — MVP core** | **Done** | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
+| **1 — MVP core** | **Shipped** (hierarchy, API, CLI, deploy loop) | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
+| **1b — Release invariants** | **On branch** `feat/release-invariants` (implementing / ready for PR) | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
 | **2** | Planned | Layered config (workspace, shared, service); multi-env | `staging`/`prod`, shared settings |
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
 | **4** | Planned | Bindings and ref resolution | Service linking |
@@ -606,6 +633,16 @@ On `POST /v1/projects`:
 | **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
 
 Each phase updates API, store, worker, CLI, and target interface together.
+
+### Known invariant debt (phase 1b)
+
+Until `feat/release-invariants` merges, code may still:
+
+- Deploy from live config/process tables instead of the release snapshot.
+- Commit changeset + config before release enqueue (non-atomic push).
+- Return PascalCase JSON for some list endpoints (untagged domain structs).
+
+Treat those as bugs relative to this document, not as the intended model.
 
 ---
 
@@ -615,6 +652,8 @@ Each phase updates API, store, worker, CLI, and target interface together.
 2. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 3. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.
 4. **`launchpad.yaml` authority.** Import sets desired state; runtime mutations via API/CLI. File is not continuously reconciled (not GitOps). Defer to phase 6.
+5. **Release status under multi-env.** Refine when phase 2 lands; MVP ties release status to the single deploy created with the release.
+6. **Rollback config policy.** Default above is re-resolve config + copy process topology/artifact; revisit if users need bit-identical config rollback.
 
 ---
 
