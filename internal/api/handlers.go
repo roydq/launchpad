@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/api/problem"
 	"github.com/launchpad/launchpad/internal/auth"
-	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/internal/service"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/pkg/launchpad"
@@ -95,7 +94,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	out := make([]any, 0, len(projects))
+	out := make([]projectDTO, 0, len(projects))
 	for i := range projects {
 		out = append(out, projectResponse(&projects[i]))
 	}
@@ -140,7 +139,11 @@ func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, processes)
+	out := make([]processDTO, 0, len(processes))
+	for _, p := range processes {
+		out = append(out, processResponse(p))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) createRelease(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +166,11 @@ func (s *Server) listReleases(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, releases)
+	out := make([]releaseDTO, 0, len(releases))
+	for _, rel := range releases {
+		out = append(out, releaseResponse(rel))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) getChangeset(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +179,7 @@ func (s *Server) getChangeset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, cs)
+	writeJSON(w, http.StatusOK, changesetResponse(cs))
 }
 
 func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +193,7 @@ func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, cs)
+	writeJSON(w, http.StatusOK, changesetResponse(cs))
 }
 
 func (s *Server) discardChangeset(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +229,7 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, job)
+	writeJSON(w, http.StatusOK, jobResponse(job))
 }
 
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
@@ -254,28 +261,6 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func releaseJobResponse(result *service.CreateReleaseResult) map[string]any {
-	return map[string]any{
-		"deployment": map[string]any{
-			"id": result.Deployment.ID, "status": result.Deployment.Status,
-			"release": map[string]any{"version": result.Release.Version},
-		},
-		"job": map[string]any{
-			"id": result.Job.ID, "type": result.Job.Type, "status": result.Job.Status,
-		},
-	}
-}
-
-func projectResponse(project *domain.Project) map[string]any {
-	return map[string]any{
-		"id":              project.ID,
-		"name":            project.Name,
-		"primary_service": project.PrimaryService,
-		"status":          project.Status,
-		"created_at":      project.CreatedAt,
-	}
-}
-
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -293,6 +278,6 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, launchpad.ErrNotImplemented):
 		problem.NotImplemented(w, err.Error())
 	default:
-		problem.Internal(w, err.Error())
+		problem.Internal(w, "internal server error")
 	}
 }
