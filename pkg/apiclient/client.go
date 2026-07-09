@@ -48,12 +48,27 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		return 0, err
 	}
 	defer resp.Body.Close()
-	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, err
+	}
+	if out != nil && len(data) > 0 {
+		if err := json.Unmarshal(data, out); err != nil {
 			return resp.StatusCode, err
 		}
 	}
+	if resp.StatusCode >= 400 {
+		return resp.StatusCode, fmt.Errorf("%s %s: status %d: %s", method, path, resp.StatusCode, truncate(string(data), 200))
+	}
 	return resp.StatusCode, nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 type Project struct {
@@ -63,9 +78,61 @@ type Project struct {
 	Status         string `json:"status"`
 }
 
+type Process struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Command  string `json:"command"`
+	Quantity int    `json:"quantity"`
+	Expose   string `json:"expose"`
+}
+
+type Release struct {
+	ID          string `json:"id"`
+	Version     int    `json:"version"`
+	ArtifactRef string `json:"artifact_ref"`
+	Status      string `json:"status"`
+	Description string `json:"description"`
+}
+
+type ChangesetChange struct {
+	ID          string          `json:"id"`
+	ServiceName string          `json:"service_name"`
+	Type        string          `json:"type"`
+	Payload     json.RawMessage `json:"payload"`
+}
+
+type Changeset struct {
+	ID        string            `json:"id"`
+	ProjectID string            `json:"project_id"`
+	Status    string            `json:"status"`
+	Changes   []ChangesetChange `json:"changes"`
+}
+
+type DeployResult struct {
+	Deployment struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Release struct {
+			Version int `json:"version"`
+		} `json:"release"`
+	} `json:"deployment"`
+	Job struct {
+		ID     string `json:"id"`
+		Type   string `json:"type"`
+		Status string `json:"status"`
+	} `json:"job"`
+}
+
+type Job struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	Status    string `json:"status"`
+	LastError string `json:"last_error,omitempty"`
+}
+
 func (c *Client) CreateProject(ctx context.Context, name, targetType, namespace string) (*Project, error) {
 	var project Project
-	status, err := c.do(ctx, http.MethodPost, "/v1/projects", map[string]any{
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects", map[string]any{
 		"name": name,
 		"target": map[string]any{
 			"type":      targetType,
@@ -75,141 +142,96 @@ func (c *Client) CreateProject(ctx context.Context, name, targetType, namespace 
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusCreated {
-		return nil, fmt.Errorf("create project: status %d", status)
-	}
 	return &project, nil
 }
 
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var projects []Project
-	status, err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &projects)
-	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("list projects: status %d", status)
-	}
-	return projects, nil
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &projects)
+	return projects, err
 }
 
 func (c *Client) GetProject(ctx context.Context, name string) (*Project, error) {
 	var project Project
-	status, err := c.do(ctx, http.MethodGet, "/v1/projects/"+name, nil, &project)
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+name, nil, &project)
 	if err != nil {
 		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("get project: status %d", status)
 	}
 	return &project, nil
 }
 
 func (c *Client) GetConfig(ctx context.Context, project string) (map[string]string, error) {
 	var config map[string]string
-	status, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/config", nil, &config)
-	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("get config: status %d", status)
-	}
-	return config, nil
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/config", nil, &config)
+	return config, err
 }
 
 func (c *Client) PatchConfig(ctx context.Context, project string, updates map[string]*string) (map[string]string, error) {
 	var config map[string]string
-	status, err := c.do(ctx, http.MethodPatch, "/v1/projects/"+project+"/config", updates, &config)
-	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("patch config: status %d", status)
-	}
-	return config, nil
+	_, err := c.do(ctx, http.MethodPatch, "/v1/projects/"+project+"/config", updates, &config)
+	return config, err
 }
 
-func (c *Client) ListProcesses(ctx context.Context, project string) ([]map[string]any, error) {
-	var processes []map[string]any
-	status, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/processes", nil, &processes)
-	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("list processes: status %d", status)
-	}
-	return processes, nil
+func (c *Client) ListProcesses(ctx context.Context, project string) ([]Process, error) {
+	var processes []Process
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/processes", nil, &processes)
+	return processes, err
 }
 
-func (c *Client) ListReleases(ctx context.Context, project string) ([]map[string]any, error) {
-	var releases []map[string]any
-	status, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/releases", nil, &releases)
-	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("list releases: status %d", status)
-	}
-	return releases, nil
+func (c *Client) ListReleases(ctx context.Context, project string) ([]Release, error) {
+	var releases []Release
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/releases", nil, &releases)
+	return releases, err
 }
 
-func (c *Client) Deploy(ctx context.Context, project, image, description string) (map[string]any, error) {
-	var result map[string]any
-	status, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/releases", map[string]any{
+func (c *Client) Deploy(ctx context.Context, project, image, description string) (*DeployResult, error) {
+	var result DeployResult
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/releases", map[string]any{
 		"source": map[string]string{"type": "image", "image": image}, "description": description,
 	}, &result)
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusAccepted {
-		return nil, fmt.Errorf("deploy: status %d", status)
-	}
-	return result, nil
+	return &result, nil
 }
 
-func (c *Client) GetChangeset(ctx context.Context, project string) (map[string]any, error) {
-	var result map[string]any
+func (c *Client) GetChangeset(ctx context.Context, project string) (*Changeset, error) {
+	var result Changeset
 	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/changeset", nil, &result)
-	return result, err
-}
-
-func (c *Client) StageChanges(ctx context.Context, project string, changes []map[string]any) (map[string]any, error) {
-	var result map[string]any
-	status, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/changeset/changes", map[string]any{"changes": changes}, &result)
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("stage: status %d", status)
-	}
-	return result, nil
+	return &result, nil
 }
 
-func (c *Client) PushChangeset(ctx context.Context, project, description string) (map[string]any, error) {
-	var result map[string]any
-	status, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/changeset/push", map[string]string{"description": description}, &result)
+func (c *Client) StageChanges(ctx context.Context, project string, changes []map[string]any) (*Changeset, error) {
+	var result Changeset
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/changeset/changes", map[string]any{"changes": changes}, &result)
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusAccepted {
-		return nil, fmt.Errorf("push: status %d", status)
+	return &result, nil
+}
+
+func (c *Client) PushChangeset(ctx context.Context, project, description string) (*DeployResult, error) {
+	var result DeployResult
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/changeset/push", map[string]string{"description": description}, &result)
+	if err != nil {
+		return nil, err
 	}
-	return result, nil
+	return &result, nil
 }
 
 func (c *Client) DiscardChangeset(ctx context.Context, project string) error {
-	status, err := c.do(ctx, http.MethodDelete, "/v1/projects/"+project+"/changeset", nil, nil)
-	if err != nil {
-		return err
-	}
-	if status != http.StatusNoContent {
-		return fmt.Errorf("discard changeset: status %d", status)
-	}
-	return nil
+	_, err := c.do(ctx, http.MethodDelete, "/v1/projects/"+project+"/changeset", nil, nil)
+	return err
 }
 
-func (c *Client) GetJob(ctx context.Context, id string) (map[string]any, error) {
-	var job map[string]any
+func (c *Client) GetJob(ctx context.Context, id string) (*Job, error) {
+	var job Job
 	_, err := c.do(ctx, http.MethodGet, "/v1/jobs/"+id, nil, &job)
-	return job, err
+	if err != nil {
+		return nil, err
+	}
+	return &job, nil
 }
