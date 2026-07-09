@@ -9,7 +9,11 @@ import (
 )
 
 func (s *Store) ListConfigVars(ctx context.Context, serviceID, environmentID uuid.UUID) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, s.q(`
+	return s.ListConfigVarsTx(ctx, nil, serviceID, environmentID)
+}
+
+func (s *Store) ListConfigVarsTx(ctx context.Context, tx *sql.Tx, serviceID, environmentID uuid.UUID) (map[string]string, error) {
+	rows, err := s.exec(tx).QueryContext(ctx, s.q(`
 		SELECT key, value FROM config_vars WHERE service_id = ? AND environment_id = ? ORDER BY key`),
 		serviceID.String(), environmentID.String())
 	if err != nil {

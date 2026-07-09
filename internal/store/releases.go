@@ -5,12 +5,24 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/pkg/launchpad"
 )
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "duplicate key") ||
+		strings.Contains(msg, "unique index")
+}
 
 func (s *Store) NextReleaseVersion(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID) (int, error) {
 	exec := s.exec(tx)
@@ -75,11 +87,18 @@ func (s *Store) CreateDeployment(ctx context.Context, tx *sql.Tx, deployment *do
 		formatTime(s.driver, deployment.StartedAt), formatTime(s.driver, deployment.CreatedAt),
 		formatTime(s.driver, deployment.UpdatedAt),
 	)
+	if err != nil && isUniqueViolation(err) {
+		return fmt.Errorf("%w: deployment already in progress", launchpad.ErrConflict)
+	}
 	return err
 }
 
 func (s *Store) HasActiveDeployment(ctx context.Context, serviceID, environmentID uuid.UUID) (bool, error) {
-	row := s.db.QueryRowContext(ctx, s.q(`
+	return s.HasActiveDeploymentTx(ctx, nil, serviceID, environmentID)
+}
+
+func (s *Store) HasActiveDeploymentTx(ctx context.Context, tx *sql.Tx, serviceID, environmentID uuid.UUID) (bool, error) {
+	row := s.exec(tx).QueryRowContext(ctx, s.q(`
 		SELECT COUNT(*) FROM deployments
 		WHERE service_id = ? AND environment_id = ? AND status IN ('pending', 'deploying')`),
 		serviceID.String(), environmentID.String())
@@ -88,6 +107,21 @@ func (s *Store) HasActiveDeployment(ctx context.Context, serviceID, environmentI
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// SupersedeRunningDeployments marks all running deployments for the service×env as
+// superseded, optionally excluding one deployment ID (the new active deploy).
+func (s *Store) SupersedeRunningDeployments(ctx context.Context, tx *sql.Tx, serviceID, environmentID, exceptID uuid.UUID) error {
+	exec := s.exec(tx)
+	now := formatTime(s.driver, time.Now().UTC())
+	_, err := exec.ExecContext(ctx, s.q(`
+		UPDATE deployments
+		SET status = ?, message = ?, finished_at = COALESCE(finished_at, ?), updated_at = ?, version = version + 1
+		WHERE service_id = ? AND environment_id = ? AND status = ? AND id != ?`),
+		string(domain.DeploymentSuperseded), "superseded by newer deployment", now, now,
+		serviceID.String(), environmentID.String(), string(domain.DeploymentRunning), exceptID.String(),
+	)
+	return err
 }
 
 func (s *Store) GetDeployment(ctx context.Context, id uuid.UUID) (*domain.Deployment, error) {

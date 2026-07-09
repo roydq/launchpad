@@ -36,7 +36,11 @@ func (s *Store) createProcessTx(ctx context.Context, tx *sql.Tx, process *domain
 }
 
 func (s *Store) ListProcesses(ctx context.Context, serviceID uuid.UUID) ([]domain.Process, error) {
-	rows, err := s.db.QueryContext(ctx, s.q(`
+	return s.ListProcessesTx(ctx, nil, serviceID)
+}
+
+func (s *Store) ListProcessesTx(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID) ([]domain.Process, error) {
+	rows, err := s.exec(tx).QueryContext(ctx, s.q(`
 		SELECT id, service_id, name, command, quantity, expose, created_at, updated_at
 		FROM processes WHERE service_id = ? ORDER BY name`), serviceID.String())
 	if err != nil {
