@@ -625,7 +625,7 @@ On `POST /v1/projects`:
 | Phase | Status | Domain changes | DX unlocked |
 |-------|--------|----------------|-------------|
 | **1 — MVP core** | **Shipped** (hierarchy, API, CLI, deploy loop) | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
-| **1b — Release invariants** | **In progress** (`feat/release-invariants`) | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
+| **1b — Release invariants** | **On branch** `feat/release-invariants` (implementing / ready for PR) | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
 | **2** | Planned | Layered config (workspace, shared, service); multi-env | `staging`/`prod`, shared settings |
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
 | **4** | Planned | Bindings and ref resolution | Service linking |
