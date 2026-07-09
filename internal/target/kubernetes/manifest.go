@@ -65,22 +65,7 @@ func buildDeployment(project domain.Project, service domain.Service, env domain.
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						{
-							Name:  process.Name,
-							Image: release.ArtifactRef,
-							Ports: []corev1.ContainerPort{
-								{Name: "http", ContainerPort: port, Protocol: corev1.ProtocolTCP},
-							},
-							EnvFrom: []corev1.EnvFromSource{
-								{
-									SecretRef: &corev1.SecretEnvSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: secretName(project.Name, service.Name),
-										},
-									},
-								},
-							},
-						},
+						containerFromProcess(process, release.ArtifactRef, port, project.Name, service.Name),
 					},
 				},
 			},
@@ -114,6 +99,29 @@ func buildService(project domain.Project, service domain.Service, env domain.Env
 			Type: corev1.ServiceTypeClusterIP,
 		},
 	}
+}
+
+func containerFromProcess(process domain.Process, image string, port int32, projectName, serviceName string) corev1.Container {
+	c := corev1.Container{
+		Name:  process.Name,
+		Image: image,
+		Ports: []corev1.ContainerPort{
+			{Name: "http", ContainerPort: port, Protocol: corev1.ProtocolTCP},
+		},
+		EnvFrom: []corev1.EnvFromSource{
+			{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secretName(projectName, serviceName),
+					},
+				},
+			},
+		},
+	}
+	if process.Command != "" {
+		c.Command = []string{process.Command}
+	}
+	return c
 }
 
 func mustNamespace(env domain.Environment) string {
