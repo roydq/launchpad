@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/internal/target"
@@ -83,10 +85,14 @@ func (w *Worker) handleDeploy(ctx context.Context, job *domain.Job) error {
 	}
 
 	if err := w.store.Transact(ctx, func(tx *sql.Tx) error {
-		return w.store.UpdateDeploymentStatus(ctx, tx, deployCtx.Deployment.ID, domain.DeploymentPending, domain.DeploymentDeploying, "deploying to target")
+		if err := w.store.UpdateDeploymentStatus(ctx, tx, deployCtx.Deployment.ID, domain.DeploymentPending, domain.DeploymentDeploying, "deploying to target"); err != nil {
+			return err
+		}
+		return w.store.SupersedeRunningDeployments(ctx, tx, deployCtx.Service.ID, deployCtx.Environment.ID, deployCtx.Deployment.ID)
 	}); err != nil {
 		return err
 	}
+	deployCtx.Deployment.Status = domain.DeploymentDeploying
 
 	result, deployErr := targetBackend.Deploy(ctx, target.DeployRequest{
 		Project:     *deployCtx.Project,
@@ -140,14 +146,12 @@ func (w *Worker) loadDeployContext(ctx context.Context, job *domain.Job) (*deplo
 		return nil, err
 	}
 
-	processes, err := w.store.ListProcesses(ctx, service.ID)
-	if err != nil {
-		return nil, err
+	// Desired state comes only from the release snapshot — never live tables.
+	config := release.ConfigResolved
+	if config == nil {
+		config = map[string]string{}
 	}
-	config, err := w.store.ListConfigVars(ctx, service.ID, environment.ID)
-	if err != nil {
-		return nil, err
-	}
+	processes := processesFromSnapshot(service.ID, release.ProcessSnapshot)
 
 	return &deployContext{
 		Payload:     payload,
@@ -159,6 +163,17 @@ func (w *Worker) loadDeployContext(ctx context.Context, job *domain.Job) (*deplo
 		Processes:   processes,
 		Config:      config,
 	}, nil
+}
+
+func processesFromSnapshot(serviceID uuid.UUID, snapshot map[string]domain.ProcessSnapshot) []domain.Process {
+	if len(snapshot) == 0 {
+		return []domain.Process{domain.ProcessFromSnapshot(serviceID, "web", domain.ProcessSnapshot{Quantity: 1, Expose: "http"})}
+	}
+	out := make([]domain.Process, 0, len(snapshot))
+	for name, snap := range snapshot {
+		out = append(out, domain.ProcessFromSnapshot(serviceID, name, snap))
+	}
+	return out
 }
 
 func (w *Worker) markDeploySucceeded(ctx context.Context, deployCtx *deployContext, targetRef string) error {
@@ -175,13 +190,15 @@ func (w *Worker) markDeploySucceeded(ctx context.Context, deployCtx *deployConte
 
 func (w *Worker) markDeployFailed(ctx context.Context, deployCtx *deployContext, deployErr error) error {
 	return w.store.Transact(ctx, func(tx *sql.Tx) error {
-		status := domain.DeploymentDeploying
-		if deployCtx.Deployment.Status == domain.DeploymentPending {
-			status = domain.DeploymentPending
+		from := deployCtx.Deployment.Status
+		if from != domain.DeploymentPending && from != domain.DeploymentDeploying {
+			from = domain.DeploymentDeploying
 		}
-		if err := w.store.UpdateDeploymentStatus(ctx, tx, deployCtx.Deployment.ID, status, domain.DeploymentFailed, deployErr.Error()); err != nil {
-			if err == launchpad.ErrConflict {
-				_ = w.store.UpdateDeploymentStatus(ctx, tx, deployCtx.Deployment.ID, domain.DeploymentPending, domain.DeploymentFailed, deployErr.Error())
+		if err := w.store.UpdateDeploymentStatus(ctx, tx, deployCtx.Deployment.ID, from, domain.DeploymentFailed, deployErr.Error()); err != nil {
+			if errors.Is(err, launchpad.ErrConflict) && from != domain.DeploymentPending {
+				if err2 := w.store.UpdateDeploymentStatus(ctx, tx, deployCtx.Deployment.ID, domain.DeploymentPending, domain.DeploymentFailed, deployErr.Error()); err2 != nil {
+					return err2
+				}
 			} else {
 				return err
 			}
