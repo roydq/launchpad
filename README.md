@@ -100,6 +100,21 @@ launchpad config set PORT=8080
 launchpad deploy --image demo:v1
 ```
 
+## End-to-end tests
+
+Default unit tests never run e2e (`//go:build e2e`).
+
+```bash
+# Fast: real API + worker, stub target (no cluster)
+make e2e-stub
+
+# Slow: kind Kubernetes cluster + public nginx image
+# Requires: Docker, kind, kubectl
+make e2e-kind
+```
+
+Environment knobs: `LAUNCHPAD_E2E_IMAGE`, `LAUNCHPAD_E2E_NAMESPACE`, `LAUNCHPAD_E2E_TIMEOUT` (see `docs/superpowers/specs/2026-07-09-e2e-testing-design.md`).
+
 ## CLI configuration
 
 | Variable | Description |

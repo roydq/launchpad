@@ -68,7 +68,13 @@ mise exec -- make build
 mise exec -- go vet ./...
 ```
 
-For behavioral changes touching deploy flow, also run the stub-target smoke path (see `.grok/skills/launchpad-dev/SKILL.md`).
+For behavioral changes touching deploy flow, also run stub e2e:
+
+```bash
+make e2e-stub          # real API + worker, stub target (canonical automated path)
+```
+
+Kind e2e (`make e2e-kind`) is optional/nightly — needs Docker, kind, and kubectl. Manual smoke notes remain in `.grok/skills/launchpad-dev/SKILL.md`.
 
 ## Code conventions
 
@@ -118,8 +124,8 @@ Invoke via `/launchpad-feature`, `/launchpad-domain`, `/launchpad-dev`, or let a
 |------|-------|
 | **Launchpad MCP server** | Agents call the REST API (create project, push changeset) without shell curl |
 | **`launchpad-target` skill** | Checklist for adding Nomad/ECS backends to `internal/target/` |
-| **CI workflow** | `mise exec -- make test` on PRs |
-| **dev smoke script** | `scripts/smoke-stub.sh` — api + worker + deploy assertion |
+
+**Implemented:** CI on PRs (`.github/workflows/ci.yml` — unit tests + `make e2e-stub`); kind e2e nightly/label (`.github/workflows/e2e-kind.yml`); e2e harness (`make e2e-stub` / `make e2e-kind`, `test/e2e`, `scripts/e2e-*.sh`).
 
 ## What not to do
 

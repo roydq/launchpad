@@ -289,4 +289,4 @@ If worker fails to register k8s, kind e2e fails clearly at deploy (job failed) â
 - [x] Brainstorm design approved (architecture + scenarios + layout + CI)
 - [x] Spec file reviewed by human
 - [x] Implementation plan written (`docs/superpowers/plans/2026-07-09-e2e-testing.md`)
-- [ ] Implementation starts only after plan exists
+- [x] Implementation starts only after plan exists
