@@ -84,6 +84,8 @@ For behavioral changes touching deploy flow, also run the stub-target smoke path
 
 **In scope now:** single `dev` environment, single primary service per project, image-only releases, changesets, deploy worker, stub + K8s targets.
 
+**In-flight correctness (phase 1b):** `feat/release-invariants` — deploy from release snapshot only, atomic changeset push, snake_case API DTOs. Spec: `docs/superpowers/specs/2026-07-09-release-invariants-design.md`. Until merged, treat live-table deploy reload and non-atomic push as known debt (see DOMAIN.md “Known invariant debt”).
+
 **Deferred (do not half-build):** multi-environment promotion, multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace/shared config layers, scale/rollback APIs, SSE/events, idempotency, builds, OpenAPI, Helm.
 
 If a task crosses a deferred boundary, update `docs/DOMAIN.md` or write a new spec in `docs/superpowers/specs/` first.

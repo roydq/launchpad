@@ -3,8 +3,9 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Active |
-| **Date** | 2026-07-04 |
+| **Date** | 2026-07-09 |
 | **Domain model** | [`docs/DOMAIN.md`](DOMAIN.md) — authoritative for entities, invariants, and roadmap |
+| **In-flight** | [`specs/2026-07-09-release-invariants-design.md`](superpowers/specs/2026-07-09-release-invariants-design.md) |
 
 ---
 
@@ -76,11 +77,16 @@ flowchart TB
 ### Request flow (deploy)
 
 1. Client `POST /v1/projects/{project}/releases` or `changeset/push`.
-2. API transaction: snapshot config → create release → create deployment → enqueue job → `202 Accepted`.
-3. Worker leases job, transitions deployment `pending → deploying`.
-4. Worker calls `Target.Deploy` with resolved config and artifact.
-5. On success: deployment `running`, release `succeeded`, project `running`.
-6. On failure: deployment `failed`, release `failed`; previous running deployment stays live.
+2. **Single API/service transaction:**
+   - For push: apply staged config/scale to live tables, then snapshot.
+   - Snapshot `config_resolved` + full `process_snapshot` + artifact.
+   - Create release → create deployment → enqueue job → (push only) mark changeset `committed`.
+   - Commit TX (or roll everything back). Return `202 Accepted`.
+3. Worker leases job, transitions deployment `pending → deploying`, and **supersedes** any previous `running` deployment for the same service×env.
+4. Worker builds `DeployRequest` **only from the release snapshot** (identity entities for naming/namespace; no live config/process reload).
+5. Worker calls `Target.Deploy`.
+6. On success: deployment `running`, release `succeeded`, project status cache `running`.
+7. On failure: deployment `failed`, release `failed`; previous deployment remains `running` only if it was never superseded (failed before `deploying`).
 
 ---
 
@@ -174,15 +180,31 @@ deploying → cancelled
 running → superseded   (when newer deployment reaches deploying)
 ```
 
-Release status is coupled to deployment terminal state: `pending` → `succeeded` | `failed`.
+Release status (MVP): coupled to the deployment created with that release: `pending` → `succeeded` | `failed`.
 
-Concurrency: at most one active deployment per `(service_id, environment_id)` via partial unique index.
+Concurrency: at most one active (`pending`/`deploying`) deployment per `(service_id, environment_id)` via partial unique index; map DB conflicts to `409 Conflict`.
+
+Supersede ownership: worker, in the same transaction as `pending → deploying`.
+
+---
+
+## Transactional boundaries
+
+| Operation | Atomic unit |
+|-----------|-------------|
+| Immediate release (`POST .../releases`) | Snapshot + release + deployment + job + project status |
+| Changeset push | Config/scale apply + snapshot + release + deployment + job + changeset `committed` + project status |
+| Worker deploy start | Deployment `deploying` + supersede previous `running` |
+| Worker deploy terminal | Deployment terminal status + release status + project status |
+
+Live `config_vars` / `processes` rows are inputs **to snapshot creation**, not to the worker.
 
 ---
 
 ## Target interface
 
 ```go
+// Processes and Config MUST be derived from Release by the worker.
 type DeployRequest struct {
     Project     domain.Project
     Service     domain.Service
@@ -192,6 +214,8 @@ type DeployRequest struct {
     Config      map[string]string
 }
 ```
+
+MVP control plane only invokes **Deploy**. Other `Target` methods may exist for future APIs but are not called by the worker today.
 
 | Target | Registration |
 |--------|--------------|
@@ -219,7 +243,7 @@ Tokens are workspace-scoped. The default workspace `default` is seeded at migrat
 
 ## REST API (shipped)
 
-Base path `/v1`. Errors: RFC 7807 (`application/problem+json`). Long operations return `202 Accepted`.
+Base path `/v1`. Errors: RFC 7807 (`application/problem+json`). Long operations return `202 Accepted`. JSON responses use **snake_case** DTOs (domain types are not serialized directly).
 
 ```
 POST   /v1/projects
@@ -239,7 +263,7 @@ POST   /v1/tokens
 GET    /healthz
 ```
 
-Release source: `{"type":"image","image":"<artifact-ref>"}` only.
+Release source: `{"type":"image","image":"<artifact-ref>"}` only. MVP environment/service context is implicit (`dev`, primary service); no `X-Launchpad-*` headers yet.
 
 ---
 
@@ -263,14 +287,15 @@ Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API_URL`. MVP operat
 
 | Phase | Status | Deliverable |
 |-------|--------|-------------|
-| **1 — MVP core** | **Done** | Project/env/service model, changeset, deploy, stub+K8s |
+| **1 — MVP core** | **Shipped** | Project/env/service model, changeset, deploy, stub+K8s |
+| **1b — Release invariants** | **In progress** | Snapshot-only deploy, atomic push, API DTOs (see domain doc) |
 | **2 — Multi-env config** | Planned | `staging`/`prod`, shared/workspace config layers |
 | **3 — Multi-service** | Planned | Multiple services, ReleaseSet, coordination modes |
 | **4 — Bindings** | Planned | `${{ ref }}` config linking between services |
 | **5 — Promotion** | Planned | `promote` across environments |
 | **6 — Integrations** | Planned | `launchpad.yaml` import/export, agent/MCP hooks |
 
-Each phase updates domain → store → service → worker → api → cli → target together.
+Each phase updates domain → store → service → worker → api → cli → target together. Canonical phase narrative: [`DOMAIN.md`](DOMAIN.md).
 
 ---
 
