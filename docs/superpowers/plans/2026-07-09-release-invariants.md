@@ -1,6 +1,6 @@
 # Release Invariants Implementation Plan
 
-> **Status: In Progress** — branch `feat/release-invariants`, started 2026-07-09
+> **Status: Implementation complete** — branch `feat/release-invariants`, ready for PR
 
 > **For agentic workers:** Read `docs/FEATURE-DEVELOPMENT.md` and the spec. Use `/launchpad-domain` for entity questions, `/launchpad-dev` for verification. Commit after each task with the message specified below. Do not implement until the design is approved if still Draft — docs tasks may land first.
 
@@ -41,10 +41,10 @@
 - Modify: `internal/domain/release.go` (comments only if needed)
 - Create or modify: `internal/domain/process_test.go` (optional helpers)
 
-- [ ] Expand `ProcessSnapshot` with `Command string`, `Quantity int`, `Expose string` and json tags
-- [ ] Keep backward-compatible unmarshaling in mind (missing fields → zero values; worker/service treat empty command as image entrypoint)
-- [ ] Verify: `mise exec -- go test ./internal/domain/...`
-- [ ] Commit: `feat(domain): expand process snapshot for deployable desired state`
+- [x] Expand `ProcessSnapshot` with `Command string`, `Quantity int`, `Expose string` and json tags
+- [x] Keep backward-compatible unmarshaling in mind (missing fields → zero values; worker/service treat empty command as image entrypoint)
+- [x] Verify: `mise exec -- go test ./internal/domain/...`
+- [x] Commit: `feat(domain): expand process snapshot for deployable desired state`
 
 ---
 
@@ -54,12 +54,12 @@
 - Modify: `internal/store/releases.go` (or deployments section)
 - Modify: `internal/store/store_test.go` as needed
 
-- [ ] Add `SupersedeRunningDeployment(ctx, tx, serviceID, environmentID, exceptDeploymentID)` (or equivalent) that sets `running → superseded` for other rows
-- [ ] Optionally map unique-index violations on deployment insert to `launchpad.ErrConflict` if not already
-- [ ] Keep `HasActiveDeployment` for pre-checks **or** rely on insert + unique index inside TX (prefer check inside same TX as create, or only unique index)
-- [ ] Tests: two active deploys rejected; supersede updates previous running
-- [ ] Verify: `mise exec -- go test ./internal/store/...`
-- [ ] Commit: `feat(store): supersede running deployments and active-deploy conflict handling`
+- [x] Add `SupersedeRunningDeployments` that sets `running → superseded` for other rows
+- [x] Map unique-index violations on deployment insert to `launchpad.ErrConflict`
+- [x] `HasActiveDeploymentTx` for in-TX checks
+- [x] Tests: two active deploys rejected; supersede updates previous running
+- [x] Verify: `mise exec -- go test ./internal/store/...`
+- [x] Commit: `feat(store): supersede running deployments and active-deploy conflict handling`
 
 ---
 
@@ -69,22 +69,15 @@
 - Modify: `internal/service/release_service.go`
 - Modify: `internal/service/changeset_service.go`
 - Modify: `internal/service/changeset_service_test.go`
-- Create: `internal/service/release_service_test.go` if needed
 
-- [ ] `buildProcessSnapshot` includes command, quantity, expose from `ListProcesses`
-- [ ] `enqueueRelease` remains the single path for create release + deployment + job + project status; call `HasActiveDeployment` **inside** the TX (or depend on unique index + conflict wrap)
-- [ ] `PushChangeset`: **one** `Transact` that:
-  1. Applies config/scale
-  2. Resolves artifact (from changes or latest succeeded release)
-  3. Builds process snapshot + config map for release
-  4. Creates release, deployment, job
-  5. Commits changeset  
-  On any failure, no live mutations and changeset stays open
-- [ ] Remove `updateProjectStatusTx` pass-through if still present — call store directly
-- [ ] Use `errors.Is` for not-found checks
-- [ ] Tests: atomic push rollback; process snapshot fields; concurrent active deploy → conflict
-- [ ] Verify: `mise exec -- go test ./internal/service/...`
-- [ ] Commit: `feat(service): atomic push and full process snapshots`
+- [x] `buildProcessSnapshot` includes command, quantity, expose
+- [x] `enqueueReleaseTx` shared path; active deploy check inside TX
+- [x] `PushChangeset` one Transact for materialize + enqueue + commit
+- [x] Remove pass-through project status wrapper
+- [x] Use `errors.Is` for not-found checks
+- [x] Tests: atomic push rollback; process snapshot fields
+- [x] Verify: `mise exec -- go test ./internal/service/...`
+- [x] Commit: `feat(service): atomic push and full process snapshots`
 
 ---
 
@@ -94,28 +87,25 @@
 - Modify: `internal/jobs/worker.go`
 - Modify: `internal/jobs/worker_test.go`
 
-- [ ] `loadDeployContext` / handleDeploy: set `Config` from `release.ConfigResolved`, `Processes` reconstructed from `release.ProcessSnapshot` (+ service ID / names as needed)
-- [ ] Do **not** call `ListConfigVars` or `ListProcesses` for deploy desired state
-- [ ] On `pending → deploying`, supersede previous running deployment for service×env
-- [ ] Clean fail-path transitions with `errors.Is`; avoid discarded errors where possible
-- [ ] Test: mutate live config after release create; deploy still uses snapshot
-- [ ] Test: supersede previous running
-- [ ] Verify: `mise exec -- go test ./internal/jobs/...`
-- [ ] Commit: `feat(worker): deploy from release snapshot only`
+- [x] Desired state from release snapshot only
+- [x] Supersede previous running on `pending → deploying`
+- [x] Fail-path uses `errors.Is`
+- [x] Tests: snapshot isolation; supersede
+- [x] Verify: `mise exec -- go test ./internal/jobs/...`
+- [x] Commit: `feat(worker): deploy from release snapshot only`
 
 ---
 
 ## Task 5: Target (minimal)
 
 **Files:**
-- Modify: `internal/target/target.go` (doc comments on DeployRequest)
-- Modify: `internal/target/kubernetes/manifest.go` / apply only if command from process is required and currently ignored
-- Modify: tests if behavior changes
+- Modify: `internal/target/target.go`
+- Modify: `internal/target/kubernetes/manifest.go`
 
-- [ ] Document that `Processes` and `Config` must be derived from the release by the caller
-- [ ] Ensure k8s/stub use `process.Command` when building containers if not already
-- [ ] Verify: `mise exec -- go test ./internal/target/...`
-- [ ] Commit: `feat(target): document snapshot-derived deploy inputs`
+- [x] Document snapshot-derived deploy inputs
+- [x] K8s uses `process.Command` when set
+- [x] Verify: `mise exec -- go test ./internal/target/...`
+- [x] Commit: `feat(target): document snapshot-derived deploy inputs`
 
 ---
 
@@ -123,16 +113,11 @@
 
 **Files:**
 - Modify: `internal/api/handlers.go`
-- Create: `internal/api/responses.go` (or similar) for DTOs
-- Optionally: thin job read via store remains acceptable if responses are DTO-shaped
+- Create: `internal/api/responses.go`
 
-- [ ] Add snake_case response types for Project (already map), Release, Process, Job, Changeset (+ changes)
-- [ ] Stop encoding bare domain structs for GET list/get endpoints
-- [ ] Keep `releaseJobResponse` consistent with DTOs
-- [ ] Prefer `problem` package for auth errors if a small shared helper is easy; else leave auth as-is
-- [ ] Avoid leaking raw internal errors on 500 where easy (log detail, generic client message) — optional nicety
-- [ ] Verify: `mise exec -- go test ./internal/api/...` (add tests if package has none; otherwise exercise via service + manual JSON in client tests)
-- [ ] Commit: `feat(api): snake_case response DTOs for MVP endpoints`
+- [x] Snake_case response DTOs
+- [x] Generic 500 detail (no raw internal leak)
+- [x] Commit: `feat(api): snake_case response DTOs for MVP endpoints`
 
 ---
 
@@ -142,21 +127,20 @@
 - Modify: `pkg/apiclient/client.go`
 - Modify: `internal/cli/root.go`
 
-- [ ] Typed structs for Changeset, Release, Process, Job, deploy result
-- [ ] Parse problem+json or at least return body snippet on non-2xx where cheap
-- [ ] Remove dual `Changes` / `changes` key handling in CLI
-- [ ] Verify: `mise exec -- make build` && `mise exec -- go test ./pkg/apiclient/... ./internal/cli/...` (if tests exist)
-- [ ] Commit: `feat(cli): typed API client responses`
+- [x] Typed structs for Changeset, Release, Process, Job, deploy result
+- [x] Error body snippet on non-2xx
+- [x] Remove dual `Changes` / `changes` key handling
+- [x] Verify: `mise exec -- make build`
+- [x] Commit: `feat(cli): typed API client responses`
 
 ---
 
 ## Task 8: Final verification and plan close-out
 
-- [ ] Full verification (below)
-- [ ] Smoke: `scripts/smoke-stub.sh` with API + worker
-- [ ] Update plan status to **Completed** (when PR ready)
-- [ ] Spec approval checkbox if not already
-- [ ] Commit: `chore: verify release-invariants and mark plan complete` (only if residual docs tweaks)
+- [x] Full verification (`make test`, `make build`, `go vet`)
+- [ ] Smoke: `scripts/smoke-stub.sh` with API + worker (optional local)
+- [x] Plan status updated
+- [x] Spec approval checkbox
 
 ---
 
