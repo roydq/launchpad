@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: true
+      - name: Unit tests
+        run: mise exec -- make test
+      - name: Vet
+        run: mise exec -- go vet ./...
+      - name: E2E stub
+        run: mise exec -- make e2e-stub
