@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft (awaiting approval) |
+| **Status** | Approved |
 | **Date** | 2026-07-09 |
 | **Domain spec** | `docs/DOMAIN.md` |
 | **Scope** | Close MVP invariant debt: snapshot-driven deploy, atomic push, API wire shape, target surface |
@@ -212,5 +212,5 @@ Optional: none for this feature.
 
 ## Approval
 
-- [ ] Design reviewed and approved (required before implementation)
-- [ ] DOMAIN.md / DESIGN.md updated on feature branch with this design
+- [x] Design reviewed and approved (required before implementation)
+- [x] DOMAIN.md / DESIGN.md updated on feature branch with this design
