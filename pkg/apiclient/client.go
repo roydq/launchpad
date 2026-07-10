@@ -235,3 +235,47 @@ func (c *Client) GetJob(ctx context.Context, id string) (*Job, error) {
 	}
 	return &job, nil
 }
+
+type TokenCreateResult struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Workspace string   `json:"workspace"`
+	Scopes    []string `json:"scopes"`
+	Token     string   `json:"token"`
+}
+
+func (c *Client) Healthz(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/healthz", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) CreateToken(ctx context.Context, name, workspace string, scopes []string) (*TokenCreateResult, error) {
+	if workspace == "" {
+		workspace = "default"
+	}
+	if len(scopes) == 0 {
+		scopes = []string{"admin", "project:read", "project:write", "deploy"}
+	}
+	var out TokenCreateResult
+	_, err := c.do(ctx, http.MethodPost, "/v1/tokens", map[string]any{
+		"name": name, "workspace": workspace, "scopes": scopes,
+	}, &out)
+	if err != nil {
+		return nil, err
+	}
+	if out.Token == "" {
+		return nil, fmt.Errorf("create token: empty token in response")
+	}
+	return &out, nil
+}
