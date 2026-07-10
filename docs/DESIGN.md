@@ -269,13 +269,16 @@ Release source: `{"type":"image","image":"<artifact-ref>"}` only. MVP environmen
 
 ## CLI (shipped)
 
+CLI stages mutations into the open changeset; `deploy` calls push. There is no `changeset` subcommand.
+
 | Command | API |
 |---------|-----|
 | `launchpad projects create` | `POST /v1/projects` |
 | `launchpad use` | Writes `~/.launchpad/config` |
-| `launchpad config get/set` | GET/PATCH config |
-| `launchpad changeset add/status/push/reset` | Changeset endpoints |
-| `launchpad deploy --image` | `POST /releases` |
+| `launchpad config get` | `GET /config` (live) |
+| `launchpad config set/unset`, `scale`, `image` | `POST …/changeset/changes` (`--now` → stage + push) |
+| `launchpad diff` / `status` / `reset` | `GET …/changeset` (+ releases for diff); `DELETE …/changeset` |
+| `launchpad deploy` | Optional stage + `POST …/changeset/push` |
 | `launchpad ps` | `GET /processes` |
 | `launchpad releases` | `GET /releases` |
 
