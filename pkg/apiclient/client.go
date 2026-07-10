@@ -86,12 +86,20 @@ type Process struct {
 	Expose   string `json:"expose"`
 }
 
+type ProcessSnapshot struct {
+	Command  string `json:"command"`
+	Quantity int    `json:"quantity"`
+	Expose   string `json:"expose"`
+}
+
 type Release struct {
-	ID          string `json:"id"`
-	Version     int    `json:"version"`
-	ArtifactRef string `json:"artifact_ref"`
-	Status      string `json:"status"`
-	Description string `json:"description"`
+	ID              string                     `json:"id"`
+	Version         int                        `json:"version"`
+	ArtifactRef     string                     `json:"artifact_ref"`
+	ConfigResolved  map[string]string          `json:"config_resolved"`
+	ProcessSnapshot map[string]ProcessSnapshot `json:"process_snapshot"`
+	Status          string                     `json:"status"`
+	Description     string                     `json:"description"`
 }
 
 type ChangesetChange struct {

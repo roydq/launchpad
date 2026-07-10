@@ -6,7 +6,7 @@ Heroku/Deis-style deployment platform with a project/environment/service domain 
 
 - **API server** (`cmd/api`) — REST control plane, enqueues deploy jobs
 - **Worker** (`cmd/worker`) — leases jobs from Postgres/SQLite, applies releases to targets
-- **CLI** (`cmd/launchpad`) — manages projects, config, changesets, and releases
+- **CLI** (`cmd/launchpad`) — manages projects, config, releases; stages changes implicitly
 
 ## Domain model (MVP)
 
@@ -26,8 +26,9 @@ Workspace
 launchpad projects create my-api
 launchpad use my-api
 launchpad config set PORT=3000
-launchpad changeset add --image my-api:v1
-launchpad changeset push
+launchpad image my-api:v1
+launchpad diff
+launchpad deploy -m "initial"
 launchpad ps
 launchpad releases
 ```
@@ -50,22 +51,30 @@ Resources created per service:
 | Deployment (per process) | `launchpad-{project}-{service}-{process}` |
 | Service (http processes) | `launchpad-{project}-{service}-{process}` |
 
-## Changeset workflow
+## Staging and deploy
 
-Stage multiple changes, then push as a single release:
+Mutations stage by default into the project's open changeset (HTTP API still uses `/changeset*`). Review, then submit with `deploy`:
 
 ```bash
-launchpad changeset add PORT=3000
-launchpad changeset add --scale web=3 --image my-api:v2
-launchpad changeset status
-launchpad changeset push --message "Scale web + update config"
-launchpad changeset reset
+launchpad config set PORT=3000
+launchpad scale web=3
+launchpad image my-api:v2
+launchpad status
+launchpad diff
+launchpad deploy -m "Scale web + update config"
+launchpad reset   # discard pending without deploying
 ```
 
-Immediate deploy (bypasses changeset):
+One-shot (append mutations and deploy):
 
 ```bash
-launchpad deploy --image my-api:v1
+launchpad deploy --image my-api:v1 PORT=8080 -m "bump"
+```
+
+Immediate release when staging is empty (`--now` on mutation commands only):
+
+```bash
+launchpad config set DEBUG=true --now -m "debug on"
 ```
 
 ## Prerequisites
