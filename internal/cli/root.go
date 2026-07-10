@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
@@ -31,7 +30,7 @@ func NewRoot(cfg Config) *cobra.Command {
 	}
 
 	projectsCmd := &cobra.Command{Use: "projects", Short: "Manage projects"}
-	projectsCmd.AddCommand(&cobra.Command{
+	createCmd := &cobra.Command{
 		Use:   "create [name]",
 		Short: "Create a new project (bootstraps dev env + primary service)",
 		Args:  cobra.ExactArgs(1),
@@ -45,10 +44,10 @@ func NewRoot(cfg Config) *cobra.Command {
 			fmt.Printf("created project %s (%s)\n", project.Name, project.ID)
 			return nil
 		},
-	})
-	createFlags := projectsCmd.Commands()[0].Flags()
-	createFlags.String("target", "stub", "dev environment target type")
-	createFlags.String("namespace", "default", "dev environment namespace")
+	}
+	createCmd.Flags().String("target", "stub", "dev environment target type")
+	createCmd.Flags().String("namespace", "default", "dev environment namespace")
+	projectsCmd.AddCommand(createCmd)
 	root.AddCommand(projectsCmd)
 
 	root.AddCommand(&cobra.Command{
@@ -64,10 +63,10 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
-	configCmd := &cobra.Command{Use: "config", Short: "Manage service config in dev environment"}
+	configCmd := &cobra.Command{Use: "config", Short: "Manage service config (stages by default)"}
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "get",
-		Short: "Show config vars",
+		Short: "Show live (applied) config vars",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
@@ -82,55 +81,236 @@ func NewRoot(cfg Config) *cobra.Command {
 			return nil
 		},
 	})
-	configCmd.AddCommand(&cobra.Command{
+
+	configSetCmd := &cobra.Command{
 		Use:   "set [KEY=VALUE...]",
-		Short: "Set config vars",
+		Short: "Stage config vars (use --now to release immediately)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			updates := make(map[string]*string, len(args))
-			for _, arg := range args {
-				parts := strings.SplitN(arg, "=", 2)
-				if len(parts) != 2 {
-					return fmt.Errorf("expected KEY=VALUE, got %q", arg)
-				}
-				val := parts[1]
-				updates[parts[0]] = &val
-			}
-			vars, err := client.PatchConfig(cmd.Context(), project, updates)
+			changes, err := parseKEYVALArgs(args)
 			if err != nil {
 				return err
 			}
-			b, _ := json.MarshalIndent(vars, "", "  ")
-			fmt.Println(string(b))
-			return nil
+			now, _ := cmd.Flags().GetBool("now")
+			message, _ := cmd.Flags().GetString("message")
+			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
+				fmt.Sprintf("Staged config %s", configKeysSummary(changes)))
 		},
-	})
-	root.AddCommand(configCmd)
+	}
+	configSetCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
+	configSetCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	configCmd.AddCommand(configSetCmd)
 
-	deployCmd := &cobra.Command{
-		Use:   "deploy",
-		Short: "Deploy an image immediately",
+	configUnsetCmd := &cobra.Command{
+		Use:   "unset [KEY...]",
+		Short: "Stage config key deletions",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			image, _ := cmd.Flags().GetString("image")
-			result, err := client.Deploy(cmd.Context(), project, image, "cli deploy")
+			changes := make([]map[string]any, 0, len(args))
+			for _, key := range args {
+				changes = append(changes, configUnsetChange(key))
+			}
+			now, _ := cmd.Flags().GetBool("now")
+			message, _ := cmd.Flags().GetString("message")
+			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
+				fmt.Sprintf("Staged unset %s", strings.Join(args, ", ")))
+		},
+	}
+	configUnsetCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
+	configUnsetCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	configCmd.AddCommand(configUnsetCmd)
+	root.AddCommand(configCmd)
+
+	scaleCmd := &cobra.Command{
+		Use:   "scale [PROC=N...]",
+		Short: "Stage process scale changes",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("deployment queued: %v\n", result)
+			var changes []map[string]any
+			var labels []string
+			for _, arg := range args {
+				ch, err := parseScaleArg(arg)
+				if err != nil {
+					return err
+				}
+				changes = append(changes, ch)
+				labels = append(labels, arg)
+			}
+			now, _ := cmd.Flags().GetBool("now")
+			message, _ := cmd.Flags().GetString("message")
+			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
+				fmt.Sprintf("Staged scale %s", strings.Join(labels, ", ")))
+		},
+	}
+	scaleCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
+	scaleCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	root.AddCommand(scaleCmd)
+
+	imageCmd := &cobra.Command{
+		Use:   "image [ref]",
+		Short: "Stage a container image change",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			now, _ := cmd.Flags().GetBool("now")
+			message, _ := cmd.Flags().GetString("message")
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{imageChange(args[0])}, now, message,
+				fmt.Sprintf("Staged image %s", args[0]))
+		},
+	}
+	imageCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
+	imageCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	root.AddCommand(imageCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "diff",
+		Short: "Show pending staged changes vs last release",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			cs, err := loadPending(cmd.Context(), client, project)
+			if err != nil {
+				return err
+			}
+			folded, err := foldChanges(cs.Changes)
+			if err != nil {
+				return err
+			}
+			baseline, err := latestRelease(cmd.Context(), client, project)
+			if err != nil {
+				return err
+			}
+			fmt.Print(formatDiff(folded, baseline))
+			return nil
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show pending staged change summary",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("project: %s\n", project)
+			cs, err := loadPending(cmd.Context(), client, project)
+			if err != nil {
+				return err
+			}
+			n := pendingCount(cs)
+			if n == 0 {
+				fmt.Println("No pending changes")
+				return nil
+			}
+			var nConfig, nScale, nImage int
+			for _, c := range cs.Changes {
+				switch c.Type {
+				case "config":
+					nConfig++
+				case "scale":
+					nScale++
+				case "image":
+					nImage++
+				}
+			}
+			fmt.Printf("pending: %d change(s) (config=%d scale=%d image=%d)\n", n, nConfig, nScale, nImage)
+			fmt.Println(`Run "launchpad diff" to review, "launchpad deploy" to apply, "launchpad reset" to discard.`)
+			return nil
+		},
+	})
+
+	deployCmd := &cobra.Command{
+		Use:   "deploy [KEY=VALUE...]",
+		Short: "Submit staged changes as a release (optional one-shot mutations)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			var changes []map[string]any
+			if len(args) > 0 {
+				kv, err := parseKEYVALArgs(args)
+				if err != nil {
+					return err
+				}
+				changes = append(changes, kv...)
+			}
+			image, _ := cmd.Flags().GetString("image")
+			if image != "" {
+				changes = append(changes, imageChange(image))
+			}
+			scale, _ := cmd.Flags().GetString("scale")
+			if scale != "" {
+				ch, err := parseScaleArg(scale)
+				if err != nil {
+					return fmt.Errorf("--scale: %w", err)
+				}
+				changes = append(changes, ch)
+			}
+			if len(changes) > 0 {
+				if _, err := stage(cmd.Context(), client, project, changes); err != nil {
+					return err
+				}
+			}
+			cs, err := loadPending(cmd.Context(), client, project)
+			if err != nil {
+				return err
+			}
+			if pendingCount(cs) == 0 {
+				return fmt.Errorf("nothing to deploy")
+			}
+			message, _ := cmd.Flags().GetString("message")
+			result, err := push(cmd.Context(), client, project, message)
+			if err != nil {
+				return err
+			}
+			printDeployResult(result)
 			return nil
 		},
 	}
-	deployCmd.Flags().String("image", "", "container image to deploy")
-	_ = deployCmd.MarkFlagRequired("image")
+	deployCmd.Flags().String("image", "", "stage container image then deploy")
+	deployCmd.Flags().String("scale", "", "stage scale change then deploy, e.g. web=3")
+	deployCmd.Flags().StringP("message", "m", "", "release description")
 	root.AddCommand(deployCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "reset",
+		Short: "Discard all pending staged changes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			if err := client.DiscardChangeset(cmd.Context(), project); err != nil {
+				// Friendly no-op when nothing is open.
+				if strings.Contains(err.Error(), "status 404") || strings.Contains(err.Error(), "not found") {
+					fmt.Println("nothing to reset")
+					return nil
+				}
+				return err
+			}
+			fmt.Println("pending changes discarded")
+			return nil
+		},
+	})
 
 	root.AddCommand(&cobra.Command{
 		Use:   "ps",
@@ -168,87 +348,6 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
-	changesetCmd := &cobra.Command{Use: "changeset", Short: "Stage changes before deploying (git-like workflow)"}
-
-	changesetCmd.AddCommand(&cobra.Command{
-		Use:   "status",
-		Short: "Show staged changes",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			project, err := requireProject(cfg)
-			if err != nil {
-				return err
-			}
-			cs, err := client.GetChangeset(cmd.Context(), project)
-			if err != nil {
-				return err
-			}
-			b, _ := json.MarshalIndent(cs, "", "  ")
-			fmt.Println(string(b))
-			return nil
-		},
-	})
-
-	addCmd := &cobra.Command{
-		Use:   "add [KEY=VALUE...]",
-		Short: "Stage config, scale, or image changes",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			project, err := requireProject(cfg)
-			if err != nil {
-				return err
-			}
-			changes, err := parseStageArgs(args, cmd)
-			if err != nil {
-				return err
-			}
-			cs, err := client.StageChanges(cmd.Context(), project, changes)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("staged %d total change(s) in changeset\n", len(cs.Changes))
-			return nil
-		},
-	}
-	addCmd.Flags().String("image", "", "stage a container image")
-	addCmd.Flags().String("scale", "", "stage scale change, e.g. web=3")
-	changesetCmd.AddCommand(addCmd)
-
-	changesetCmd.AddCommand(&cobra.Command{
-		Use:   "reset",
-		Short: "Discard all staged changes",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			project, err := requireProject(cfg)
-			if err != nil {
-				return err
-			}
-			if err := client.DiscardChangeset(cmd.Context(), project); err != nil {
-				return err
-			}
-			fmt.Println("changeset discarded")
-			return nil
-		},
-	})
-
-	pushCmd := &cobra.Command{
-		Use:   "push",
-		Short: "Apply staged changes and deploy",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			project, err := requireProject(cfg)
-			if err != nil {
-				return err
-			}
-			desc, _ := cmd.Flags().GetString("message")
-			result, err := client.PushChangeset(cmd.Context(), project, desc)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("push queued: %v\n", result)
-			return nil
-		},
-	}
-	pushCmd.Flags().String("message", "", "release description")
-	changesetCmd.AddCommand(pushCmd)
-	root.AddCommand(changesetCmd)
-
 	return root
 }
 
@@ -257,38 +356,6 @@ func requireProject(cfg Config) (string, error) {
 		return "", fmt.Errorf("set project with `launchpad use <name>` or LAUNCHPAD_PROJECT")
 	}
 	return cfg.Project, nil
-}
-
-func parseStageArgs(args []string, cmd *cobra.Command) ([]map[string]any, error) {
-	image, _ := cmd.Flags().GetString("image")
-	scale, _ := cmd.Flags().GetString("scale")
-
-	var changes []map[string]any
-	for _, arg := range args {
-		parts := strings.SplitN(arg, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("expected KEY=VALUE, got %q", arg)
-		}
-		changes = append(changes, map[string]any{"type": "config", "key": parts[0], "value": parts[1]})
-	}
-	if image != "" {
-		changes = append(changes, map[string]any{"type": "image", "image": image})
-	}
-	if scale != "" {
-		parts := strings.SplitN(scale, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("expected --scale web=3")
-		}
-		qty, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, map[string]any{"type": "scale", "process": parts[0], "quantity": qty})
-	}
-	if len(changes) == 0 {
-		return nil, fmt.Errorf("no changes to stage")
-	}
-	return changes, nil
 }
 
 func configPath() (string, error) {
