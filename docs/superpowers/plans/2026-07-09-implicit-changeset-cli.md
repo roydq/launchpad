@@ -1,6 +1,6 @@
 # Implicit Changeset CLI Implementation Plan
 
-> **Status: In Progress** — branch `feat/implicit-changeset-cli`, started 2026-07-09
+> **Status: Completed** — branch `feat/implicit-changeset-cli`, ready for PR
 
 > **For agentic workers:** Read `docs/FEATURE-DEVELOPMENT.md` and the spec. Use `/launchpad-dev` for verification. Commit after each task with the message specified below. REQUIRED SUB-SKILL when dispatching: `superpowers:subagent-driven-development` or execute inline with `superpowers:executing-plans`.
 
@@ -34,7 +34,7 @@
 **Files:**
 - Modify: `pkg/apiclient/client.go`
 
-- [ ] Extend `Release` so list responses carry diff baselines:
+- [x] Extend `Release` so list responses carry diff baselines:
 
 ```go
 type ProcessSnapshot struct {
@@ -54,8 +54,8 @@ type Release struct {
 }
 ```
 
-- [ ] Verify: `mise exec -- go test ./pkg/apiclient/...` (package may have no tests; compile via `go test ./pkg/...`)
-- [ ] Commit: `feat(apiclient): include release snapshot fields for CLI diff`
+- [x] Verify: `mise exec -- go test ./pkg/apiclient/...` (package may have no tests; compile via `go test ./pkg/...`)
+- [x] Commit: `feat(apiclient): include release snapshot fields for CLI diff`
 
 ---
 

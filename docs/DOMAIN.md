@@ -386,24 +386,37 @@ LOG_LEVEL=debug
 
 ### Changeset workflow
 
+The **API** exposes project changesets (`GET/POST/DELETE …/changeset*`, `POST …/changeset/push`). The **CLI** stages implicitly: mutation commands write the open changeset; `deploy` submits (push). There is no user-facing `changeset` CLI command.
+
 ```bash
-# Stage changes (service-aware)
-launchpad changeset add --service api PORT=3000
-launchpad changeset add --service api --scale web=3 --image api:v2
-launchpad changeset add --service worker-batch --image batch:v1
+# Stage by default (MVP: primary service)
+launchpad config set PORT=3000
+launchpad scale web=3
+launchpad image api:v2
 
 # Review
-launchpad changeset status
+launchpad status
+launchpad diff          # staged vs last release
 
-# Push — single service (parallel implicit)
-launchpad changeset push --message "API config + scale"
+# Submit — single service (parallel implicit)
+launchpad deploy -m "API config + scale"
 
-# Push — multi-service (mode required)
-launchpad changeset push --mode parallel --message "API + batch worker"
-launchpad changeset push --mode atomic --message "Coordinated rollout"
+# One-shot mutations + submit
+launchpad deploy --image api:v3 PORT=8080 -m "bump"
+
+# Immediate (clean staging only; --now on mutations)
+launchpad config set DEBUG=true --now -m "debug"
 
 # Discard
-launchpad changeset reset
+launchpad reset
+```
+
+Phase 3+ multi-service CLI (planned; still maps to changeset push with coordination):
+
+```bash
+# Future:
+launchpad deploy --mode parallel -m "API + batch worker"
+launchpad deploy --mode atomic -m "Coordinated rollout"
 ```
 
 **Push flow (single database transaction for MVP single-service):**
@@ -420,16 +433,16 @@ launchpad changeset reset
 
 Phase 3+: step 6–7 also create a **ReleaseSet** and honor coordination mode. Still one logical transaction.
 
-**Immediate operations** (bypass staging; still create a **new release** — runtime changes do not skip the snapshot model):
+**Immediate operations** (`--now` on mutation commands when staging is empty; still create a **new release** via stage+push — runtime changes do not skip the snapshot model):
 
 ```bash
-launchpad deploy --service api --image api:v2 --now
+launchpad image api:v2 --now -m "bump image"
+launchpad scale web=3 --now -m "scale web"
 # Future:
-launchpad scale --service api web=3 --now     # creates release from latest artifact + new process snapshot
-launchpad rollback --service api 4 --now      # new release copying artifact + process_snapshot from v4
+launchpad rollback 4 --now      # new release copying artifact + process_snapshot from v4
 ```
 
-There is **no** MVP control-plane path that mutates runtime desired state without a release.
+`--now` is **rejected** if any changes are already staged (use `diff` / `deploy` / `reset` first). There is **no** MVP control-plane path that mutates runtime desired state without a release.
 
 ### Deployment state machine
 
@@ -575,9 +588,10 @@ GET    /healthz
 |---------|-------|
 | `launchpad projects create` | Bootstraps project + `dev` + primary service + `web` |
 | `launchpad use <project>` | Persists context to `~/.launchpad/config` |
-| `launchpad config get/set` | Service config in `dev` |
-| `launchpad changeset add/status/push/reset` | Git-like staging |
-| `launchpad deploy --image` | Immediate release |
+| `launchpad config get/set/unset` | Live get; set/unset stage by default (`--now` for immediate) |
+| `launchpad scale` / `image` | Stage scale or image (`--now` for immediate) |
+| `launchpad diff` / `status` / `reset` | Review pending vs last release; discard staging |
+| `launchpad deploy` | Submit staged batch; optional one-shot mutations (`--image`, `KEY=VAL`, `--scale`) |
 | `launchpad ps` | Process list |
 | `launchpad releases` | Release history |
 
@@ -588,8 +602,8 @@ GET    /healthz
 | `launchpad env use / list / create` | Multi-environment context |
 | `launchpad services list` | Multi-service projects |
 | `launchpad config set [--shared\|--workspace]` | Layered config |
-| `launchpad changeset add --service` / `push --mode` | Multi-service + coordination |
-| `launchpad scale / rollback / promote / logs` | Deferred ops (still release-backed where they change runtime) |
+| `launchpad deploy --mode` / multi-service staging | Multi-service + coordination |
+| `launchpad rollback / promote / logs` | Deferred ops (still release-backed where they change runtime) |
 
 ### Bootstrap defaults
 
