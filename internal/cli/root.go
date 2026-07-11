@@ -461,7 +461,41 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
+	root.AddCommand(&cobra.Command{
+		Use:   "context",
+		Short: "Show resolved project/environment and config sources",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("project: %s\n", emptyDash(cfg.Project))
+			fmt.Printf("environment: %s\n", effectiveEnv(cfg))
+			fmt.Printf("api: %s\n", cfg.APIURL)
+			if cfg.Token != "" {
+				fmt.Println("token: set")
+			} else {
+				fmt.Println("token: (not set)")
+			}
+			if cwd, err := os.Getwd(); err == nil {
+				if _, path, err := findProjectLocalConfig(cwd); err == nil && path != "" {
+					fmt.Printf("project-local: %s\n", path)
+				} else {
+					fmt.Println("project-local: (none)")
+				}
+			}
+			if p, err := configPath(); err == nil {
+				fmt.Printf("global-config: %s\n", p)
+			}
+			fmt.Println("precedence: LAUNCHPAD_* env > .launchpad/config (walk up) > ~/.launchpad/config")
+			return nil
+		},
+	})
+
 	return root
+}
+
+func emptyDash(s string) string {
+	if s == "" {
+		return "(not set)"
+	}
+	return s
 }
 
 func requireProject(cfg Config) (string, error) {
@@ -532,24 +566,17 @@ func saveLocalConfig(cfg localConfig) error {
 }
 
 func LoadConfig() Config {
-	cfg := Config{
-		APIURL: envOr("LAUNCHPAD_API_URL", "http://localhost:8080"),
-		Token:  os.Getenv("LAUNCHPAD_TOKEN"),
+	var global localConfig
+	if g, err := loadLocalConfig(); err == nil {
+		global = g
 	}
-	if local, err := loadLocalConfig(); err == nil {
-		cfg.Project = local.Project
-		cfg.Environment = local.Environment
+	var projectLocal localConfig
+	if cwd, err := os.Getwd(); err == nil {
+		if pl, _, err := findProjectLocalConfig(cwd); err == nil {
+			projectLocal = pl
+		}
 	}
-	if v := os.Getenv("LAUNCHPAD_PROJECT"); v != "" {
-		cfg.Project = v
-	}
-	if v := os.Getenv("LAUNCHPAD_ENV"); v != "" {
-		cfg.Environment = v
-	}
-	if cfg.Environment == "" {
-		cfg.Environment = "dev"
-	}
-	return cfg
+	return mergeConfigLayers(global, projectLocal, os.Getenv("LAUNCHPAD_PROJECT"), os.Getenv("LAUNCHPAD_ENV"))
 }
 
 func envOr(key, fallback string) string {
