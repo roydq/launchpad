@@ -16,9 +16,11 @@ var migrationFS embed.FS
 var migrationFiles = map[Driver][]string{
 	DriverSQLite: {
 		"001_initial.sqlite.up.sql",
+		"002_changeset_environment.sqlite.up.sql",
 	},
 	DriverPostgres: {
 		"001_initial.postgres.up.sql",
+		"002_changeset_environment.postgres.up.sql",
 	},
 }
 

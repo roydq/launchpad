@@ -201,6 +201,37 @@ func (s *Store) ListReleases(ctx context.Context, serviceID uuid.UUID) ([]domain
 	return releases, rows.Err()
 }
 
+// GetLatestDeploymentForServiceEnv returns the most recently created deployment for a service×env pair.
+func (s *Store) GetLatestDeploymentForServiceEnv(ctx context.Context, serviceID, environmentID uuid.UUID) (*domain.Deployment, error) {
+	row := s.db.QueryRowContext(ctx, s.q(`
+		SELECT id, service_id, environment_id, release_id, status, version, target_ref, message, started_at, finished_at, created_at, updated_at
+		FROM deployments
+		WHERE service_id = ? AND environment_id = ?
+		ORDER BY created_at DESC LIMIT 1`), serviceID.String(), environmentID.String())
+	return scanDeployment(row, s.driver)
+}
+
+// ListDeploymentsForService returns deployments for a service ordered by created_at desc (for release annotations).
+func (s *Store) ListDeploymentsForService(ctx context.Context, serviceID uuid.UUID) ([]domain.Deployment, error) {
+	rows, err := s.db.QueryContext(ctx, s.q(`
+		SELECT id, service_id, environment_id, release_id, status, version, target_ref, message, started_at, finished_at, created_at, updated_at
+		FROM deployments WHERE service_id = ? ORDER BY created_at DESC`), serviceID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows, s.driver)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *d)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) UpdateReleaseStatus(ctx context.Context, tx *sql.Tx, id uuid.UUID, status domain.ReleaseStatus) error {
 	exec := s.exec(tx)
 	_, err := exec.ExecContext(ctx, s.q(`UPDATE releases SET status = ? WHERE id = ?`), string(status), id.String())

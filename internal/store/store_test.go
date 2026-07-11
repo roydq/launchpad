@@ -106,6 +106,62 @@ func TestProjectBootstrapAndJobQueue(t *testing.T) {
 	}
 }
 
+func TestCreateSecondEnvironmentAndChangesetPin(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	s := New(db, driver)
+
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "multi-env"}
+	if err := s.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	staging := &domain.Environment{
+		ProjectID:    project.ID,
+		Name:         "staging",
+		TargetType:   "stub",
+		TargetConfig: json.RawMessage(`{"namespace":"staging"}`),
+	}
+	if err := s.CreateEnvironment(ctx, staging); err != nil {
+		t.Fatal(err)
+	}
+	envs, err := s.ListEnvironments(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(envs) != 2 {
+		t.Fatalf("expected 2 envs, got %d", len(envs))
+	}
+
+	err = s.Transact(ctx, func(tx *sql.Tx) error {
+		cs, err := s.GetOrCreateOpenChangeset(ctx, tx, project.ID)
+		if err != nil {
+			return err
+		}
+		if cs.EnvironmentID != nil {
+			t.Fatalf("expected nil pin on fresh changeset")
+		}
+		return s.SetChangesetEnvironment(ctx, tx, cs.ID, staging.ID)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open, err := s.GetOpenChangeset(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if open.EnvironmentID == nil || *open.EnvironmentID != staging.ID {
+		t.Fatalf("expected pin to staging, got %v", open.EnvironmentID)
+	}
+}
+
 func TestActiveDeploymentUniqueAndSupersede(t *testing.T) {
 	ctx := context.Background()
 	db, driver, err := Open(ctx, ":memory:")

@@ -31,9 +31,9 @@ func (s *Store) GetOrCreateOpenChangeset(ctx context.Context, tx *sql.Tx, projec
 	}
 	exec := s.exec(tx)
 	_, err = exec.ExecContext(ctx, s.q(`
-		INSERT INTO changesets (id, project_id, status, description, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)`),
-		cs.ID.String(), cs.ProjectID.String(), string(cs.Status), cs.Description,
+		INSERT INTO changesets (id, project_id, environment_id, status, description, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		cs.ID.String(), cs.ProjectID.String(), nil, string(cs.Status), cs.Description,
 		formatTime(s.driver, cs.CreatedAt), formatTime(s.driver, cs.UpdatedAt),
 	)
 	return cs, err
@@ -45,7 +45,7 @@ func (s *Store) GetOpenChangeset(ctx context.Context, projectID uuid.UUID) (*dom
 
 func (s *Store) getOpenChangeset(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) (*domain.Changeset, error) {
 	row := s.exec(tx).QueryRowContext(ctx, s.q(`
-		SELECT id, project_id, status, description, created_at, updated_at
+		SELECT id, project_id, environment_id, status, description, created_at, updated_at
 		FROM changesets WHERE project_id = ? AND status = 'open'`), projectID.String())
 
 	cs, err := scanChangeset(row, s.driver)
@@ -58,6 +58,17 @@ func (s *Store) getOpenChangeset(ctx context.Context, tx *sql.Tx, projectID uuid
 	}
 	cs.Changes = changes
 	return cs, nil
+}
+
+// SetChangesetEnvironment pins an open changeset to an environment (idempotent if already set to same).
+func (s *Store) SetChangesetEnvironment(ctx context.Context, tx *sql.Tx, changesetID, environmentID uuid.UUID) error {
+	exec := s.exec(tx)
+	now := formatTime(s.driver, time.Now().UTC())
+	_, err := exec.ExecContext(ctx, s.q(`
+		UPDATE changesets SET environment_id = ?, updated_at = ? WHERE id = ? AND status = 'open'`),
+		environmentID.String(), now, changesetID.String(),
+	)
+	return err
 }
 
 func (s *Store) AddChangesetChanges(ctx context.Context, tx *sql.Tx, changesetID uuid.UUID, changes []domain.ChangesetChange) error {
@@ -153,20 +164,26 @@ func (s *Store) listChangesetChanges(ctx context.Context, tx *sql.Tx, changesetI
 
 func scanChangeset(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Changeset, error) {
 	var id, projectID, status, description, createdAt, updatedAt string
-	if err := scanner.Scan(&id, &projectID, &status, &description, &createdAt, &updatedAt); err != nil {
+	var environmentID sql.NullString
+	if err := scanner.Scan(&id, &projectID, &environmentID, &status, &description, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
 		}
 		return nil, err
 	}
-	return &domain.Changeset{
+	cs := &domain.Changeset{
 		ID:          uuid.MustParse(id),
 		ProjectID:   uuid.MustParse(projectID),
 		Status:      domain.ChangesetStatus(status),
 		Description: description,
 		CreatedAt:   parseTime(driver, createdAt),
 		UpdatedAt:   parseTime(driver, updatedAt),
-	}, nil
+	}
+	if environmentID.Valid && environmentID.String != "" {
+		eid := uuid.MustParse(environmentID.String)
+		cs.EnvironmentID = &eid
+	}
+	return cs, nil
 }
 
 func scanChangesetChange(scanner interface{ Scan(...any) error }, driver Driver) (*domain.ChangesetChange, error) {
