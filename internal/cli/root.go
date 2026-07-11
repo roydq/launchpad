@@ -12,17 +12,20 @@ import (
 )
 
 type Config struct {
-	APIURL  string
-	Token   string
-	Project string
+	APIURL      string
+	Token       string
+	Project     string
+	Environment string
 }
 
 type localConfig struct {
-	Project string `json:"project"`
+	Project     string `json:"project"`
+	Environment string `json:"environment,omitempty"`
 }
 
 func NewRoot(cfg Config) *cobra.Command {
 	client := apiclient.New(cfg.APIURL, cfg.Token)
+	client.Environment = cfg.Environment
 
 	root := &cobra.Command{
 		Use:   "launchpad",
@@ -55,13 +58,102 @@ func NewRoot(cfg Config) *cobra.Command {
 		Short: "Set the active project in ~/.launchpad/config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := saveLocalConfig(localConfig{Project: args[0]}); err != nil {
+			local, _ := loadLocalConfig()
+			local.Project = args[0]
+			if err := saveLocalConfig(local); err != nil {
 				return err
 			}
-			fmt.Printf("using project %s\n", args[0])
+			fmt.Printf("using project %s (environment %s)\n", args[0], effectiveEnv(cfg))
 			return nil
 		},
 	})
+
+	envCmd := &cobra.Command{Use: "env", Short: "Manage environments (ambient deploy/config context)"}
+	envCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List environments for the active project",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			envs, err := client.ListEnvironments(cmd.Context(), project)
+			if err != nil {
+				return err
+			}
+			cur := effectiveEnv(cfg)
+			for _, e := range envs {
+				mark := " "
+				if e.Name == cur {
+					mark = "*"
+				}
+				fmt.Printf("%s %s  target=%s\n", mark, e.Name, e.TargetType)
+			}
+			return nil
+		},
+	})
+	envCreate := &cobra.Command{
+		Use:   "create [name]",
+		Short: "Create an environment (empty config; own target)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			targetType, _ := cmd.Flags().GetString("target")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			env, err := client.CreateEnvironment(cmd.Context(), project, args[0], targetType, namespace, false)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("created environment %s (%s)\n", env.Name, env.ID)
+			return nil
+		},
+	}
+	envCreate.Flags().String("target", "stub", "target type")
+	envCreate.Flags().String("namespace", "default", "target namespace")
+	envCmd.AddCommand(envCreate)
+	envCmd.AddCommand(&cobra.Command{
+		Use:   "use [name]",
+		Short: "Set the active environment",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			name := args[0]
+			if _, err := client.GetEnvironment(cmd.Context(), project, name); err != nil {
+				return err
+			}
+			cs, err := loadPending(cmd.Context(), client, project)
+			if err != nil {
+				return err
+			}
+			if pendingCount(cs) > 0 && cs.Environment != "" && cs.Environment != name {
+				return fmt.Errorf("cannot switch environment: %d pending change(s) for %s; run \"launchpad deploy\", \"launchpad diff\", or \"launchpad reset\"",
+					pendingCount(cs), cs.Environment)
+			}
+			local, _ := loadLocalConfig()
+			local.Project = project
+			local.Environment = name
+			if err := saveLocalConfig(local); err != nil {
+				return err
+			}
+			fmt.Printf("using environment %s\n", name)
+			return nil
+		},
+	})
+	envCmd.AddCommand(&cobra.Command{
+		Use:   "current",
+		Short: "Print the active environment",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println(effectiveEnv(cfg))
+			return nil
+		},
+	})
+	root.AddCommand(envCmd)
 
 	configCmd := &cobra.Command{Use: "config", Short: "Manage service config (stages by default)"}
 	configCmd.AddCommand(&cobra.Command{
@@ -193,7 +285,7 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			baseline, err := latestRelease(cmd.Context(), client, project)
+			baseline, err := latestReleaseForEnv(cmd.Context(), client, project, effectiveEnv(cfg))
 			if err != nil {
 				return err
 			}
@@ -210,15 +302,26 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			envName := effectiveEnv(cfg)
 			fmt.Printf("project: %s\n", project)
+			fmt.Printf("environment: %s\n", envName)
 			cs, err := loadPending(cmd.Context(), client, project)
 			if err != nil {
 				return err
+			}
+			if baseline, err := latestReleaseForEnv(cmd.Context(), client, project, envName); err == nil && baseline != nil {
+				fmt.Printf("running/last deploy: release v%d (%s)\n", baseline.Version, baseline.ArtifactRef)
+			} else {
+				fmt.Println("running/last deploy: none")
 			}
 			n := pendingCount(cs)
 			if n == 0 {
 				fmt.Println("No pending changes")
 				return nil
+			}
+			pin := cs.Environment
+			if pin == "" {
+				pin = envName
 			}
 			var nConfig, nScale, nImage int
 			for _, c := range cs.Changes {
@@ -231,7 +334,7 @@ func NewRoot(cfg Config) *cobra.Command {
 					nImage++
 				}
 			}
-			fmt.Printf("pending: %d change(s) (config=%d scale=%d image=%d)\n", n, nConfig, nScale, nImage)
+			fmt.Printf("pending: %d change(s) for %s (config=%d scale=%d image=%d)\n", n, pin, nConfig, nScale, nImage)
 			fmt.Println(`Run "launchpad diff" to review, "launchpad deploy" to apply, "launchpad reset" to discard.`)
 			return nil
 		},
@@ -358,6 +461,13 @@ func requireProject(cfg Config) (string, error) {
 	return cfg.Project, nil
 }
 
+func effectiveEnv(cfg Config) string {
+	if cfg.Environment != "" {
+		return cfg.Environment
+	}
+	return "dev"
+}
+
 func configPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -407,9 +517,16 @@ func LoadConfig() Config {
 	}
 	if local, err := loadLocalConfig(); err == nil {
 		cfg.Project = local.Project
+		cfg.Environment = local.Environment
 	}
 	if v := os.Getenv("LAUNCHPAD_PROJECT"); v != "" {
 		cfg.Project = v
+	}
+	if v := os.Getenv("LAUNCHPAD_ENV"); v != "" {
+		cfg.Environment = v
+	}
+	if cfg.Environment == "" {
+		cfg.Environment = "dev"
 	}
 	return cfg
 }

@@ -11,9 +11,10 @@ import (
 )
 
 type Client struct {
-	BaseURL string
-	Token   string
-	HTTP    *http.Client
+	BaseURL     string
+	Token       string
+	Environment string // sent as X-Launchpad-Environment; empty means API defaults to dev
+	HTTP        *http.Client
 }
 
 func New(baseURL, token string) *Client {
@@ -42,6 +43,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if c.Environment != "" {
+		req.Header.Set("X-Launchpad-Environment", c.Environment)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -92,6 +96,12 @@ type ProcessSnapshot struct {
 	Expose   string `json:"expose"`
 }
 
+type ReleaseDeployment struct {
+	Environment string `json:"environment"`
+	Status      string `json:"status"`
+	ID          string `json:"id"`
+}
+
 type Release struct {
 	ID              string                     `json:"id"`
 	Version         int                        `json:"version"`
@@ -100,6 +110,15 @@ type Release struct {
 	ProcessSnapshot map[string]ProcessSnapshot `json:"process_snapshot"`
 	Status          string                     `json:"status"`
 	Description     string                     `json:"description"`
+	Deployments     []ReleaseDeployment        `json:"deployments,omitempty"`
+}
+
+type Environment struct {
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	TargetType   string          `json:"target_type"`
+	TargetConfig json.RawMessage `json:"target_config"`
+	Ephemeral    bool            `json:"ephemeral"`
 }
 
 type ChangesetChange struct {
@@ -110,16 +129,17 @@ type ChangesetChange struct {
 }
 
 type Changeset struct {
-	ID        string            `json:"id"`
-	ProjectID string            `json:"project_id"`
-	Status    string            `json:"status"`
-	Changes   []ChangesetChange `json:"changes"`
+	ID          string            `json:"id"`
+	ProjectID   string            `json:"project_id"`
+	Environment string            `json:"environment,omitempty"`
+	Status      string            `json:"status"`
+	Changes     []ChangesetChange `json:"changes"`
 }
 
 type DeployResult struct {
 	Deployment struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
+		ID      string `json:"id"`
+		Status  string `json:"status"`
 		Release struct {
 			Version int `json:"version"`
 		} `json:"release"`
@@ -190,6 +210,37 @@ func (c *Client) ListReleases(ctx context.Context, project string) ([]Release, e
 	var releases []Release
 	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/releases", nil, &releases)
 	return releases, err
+}
+
+func (c *Client) ListEnvironments(ctx context.Context, project string) ([]Environment, error) {
+	var envs []Environment
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/environments", nil, &envs)
+	return envs, err
+}
+
+func (c *Client) GetEnvironment(ctx context.Context, project, name string) (*Environment, error) {
+	var env Environment
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/environments/"+name, nil, &env)
+	if err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+func (c *Client) CreateEnvironment(ctx context.Context, project, name, targetType, namespace string, ephemeral bool) (*Environment, error) {
+	var env Environment
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/environments", map[string]any{
+		"name": name,
+		"target": map[string]any{
+			"type":      targetType,
+			"namespace": namespace,
+		},
+		"ephemeral": ephemeral,
+	}, &env)
+	if err != nil {
+		return nil, err
+	}
+	return &env, nil
 }
 
 func (c *Client) Deploy(ctx context.Context, project, image, description string) (*DeployResult, error) {
