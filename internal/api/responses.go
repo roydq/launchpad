@@ -28,6 +28,12 @@ type processDTO struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type releaseDeploymentDTO struct {
+	Environment string `json:"environment"`
+	Status      string `json:"status"`
+	ID          string `json:"id"`
+}
+
 type releaseDTO struct {
 	ID              string                            `json:"id"`
 	ServiceID       string                            `json:"service_id"`
@@ -38,6 +44,17 @@ type releaseDTO struct {
 	Status          string                            `json:"status"`
 	Description     string                            `json:"description"`
 	CreatedAt       time.Time                         `json:"created_at"`
+	Deployments     []releaseDeploymentDTO            `json:"deployments,omitempty"`
+}
+
+type environmentDTO struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	TargetType string         `json:"target_type"`
+	TargetConfig json.RawMessage `json:"target_config"`
+	Ephemeral bool            `json:"ephemeral"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 type jobDTO struct {
@@ -65,6 +82,7 @@ type changesetChangeDTO struct {
 type changesetDTO struct {
 	ID          string               `json:"id"`
 	ProjectID   string               `json:"project_id"`
+	Environment string               `json:"environment,omitempty"`
 	Status      string               `json:"status"`
 	Description string               `json:"description"`
 	Changes     []changesetChangeDTO `json:"changes"`
@@ -132,6 +150,38 @@ func releaseResponse(r domain.Release) releaseDTO {
 	}
 }
 
+func releaseWithDeploymentsResponse(item service.ReleaseWithDeployments) releaseDTO {
+	dto := releaseResponse(item.Release)
+	if len(item.Deployments) == 0 {
+		return dto
+	}
+	dto.Deployments = make([]releaseDeploymentDTO, 0, len(item.Deployments))
+	for _, d := range item.Deployments {
+		dto.Deployments = append(dto.Deployments, releaseDeploymentDTO{
+			Environment: d.Environment,
+			Status:      d.Status,
+			ID:          d.ID.String(),
+		})
+	}
+	return dto
+}
+
+func environmentResponse(env *domain.Environment) environmentDTO {
+	cfg := env.TargetConfig
+	if len(cfg) == 0 {
+		cfg = json.RawMessage(`{}`)
+	}
+	return environmentDTO{
+		ID:           env.ID.String(),
+		Name:         env.Name,
+		TargetType:   env.TargetType,
+		TargetConfig: cfg,
+		Ephemeral:    env.Ephemeral,
+		CreatedAt:    env.CreatedAt,
+		UpdatedAt:    env.UpdatedAt,
+	}
+}
+
 func jobResponse(j *domain.Job) jobDTO {
 	return jobDTO{
 		ID:           j.ID.String(),
@@ -179,6 +229,15 @@ func changesetResponse(cs *domain.Changeset) changesetDTO {
 		CreatedAt:   cs.CreatedAt,
 		UpdatedAt:   cs.UpdatedAt,
 	}
+}
+
+func changesetViewResponse(view *service.ChangesetView) changesetDTO {
+	if view == nil || view.Changeset == nil {
+		return changesetDTO{Changes: []changesetChangeDTO{}}
+	}
+	dto := changesetResponse(view.Changeset)
+	dto.Environment = view.EnvironmentName
+	return dto
 }
 
 func releaseJobResponse(result *service.CreateReleaseResult) releaseJobDTO {
