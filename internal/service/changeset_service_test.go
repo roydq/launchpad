@@ -69,7 +69,7 @@ func TestChangesetStageAndPush(t *testing.T) {
 
 	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
 
-	_, err = csSvc.StageChanges(ctx, "batch-app", StageChangesInput{Changes: []StageChangeInput{
+	_, err = csSvc.StageChanges(ctx, "batch-app", DefaultEnvironment, StageChangesInput{Changes: []StageChangeInput{
 		{Type: "config", Key: "FOO", Value: strPtr("bar")},
 		{Type: "image", Image: "demo:v1"},
 	}})
@@ -77,7 +77,7 @@ func TestChangesetStageAndPush(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	open, err := csSvc.GetChangeset(ctx, "batch-app")
+	open, err := csSvc.GetChangeset(ctx, "batch-app", DefaultEnvironment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestChangesetStageAndPush(t *testing.T) {
 		t.Fatalf("expected 2 staged changes, got %d", len(open.Changes))
 	}
 
-	result, err := csSvc.PushChangeset(ctx, "batch-app", PushChangesetInput{Description: "batch deploy"})
+	result, err := csSvc.PushChangeset(ctx, "batch-app", DefaultEnvironment, PushChangesetInput{Description: "batch deploy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestChangesetStageAndPush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	devEnv, err := st.GetEnvironmentByProjectAndName(ctx, project.ID, devEnvironment)
+	devEnv, err := st.GetEnvironmentByProjectAndName(ctx, project.ID, DefaultEnvironment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestPushAtomicOnActiveDeploy(t *testing.T) {
 	csSvc := NewChangesetService(st, projectSvc, NewReleaseService(st, projectSvc))
 	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
 
-	_, err = csSvc.StageChanges(ctx, "atomic-app", StageChangesInput{Changes: []StageChangeInput{
+	_, err = csSvc.StageChanges(ctx, "atomic-app", DefaultEnvironment, StageChangesInput{Changes: []StageChangeInput{
 		{Type: "config", Key: "FOO", Value: strPtr("bar")},
 		{Type: "image", Image: "demo:v2"},
 	}})
@@ -166,7 +166,7 @@ func TestPushAtomicOnActiveDeploy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = csSvc.PushChangeset(ctx, "atomic-app", PushChangesetInput{})
+	_, err = csSvc.PushChangeset(ctx, "atomic-app", DefaultEnvironment, PushChangesetInput{})
 	if err == nil {
 		t.Fatal("expected push to fail while deployment active")
 	}
@@ -178,7 +178,7 @@ func TestPushAtomicOnActiveDeploy(t *testing.T) {
 	if _, ok := vars["FOO"]; ok {
 		t.Fatalf("config should roll back on failed push, got %+v", vars)
 	}
-	open, err := csSvc.GetChangeset(ctx, "atomic-app")
+	open, err := csSvc.GetChangeset(ctx, "atomic-app", DefaultEnvironment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestProcessSnapshotIncludesCommandAndExpose(t *testing.T) {
 	releaseSvc := NewReleaseService(st, projectSvc)
 	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
 
-	result, err := releaseSvc.CreateRelease(ctx, "snap-app", CreateReleaseInput{
+	result, err := releaseSvc.CreateRelease(ctx, "snap-app", DefaultEnvironment, CreateReleaseInput{
 		Source: SourceInput{Type: "image", Image: "snap:v1"},
 	})
 	if err != nil {
@@ -220,6 +220,47 @@ func TestProcessSnapshotIncludesCommandAndExpose(t *testing.T) {
 	}
 	if web.Quantity != 1 || web.Expose != "http" {
 		t.Fatalf("unexpected snapshot: %+v", web)
+	}
+}
+
+func TestChangesetPinBlocksOtherEnvironment(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "pin-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	projectSvc := NewProjectService(st)
+	releaseSvc := NewReleaseService(st, projectSvc)
+	csSvc := NewChangesetService(st, projectSvc, releaseSvc)
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+
+	if _, err := projectSvc.CreateEnvironment(ctx, "pin-app", CreateEnvironmentInput{
+		Name:   "staging",
+		Target: TargetInput{Type: "stub", Namespace: "stg"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := csSvc.StageChanges(ctx, "pin-app", "dev", StageChangesInput{Changes: []StageChangeInput{
+		{Type: "config", Key: "A", Value: strPtr("1")},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = csSvc.StageChanges(ctx, "pin-app", "staging", StageChangesInput{Changes: []StageChangeInput{
+		{Type: "config", Key: "B", Value: strPtr("2")},
+	}})
+	if err == nil {
+		t.Fatal("expected conflict when staging on other env")
 	}
 }
 
@@ -245,7 +286,7 @@ func TestStageChangesRejectsWrongService(t *testing.T) {
 	csSvc := NewChangesetService(st, projectSvc, NewReleaseService(st, projectSvc))
 	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
 
-	_, err = csSvc.StageChanges(ctx, "my-api", StageChangesInput{
+	_, err = csSvc.StageChanges(ctx, "my-api", DefaultEnvironment, StageChangesInput{
 		Service: "other-service",
 		Changes: []StageChangeInput{{Type: "config", Key: "X", Value: strPtr("1")}},
 	})

@@ -40,7 +40,13 @@ type PushChangesetInput struct {
 	Description string `json:"description"`
 }
 
-func (s *ChangesetService) GetChangeset(ctx context.Context, projectName string) (*domain.Changeset, error) {
+// ChangesetView is the open changeset plus resolved environment name for API/CLI.
+type ChangesetView struct {
+	*domain.Changeset
+	EnvironmentName string
+}
+
+func (s *ChangesetService) GetChangeset(ctx context.Context, projectName, envName string) (*ChangesetView, error) {
 	project, err := s.projectService.GetProject(ctx, projectName)
 	if err != nil {
 		return nil, err
@@ -48,18 +54,24 @@ func (s *ChangesetService) GetChangeset(ctx context.Context, projectName string)
 	cs, err := s.store.GetOpenChangeset(ctx, project.ID)
 	if err != nil {
 		if errors.Is(err, launchpad.ErrNotFound) {
-			return &domain.Changeset{ProjectID: project.ID, Status: domain.ChangesetOpen, Changes: []domain.ChangesetChange{}}, nil
+			return &ChangesetView{
+				Changeset: &domain.Changeset{
+					ProjectID: project.ID,
+					Status:    domain.ChangesetOpen,
+					Changes:   []domain.ChangesetChange{},
+				},
+			}, nil
 		}
 		return nil, err
 	}
-	return cs, nil
+	return s.viewFor(ctx, cs)
 }
 
-func (s *ChangesetService) StageChanges(ctx context.Context, projectName string, input StageChangesInput) (*domain.Changeset, error) {
+func (s *ChangesetService) StageChanges(ctx context.Context, projectName, envName string, input StageChangesInput) (*ChangesetView, error) {
 	if len(input.Changes) == 0 {
 		return nil, fmt.Errorf("%w: at least one change required", launchpad.ErrBadRequest)
 	}
-	project, svc, _, err := s.projectService.resolvePrimaryService(ctx, projectName)
+	project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +83,20 @@ func (s *ChangesetService) StageChanges(ctx context.Context, projectName string,
 		open, err := s.store.GetOrCreateOpenChangeset(ctx, tx, project.ID)
 		if err != nil {
 			return err
+		}
+		if open.EnvironmentID != nil && *open.EnvironmentID != env.ID {
+			pinned, _ := s.store.GetEnvironmentByID(ctx, *open.EnvironmentID)
+			pinName := "unknown"
+			if pinned != nil {
+				pinName = pinned.Name
+			}
+			return fmt.Errorf("%w: changeset is pinned to environment %q; current context is %q",
+				launchpad.ErrConflict, pinName, env.Name)
+		}
+		if open.EnvironmentID == nil {
+			if err := s.store.SetChangesetEnvironment(ctx, tx, open.ID, env.ID); err != nil {
+				return err
+			}
 		}
 
 		changes := make([]domain.ChangesetChange, 0, len(input.Changes))
@@ -88,7 +114,11 @@ func (s *ChangesetService) StageChanges(ctx context.Context, projectName string,
 	if err != nil {
 		return nil, err
 	}
-	return s.store.GetOpenChangeset(ctx, project.ID)
+	cs, err := s.store.GetOpenChangeset(ctx, project.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.viewFor(ctx, cs)
 }
 
 func (s *ChangesetService) DiscardChangeset(ctx context.Context, projectName string) error {
@@ -99,8 +129,8 @@ func (s *ChangesetService) DiscardChangeset(ctx context.Context, projectName str
 	return s.store.DiscardOpenChangeset(ctx, project.ID)
 }
 
-func (s *ChangesetService) PushChangeset(ctx context.Context, projectName string, input PushChangesetInput) (*CreateReleaseResult, error) {
-	project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName)
+func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envName string, input PushChangesetInput) (*CreateReleaseResult, error) {
+	project, svc, reqEnv, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +141,19 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName string
 	if len(cs.Changes) == 0 {
 		return nil, fmt.Errorf("%w: changeset is empty", launchpad.ErrBadRequest)
 	}
+	if cs.EnvironmentID == nil {
+		return nil, fmt.Errorf("%w: changeset has no environment pin", launchpad.ErrBadRequest)
+	}
+	if *cs.EnvironmentID != reqEnv.ID {
+		pinned, _ := s.store.GetEnvironmentByID(ctx, *cs.EnvironmentID)
+		pinName := "unknown"
+		if pinned != nil {
+			pinName = pinned.Name
+		}
+		return nil, fmt.Errorf("%w: changeset is pinned to environment %q; current context is %q",
+			launchpad.ErrConflict, pinName, reqEnv.Name)
+	}
+	env := reqEnv
 
 	configUpdates, scales, artifactRef, err := materializeChanges(cs.Changes)
 	if err != nil {
@@ -168,6 +211,17 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName string
 		return nil, err
 	}
 	return &result, nil
+}
+
+func (s *ChangesetService) viewFor(ctx context.Context, cs *domain.Changeset) (*ChangesetView, error) {
+	view := &ChangesetView{Changeset: cs}
+	if cs.EnvironmentID != nil {
+		env, err := s.store.GetEnvironmentByID(ctx, *cs.EnvironmentID)
+		if err == nil {
+			view.EnvironmentName = env.Name
+		}
+	}
+	return view, nil
 }
 
 func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {

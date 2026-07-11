@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -44,8 +45,8 @@ type releasePlan struct {
 	Description     string
 }
 
-func (s *ReleaseService) CreateRelease(ctx context.Context, projectName string, input CreateReleaseInput) (*CreateReleaseResult, error) {
-	project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName)
+func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName string, input CreateReleaseInput) (*CreateReleaseResult, error) {
+	project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +74,77 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, projectName string, 
 	})
 }
 
-func (s *ReleaseService) ListReleases(ctx context.Context, projectName string) ([]domain.Release, error) {
-	_, svc, _, err := s.projectService.resolvePrimaryService(ctx, projectName)
+// ReleaseDeploymentRef is a deployment of a release into an environment.
+type ReleaseDeploymentRef struct {
+	Environment string
+	Status      string
+	ID          uuid.UUID
+}
+
+// ReleaseWithDeployments is a release plus where it has been deployed.
+type ReleaseWithDeployments struct {
+	Release     domain.Release
+	Deployments []ReleaseDeploymentRef
+}
+
+func (s *ReleaseService) ListReleases(ctx context.Context, projectName, envName string) ([]ReleaseWithDeployments, error) {
+	_, svc, _, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
 	if err != nil {
 		return nil, err
 	}
-	return s.store.ListReleases(ctx, svc.ID)
+	releases, err := s.store.ListReleases(ctx, svc.ID)
+	if err != nil {
+		return nil, err
+	}
+	deploys, err := s.store.ListDeploymentsForService(ctx, svc.ID)
+	if err != nil {
+		return nil, err
+	}
+	envNames := map[uuid.UUID]string{}
+	for _, d := range deploys {
+		if _, ok := envNames[d.EnvironmentID]; !ok {
+			env, err := s.store.GetEnvironmentByID(ctx, d.EnvironmentID)
+			if err == nil {
+				envNames[d.EnvironmentID] = env.Name
+			}
+		}
+	}
+	byRelease := map[uuid.UUID][]ReleaseDeploymentRef{}
+	for _, d := range deploys {
+		name := envNames[d.EnvironmentID]
+		if name == "" {
+			name = d.EnvironmentID.String()
+		}
+		byRelease[d.ReleaseID] = append(byRelease[d.ReleaseID], ReleaseDeploymentRef{
+			Environment: name,
+			Status:      string(d.Status),
+			ID:          d.ID,
+		})
+	}
+	out := make([]ReleaseWithDeployments, 0, len(releases))
+	for _, r := range releases {
+		out = append(out, ReleaseWithDeployments{
+			Release:     r,
+			Deployments: byRelease[r.ID],
+		})
+	}
+	return out, nil
+}
+
+// GetLatestReleaseForEnvironment returns the release for the latest deployment in env, or nil if none.
+func (s *ReleaseService) GetLatestReleaseForEnvironment(ctx context.Context, projectName, envName string) (*domain.Release, error) {
+	_, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
+	if err != nil {
+		return nil, err
+	}
+	dep, err := s.store.GetLatestDeploymentForServiceEnv(ctx, svc.ID, env.ID)
+	if err != nil {
+		if errors.Is(err, launchpad.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return s.store.GetReleaseByID(ctx, dep.ReleaseID)
 }
 
 func (s *ReleaseService) enqueueRelease(ctx context.Context, project *domain.Project, svc *domain.Service, env *domain.Environment, plan releasePlan) (*CreateReleaseResult, error) {
