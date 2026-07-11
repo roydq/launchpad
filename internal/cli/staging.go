@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
 )
@@ -102,6 +103,14 @@ func printDeployResult(result *apiclient.DeployResult) {
 	)
 }
 
+func maybeWaitForDeploy(ctx context.Context, client *apiclient.Client, result *apiclient.DeployResult, wait bool, timeout time.Duration) error {
+	printDeployResult(result)
+	if !wait || result == nil {
+		return nil
+	}
+	return waitForJob(ctx, client, result.Job.ID, timeout, 500*time.Millisecond)
+}
+
 // latestReleaseForEnv returns the release for the latest meaningful deploy in env.
 // Prefer a running deployment; else highest-version release that has any deployment in env.
 func latestReleaseForEnv(ctx context.Context, client *apiclient.Client, project, env string) (*apiclient.Release, error) {
@@ -134,6 +143,8 @@ func stageAndMaybeNow(
 	now bool,
 	message string,
 	stagedMsg string,
+	wait bool,
+	timeout time.Duration,
 ) error {
 	if now {
 		if err := requireCleanStaging(ctx, client, project); err != nil {
@@ -151,8 +162,7 @@ func stageAndMaybeNow(
 	if err != nil {
 		return err
 	}
-	printDeployResult(result)
-	return nil
+	return maybeWaitForDeploy(ctx, client, result, wait, timeout)
 }
 
 func configKeysSummary(changes []map[string]any) string {

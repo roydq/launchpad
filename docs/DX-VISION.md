@@ -114,11 +114,13 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 ## Suggested sequencing (DX-obsessed)
 
-1. **Multi-env 2a** — context + per-env config/deploy ([spec](superpowers/specs/2026-07-11-multi-env-design.md))
-2. **Deploy wait/follow + basic logs** — make multi-env *feel* real
+1. **Multi-env 2a** — **shipped** ([spec](superpowers/specs/2026-07-11-multi-env-design.md))
+2. **Deploy wait** — **in progress** on `feat/dx-stack` ([spec](superpowers/specs/2026-07-11-deploy-wait-design.md)); logs next
 3. **Layered config 2b *or* rollback** — pick by dogfood pain
 4. **MCP + project-local context** — agent + repo gravity
 5. **Promote, bindings, multi-service, yaml** — composition once env model is solid
+
+**Integration branch:** `feat/dx-stack` — feature PRs merge here first, then stack → `main`.
 
 ---
 
