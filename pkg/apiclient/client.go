@@ -254,6 +254,17 @@ func (c *Client) Deploy(ctx context.Context, project, image, description string)
 	return &result, nil
 }
 
+func (c *Client) Rollback(ctx context.Context, project string, version int, description string) (*DeployResult, error) {
+	var result DeployResult
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/rollback", map[string]any{
+		"version": version, "description": description,
+	}, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (c *Client) GetChangeset(ctx context.Context, project string) (*Changeset, error) {
 	var result Changeset
 	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/changeset", nil, &result)

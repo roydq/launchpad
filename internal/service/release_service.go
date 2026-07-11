@@ -74,6 +74,40 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName
 	})
 }
 
+// Rollback creates a new release copying artifact + process_snapshot from version,
+// re-resolves config for the target environment, and deploys.
+func (s *ReleaseService) Rollback(ctx context.Context, projectName, envName string, version int, description string) (*CreateReleaseResult, error) {
+	if version < 1 {
+		return nil, fmt.Errorf("%w: version must be >= 1", launchpad.ErrBadRequest)
+	}
+	project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
+	if err != nil {
+		return nil, err
+	}
+	prior, err := s.store.GetReleaseByVersion(ctx, svc.ID, version)
+	if err != nil {
+		return nil, err
+	}
+	config, err := s.store.ListConfigVars(ctx, svc.ID, env.ID)
+	if err != nil {
+		return nil, err
+	}
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("Rollback to v%d", version)
+	}
+	snap := prior.ProcessSnapshot
+	if snap == nil {
+		snap = map[string]domain.ProcessSnapshot{}
+	}
+	return s.enqueueRelease(ctx, project, svc, env, releasePlan{
+		ArtifactRef:     prior.ArtifactRef,
+		Config:          config,
+		ProcessSnapshot: snap,
+		Description:     desc,
+	})
+}
+
 // ReleaseDeploymentRef is a deployment of a release into an environment.
 type ReleaseDeploymentRef struct {
 	Environment string

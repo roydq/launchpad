@@ -461,6 +461,40 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
+	rollbackCmd := &cobra.Command{
+		Use:   "rollback [version]",
+		Short: "Create a new release from a prior version and deploy to current env",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			var version int
+			if _, err := fmt.Sscanf(args[0], "%d", &version); err != nil || version < 1 {
+				return fmt.Errorf("version must be a positive integer")
+			}
+			message, _ := cmd.Flags().GetString("message")
+			result, err := client.Rollback(cmd.Context(), project, version, message)
+			if err != nil {
+				return err
+			}
+			wait, timeout := waitFlags(cmd)
+			return maybeWaitForDeploy(cmd.Context(), client, result, wait, timeout)
+		},
+	}
+	rollbackCmd.Flags().StringP("message", "m", "", "release description")
+	addWaitFlags(rollbackCmd)
+	root.AddCommand(rollbackCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "doctor",
+		Short: "Check API connectivity, auth, and context",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDoctor(cmd.Context(), client, cfg)
+		},
+	})
+
 	root.AddCommand(&cobra.Command{
 		Use:   "context",
 		Short: "Show resolved project/environment and config sources",

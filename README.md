@@ -85,6 +85,18 @@ launchpad deploy --image my-api:v1 --wait
 launchpad deploy --image my-api:v1 --wait --timeout 2m
 ```
 
+Rollback (new release from prior version; config re-resolved for current env):
+
+```bash
+launchpad rollback 1 --wait
+```
+
+Health check:
+
+```bash
+launchpad doctor
+```
+
 Immediate release when staging is empty (`--now` on mutation commands only):
 
 ```bash
