@@ -149,6 +149,16 @@ Environment knobs: `LAUNCHPAD_E2E_IMAGE`, `LAUNCHPAD_E2E_NAMESPACE`, `LAUNCHPAD_
 
 `launchpad use <project>` and `launchpad env use <name>` write sticky context to `~/.launchpad/config`. API calls send `X-Launchpad-Environment`.
 
+Optional **project-local** file (walk parents from cwd):
+
+```json
+// .launchpad/config
+{ "project": "my-api", "environment": "staging" }
+```
+
+Precedence: `LAUNCHPAD_PROJECT` / `LAUNCHPAD_ENV` → `.launchpad/config` → `~/.launchpad/config` → env default `dev`.  
+`launchpad context` prints the resolved stack.
+
 ## API (MVP)
 
 ```
