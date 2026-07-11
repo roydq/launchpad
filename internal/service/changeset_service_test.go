@@ -223,6 +223,72 @@ func TestProcessSnapshotIncludesCommandAndExpose(t *testing.T) {
 	}
 }
 
+func TestRollbackCopiesArtifactAndSnapshot(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "rb-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	projectSvc := NewProjectService(st)
+	releaseSvc := NewReleaseService(st, projectSvc)
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+
+	r1, err := releaseSvc.CreateRelease(ctx, "rb-app", DefaultEnvironment, CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "app:v1"}, Description: "first",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// mark first deploy terminal so second can enqueue
+	_ = st.Transact(ctx, func(tx *sql.Tx) error {
+		return st.UpdateDeploymentStatus(ctx, tx, r1.Deployment.ID, domain.DeploymentPending, domain.DeploymentDeploying, "go")
+	})
+	_ = st.Transact(ctx, func(tx *sql.Tx) error {
+		return st.UpdateDeploymentStatus(ctx, tx, r1.Deployment.ID, domain.DeploymentDeploying, domain.DeploymentRunning, "ok")
+	})
+	_ = st.UpdateReleaseStatus(ctx, nil, r1.Release.ID, domain.ReleaseStatusSucceeded)
+
+	r2, err := releaseSvc.CreateRelease(ctx, "rb-app", DefaultEnvironment, CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "app:v2"}, Description: "second",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = st.Transact(ctx, func(tx *sql.Tx) error {
+		if err := st.UpdateDeploymentStatus(ctx, tx, r2.Deployment.ID, domain.DeploymentPending, domain.DeploymentDeploying, "go"); err != nil {
+			return err
+		}
+		return st.SupersedeRunningDeployments(ctx, tx, r2.Deployment.ServiceID, r2.Deployment.EnvironmentID, r2.Deployment.ID)
+	})
+	_ = st.Transact(ctx, func(tx *sql.Tx) error {
+		return st.UpdateDeploymentStatus(ctx, tx, r2.Deployment.ID, domain.DeploymentDeploying, domain.DeploymentRunning, "ok")
+	})
+
+	rb, err := releaseSvc.Rollback(ctx, "rb-app", DefaultEnvironment, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rb.Release.Version != 3 {
+		t.Fatalf("expected v3, got v%d", rb.Release.Version)
+	}
+	if rb.Release.ArtifactRef != "app:v1" {
+		t.Fatalf("artifact: %s", rb.Release.ArtifactRef)
+	}
+	if rb.Release.Description != "Rollback to v1" {
+		t.Fatalf("desc: %s", rb.Release.Description)
+	}
+}
+
 func TestChangesetPinBlocksOtherEnvironment(t *testing.T) {
 	ctx := context.Background()
 	db, driver, err := store.Open(ctx, ":memory:")
