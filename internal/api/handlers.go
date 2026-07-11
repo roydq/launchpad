@@ -63,6 +63,10 @@ func (s *Server) Routes() chi.Router {
 
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/processes", s.listProcesses)
 
+		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/environments", s.listEnvironments)
+		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/environments", s.createEnvironment)
+		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/environments/{name}", s.getEnvironment)
+
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/releases", s.createRelease)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/releases", s.listReleases)
 
@@ -72,6 +76,13 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/changeset/push", s.pushChangeset)
 	})
 	return r
+}
+
+func environmentFromRequest(r *http.Request) string {
+	if v := r.Header.Get("X-Launchpad-Environment"); v != "" {
+		return v
+	}
+	return service.DefaultEnvironment
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +122,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
-	vars, err := s.config.GetConfig(r.Context(), chi.URLParam(r, "project"))
+	vars, err := s.config.GetConfig(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -125,12 +136,48 @@ func (s *Server) patchConfig(w http.ResponseWriter, r *http.Request) {
 		problem.BadRequest(w, "invalid json")
 		return
 	}
-	vars, err := s.config.PatchConfig(r.Context(), chi.URLParam(r, "project"), updates)
+	vars, err := s.config.PatchConfig(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), updates)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, vars)
+}
+
+func (s *Server) listEnvironments(w http.ResponseWriter, r *http.Request) {
+	envs, err := s.projects.ListEnvironments(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out := make([]environmentDTO, 0, len(envs))
+	for i := range envs {
+		out = append(out, environmentResponse(&envs[i]))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) createEnvironment(w http.ResponseWriter, r *http.Request) {
+	var input service.CreateEnvironmentInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	env, err := s.projects.CreateEnvironment(r.Context(), chi.URLParam(r, "project"), input)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, environmentResponse(env))
+}
+
+func (s *Server) getEnvironment(w http.ResponseWriter, r *http.Request) {
+	env, err := s.projects.GetEnvironment(r.Context(), chi.URLParam(r, "project"), chi.URLParam(r, "name"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, environmentResponse(env))
 }
 
 func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +199,7 @@ func (s *Server) createRelease(w http.ResponseWriter, r *http.Request) {
 		problem.BadRequest(w, "invalid json")
 		return
 	}
-	result, err := s.releases.CreateRelease(r.Context(), chi.URLParam(r, "project"), input)
+	result, err := s.releases.CreateRelease(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), input)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -161,25 +208,25 @@ func (s *Server) createRelease(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listReleases(w http.ResponseWriter, r *http.Request) {
-	releases, err := s.releases.ListReleases(r.Context(), chi.URLParam(r, "project"))
+	releases, err := s.releases.ListReleases(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 	out := make([]releaseDTO, 0, len(releases))
 	for _, rel := range releases {
-		out = append(out, releaseResponse(rel))
+		out = append(out, releaseWithDeploymentsResponse(rel))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) getChangeset(w http.ResponseWriter, r *http.Request) {
-	cs, err := s.changesets.GetChangeset(r.Context(), chi.URLParam(r, "project"))
+	cs, err := s.changesets.GetChangeset(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, changesetResponse(cs))
+	writeJSON(w, http.StatusOK, changesetViewResponse(cs))
 }
 
 func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
@@ -188,12 +235,12 @@ func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
 		problem.BadRequest(w, "invalid json")
 		return
 	}
-	cs, err := s.changesets.StageChanges(r.Context(), chi.URLParam(r, "project"), input)
+	cs, err := s.changesets.StageChanges(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), input)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, changesetResponse(cs))
+	writeJSON(w, http.StatusOK, changesetViewResponse(cs))
 }
 
 func (s *Server) discardChangeset(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +257,7 @@ func (s *Server) pushChangeset(w http.ResponseWriter, r *http.Request) {
 		problem.BadRequest(w, "invalid json")
 		return
 	}
-	result, err := s.changesets.PushChangeset(r.Context(), chi.URLParam(r, "project"), input)
+	result, err := s.changesets.PushChangeset(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), input)
 	if err != nil {
 		writeError(w, r, err)
 		return

@@ -24,13 +24,14 @@ const (
 )
 
 type Changeset struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	Status      ChangesetStatus
-	Description string
-	Changes     []ChangesetChange
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	EnvironmentID *uuid.UUID // pinned env once staging starts; nil if open with no pin
+	Status        ChangesetStatus
+	Description   string
+	Changes       []ChangesetChange
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type ChangesetChange struct {

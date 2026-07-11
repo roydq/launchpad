@@ -269,20 +269,21 @@ Release source: `{"type":"image","image":"<artifact-ref>"}` only. MVP environmen
 
 ## CLI (shipped)
 
-CLI stages mutations into the open changeset; `deploy` calls push. There is no `changeset` subcommand.
+CLI stages mutations into the open changeset; `deploy` calls push. There is no `changeset` subcommand. Environment is ambient (`env use` / `LAUNCHPAD_ENV`, default `dev`) via `X-Launchpad-Environment`.
 
 | Command | API |
 |---------|-----|
 | `launchpad projects create` | `POST /v1/projects` |
-| `launchpad use` | Writes `~/.launchpad/config` |
-| `launchpad config get` | `GET /config` (live) |
+| `launchpad use` | Writes project to `~/.launchpad/config` |
+| `launchpad env list/create/use` | `GET/POST …/environments` |
+| `launchpad config get` | `GET /config` (live, current env) |
 | `launchpad config set/unset`, `scale`, `image` | `POST …/changeset/changes` (`--now` → stage + push) |
-| `launchpad diff` / `status` / `reset` | `GET …/changeset` (+ releases for diff); `DELETE …/changeset` |
+| `launchpad diff` / `status` / `reset` | `GET …/changeset` (+ releases for per-env baseline); `DELETE …/changeset` |
 | `launchpad deploy` | Optional stage + `POST …/changeset/push` |
 | `launchpad ps` | `GET /processes` |
-| `launchpad releases` | `GET /releases` |
+| `launchpad releases` | `GET /releases` (with deployment annotations) |
 
-Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API_URL`. MVP operates on `dev` environment and primary service implicitly.
+Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API_URL`. Primary service is still implicit.
 
 ---
 

@@ -5,7 +5,7 @@
 | **Status** | Active (revision 3) |
 | **Date** | 2026-07-09 |
 | **Related** | `docs/DESIGN.md` — control plane architecture and operational design |
-| **In-flight** | `docs/superpowers/specs/2026-07-09-release-invariants-design.md` — snapshot deploy + atomic push |
+| **Related** | `docs/superpowers/specs/2026-07-11-multi-env-design.md` — multi-env phase 2a |
 
 ---
 
@@ -544,7 +544,7 @@ Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` with
 
 ### Shipped paths (MVP)
 
-Workspace is implicit from the auth token. Environment is hardcoded `dev`; service is the project's `primary_service`. Context headers are **not** accepted in MVP (avoid partial multi-env).
+Workspace is implicit from the auth token. Environment is selected via **`X-Launchpad-Environment`** (default `dev`). Service is the project's `primary_service` until multi-service.
 
 ```
 POST   /v1/projects
@@ -552,6 +552,9 @@ GET    /v1/projects
 GET    /v1/projects/{project}
 GET    /v1/projects/{project}/config
 PATCH  /v1/projects/{project}/config
+GET    /v1/projects/{project}/environments
+POST   /v1/projects/{project}/environments
+GET    /v1/projects/{project}/environments/{name}
 GET    /v1/projects/{project}/processes
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
@@ -564,19 +567,18 @@ POST   /v1/tokens
 GET    /healthz
 ```
 
-### Planned paths and headers
-
-```
-/v1/workspaces/{workspace}/projects/{project}/environments/{env}/...
-/v1/projects/{project}/promote
-/v1/projects/{project}/environments
-```
-
 | Header | Purpose | Status |
 |--------|---------|--------|
-| `X-Launchpad-Environment` | Target environment (default `dev`) | Planned (phase 2) |
+| `X-Launchpad-Environment` | Target environment (default `dev`) | **Shipped** (phase 2a) |
 | `X-Launchpad-Service` | Target service (default `primary_service`) | Planned (phase 3) |
 | `Idempotency-Key` | Dedup on mutating POSTs | Planned |
+
+### Planned paths
+
+```
+/v1/workspaces/{workspace}/projects/{project}/...
+/v1/projects/{project}/promote
+```
 
 ---
 
@@ -587,19 +589,19 @@ GET    /healthz
 | Command | Notes |
 |---------|-------|
 | `launchpad projects create` | Bootstraps project + `dev` + primary service + `web` |
-| `launchpad use <project>` | Persists context to `~/.launchpad/config` |
+| `launchpad use <project>` | Persists project context to `~/.launchpad/config` |
+| `launchpad env list/create/use/current` | Environments; sticky env (default `dev`); dirty batch blocks switch |
 | `launchpad config get/set/unset` | Live get; set/unset stage by default (`--now` for immediate) |
 | `launchpad scale` / `image` | Stage scale or image (`--now` for immediate) |
-| `launchpad diff` / `status` / `reset` | Review pending vs last release; discard staging |
+| `launchpad diff` / `status` / `reset` | Review pending vs last deploy **in current env**; discard staging |
 | `launchpad deploy` | Submit staged batch; optional one-shot mutations (`--image`, `KEY=VAL`, `--scale`) |
-| `launchpad ps` | Process list |
-| `launchpad releases` | Release history |
+| `launchpad ps` | Process definitions |
+| `launchpad releases` | Release history with per-env deployment annotations |
 
 ### Planned (deltas from shipped)
 
 | Command | Action |
 |---------|--------|
-| `launchpad env use / list / create` | Multi-environment context |
 | `launchpad services list` | Multi-service projects |
 | `launchpad config set [--shared\|--workspace]` | Layered config |
 | `launchpad deploy --mode` / multi-service staging | Multi-service + coordination |
@@ -623,7 +625,7 @@ On `POST /v1/projects`:
 3. Service names are unique per project.
 4. Process names are unique per service.
 5. Release versions are monotonically increasing per service.
-6. At most one open changeset per project.
+6. At most one open changeset per project; when non-empty it is **pinned** to one environment.
 7. At most one active (`pending`/`deploying`) deployment per (service, environment).
 8. Releases are immutable after create.
 9. `config_resolved` and `process_snapshot` are complete at release creation — **no live-table reload at deploy time**.
@@ -639,24 +641,15 @@ On `POST /v1/projects`:
 | Phase | Status | Domain changes | DX unlocked |
 |-------|--------|----------------|-------------|
 | **1 — MVP core** | **Shipped** (hierarchy, API, CLI, deploy loop) | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
-| **1b — Release invariants** | **On branch** `feat/release-invariants` (implementing / ready for PR) | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
-| **2** | Planned | Layered config (workspace, shared, service); multi-env | `staging`/`prod`, shared settings |
+| **1b — Release invariants** | **Shipped** | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
+| **2a — Multi-env** | **Shipped** (this branch / PR) | Ambient env header; env CRUD; changeset env pin; CLI `env *` | `staging`/`prod` without app rename |
+| **2b** | Planned | Layered config (workspace, shared, service) | Shared settings across envs |
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
 | **4** | Planned | Bindings and ref resolution | Service linking |
 | **5** | Planned | Promotion API | staging → production flow |
 | **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
 
 Each phase updates API, store, worker, CLI, and target interface together.
-
-### Known invariant debt (phase 1b)
-
-Until `feat/release-invariants` merges, code may still:
-
-- Deploy from live config/process tables instead of the release snapshot.
-- Commit changeset + config before release enqueue (non-atomic push).
-- Return PascalCase JSON for some list endpoints (untagged domain structs).
-
-Treat those as bugs relative to this document, not as the intended model.
 
 ---
 

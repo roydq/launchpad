@@ -24,11 +24,18 @@ Workspace
 
 ```bash
 launchpad projects create my-api
-launchpad use my-api
+launchpad use my-api                  # environment defaults to dev
 launchpad config set PORT=3000
 launchpad image my-api:v1
 launchpad diff
 launchpad deploy -m "initial"
+
+# Second environment
+launchpad env create staging --target stub
+launchpad env use staging
+launchpad config set LOG_LEVEL=info
+launchpad deploy --image my-api:v1 -m "staging"
+
 launchpad ps
 launchpad releases
 ```
@@ -131,8 +138,9 @@ Environment knobs: `LAUNCHPAD_E2E_IMAGE`, `LAUNCHPAD_E2E_NAMESPACE`, `LAUNCHPAD_
 | `LAUNCHPAD_API_URL` | API base URL (default `http://localhost:8080`) |
 | `LAUNCHPAD_TOKEN` | Bearer token |
 | `LAUNCHPAD_PROJECT` | Active project (overrides `~/.launchpad/config`) |
+| `LAUNCHPAD_ENV` | Active environment (overrides config file; default `dev`) |
 
-`launchpad use <project>` writes the active project to `~/.launchpad/config`.
+`launchpad use <project>` and `launchpad env use <name>` write sticky context to `~/.launchpad/config`. API calls send `X-Launchpad-Environment`.
 
 ## API (MVP)
 
@@ -142,6 +150,9 @@ GET    /v1/projects
 GET    /v1/projects/{project}
 GET    /v1/projects/{project}/config
 PATCH  /v1/projects/{project}/config
+GET    /v1/projects/{project}/environments
+POST   /v1/projects/{project}/environments
+GET    /v1/projects/{project}/environments/{name}
 GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
 DELETE /v1/projects/{project}/changeset
@@ -153,6 +164,8 @@ GET    /v1/jobs/{id}
 POST   /v1/tokens
 GET    /healthz
 ```
+
+Header `X-Launchpad-Environment` (default `dev`) scopes config, changeset, and deploy routes.
 
 ## For AI agents
 

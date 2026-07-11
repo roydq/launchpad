@@ -82,17 +82,15 @@ Kind e2e (`make e2e-kind`) is optional/nightly — needs Docker, kind, and kubec
 - **Store:** use `?` placeholders; `rebind()` handles Postgres. Use `Transact()` for multi-step writes.
 - **Errors:** `pkg/launchpad` sentinels (`ErrNotFound`, `ErrConflict`, `ErrBadRequest`, …); API returns `application/problem+json`.
 - **Auth:** workspace-scoped tokens; bootstrap via `LAUNCHPAD_BOOTSTRAP_TOKEN`. Context key `team_id` is legacy naming for workspace ID.
-- **MVP environment:** hardcode or default `dev` until multi-env phase lands.
+- **Environment:** default `dev`; select via `X-Launchpad-Environment` / CLI `env use` / `LAUNCHPAD_ENV`.
 - **Targets:** implement `internal/target.Target`; K8s resource prefix `launchpad-{project}-{service}-{process}`.
 - **Commits:** focused, present tense; one logical layer per commit when possible.
 
 ## MVP scope boundaries
 
-**In scope now:** single `dev` environment, single primary service per project, image-only releases, changesets, deploy worker, stub + K8s targets.
+**In scope now:** multi-env (ambient header + CLI `env *`), single primary service per project, image-only releases, implicit staging CLI, deploy worker, stub + K8s targets.
 
-**In-flight correctness (phase 1b):** `feat/release-invariants` — deploy from release snapshot only, atomic changeset push, snake_case API DTOs. Spec: `docs/superpowers/specs/2026-07-09-release-invariants-design.md`. Until merged, treat live-table deploy reload and non-atomic push as known debt (see DOMAIN.md “Known invariant debt”).
-
-**Deferred (do not half-build):** multi-environment promotion, multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace/shared config layers, scale/rollback APIs, SSE/events, idempotency, builds, OpenAPI, Helm.
+**Deferred (do not half-build):** promotion, multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace/shared config layers, secrets-typed config, scale/rollback APIs, SSE/events, idempotency, builds, OpenAPI, Helm.
 
 If a task crosses a deferred boundary, update `docs/DOMAIN.md` or write a new spec in `docs/superpowers/specs/` first.
 

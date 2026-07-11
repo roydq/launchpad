@@ -102,21 +102,28 @@ func printDeployResult(result *apiclient.DeployResult) {
 	)
 }
 
-func latestRelease(ctx context.Context, client *apiclient.Client, project string) (*apiclient.Release, error) {
+// latestReleaseForEnv returns the release for the latest meaningful deploy in env.
+// Prefer a running deployment; else highest-version release that has any deployment in env.
+func latestReleaseForEnv(ctx context.Context, client *apiclient.Client, project, env string) (*apiclient.Release, error) {
 	releases, err := client.ListReleases(ctx, project)
 	if err != nil {
 		return nil, err
 	}
-	if len(releases) == 0 {
-		return nil, nil
-	}
-	// List is version DESC. Prefer latest succeeded, else highest version.
 	for i := range releases {
-		if releases[i].Status == "succeeded" {
-			return &releases[i], nil
+		for _, d := range releases[i].Deployments {
+			if d.Environment == env && d.Status == "running" {
+				return &releases[i], nil
+			}
 		}
 	}
-	return &releases[0], nil
+	for i := range releases {
+		for _, d := range releases[i].Deployments {
+			if d.Environment == env {
+				return &releases[i], nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 func stageAndMaybeNow(
