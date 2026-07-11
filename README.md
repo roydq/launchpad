@@ -78,6 +78,13 @@ One-shot (append mutations and deploy):
 launchpad deploy --image my-api:v1 PORT=8080 -m "bump"
 ```
 
+Wait for the worker to finish the job:
+
+```bash
+launchpad deploy --image my-api:v1 --wait
+launchpad deploy --image my-api:v1 --wait --timeout 2m
+```
+
 Immediate release when staging is empty (`--now` on mutation commands only):
 
 ```bash

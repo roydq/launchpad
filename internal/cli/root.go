@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
 	"github.com/spf13/cobra"
@@ -189,12 +190,14 @@ func NewRoot(cfg Config) *cobra.Command {
 			}
 			now, _ := cmd.Flags().GetBool("now")
 			message, _ := cmd.Flags().GetString("message")
+			wait, timeout := waitFlags(cmd)
 			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
-				fmt.Sprintf("Staged config %s", configKeysSummary(changes)))
+				fmt.Sprintf("Staged config %s", configKeysSummary(changes)), wait, timeout)
 		},
 	}
 	configSetCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
 	configSetCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	addWaitFlags(configSetCmd)
 	configCmd.AddCommand(configSetCmd)
 
 	configUnsetCmd := &cobra.Command{
@@ -212,12 +215,14 @@ func NewRoot(cfg Config) *cobra.Command {
 			}
 			now, _ := cmd.Flags().GetBool("now")
 			message, _ := cmd.Flags().GetString("message")
+			wait, timeout := waitFlags(cmd)
 			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
-				fmt.Sprintf("Staged unset %s", strings.Join(args, ", ")))
+				fmt.Sprintf("Staged unset %s", strings.Join(args, ", ")), wait, timeout)
 		},
 	}
 	configUnsetCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
 	configUnsetCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	addWaitFlags(configUnsetCmd)
 	configCmd.AddCommand(configUnsetCmd)
 	root.AddCommand(configCmd)
 
@@ -242,12 +247,14 @@ func NewRoot(cfg Config) *cobra.Command {
 			}
 			now, _ := cmd.Flags().GetBool("now")
 			message, _ := cmd.Flags().GetString("message")
+			wait, timeout := waitFlags(cmd)
 			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
-				fmt.Sprintf("Staged scale %s", strings.Join(labels, ", ")))
+				fmt.Sprintf("Staged scale %s", strings.Join(labels, ", ")), wait, timeout)
 		},
 	}
 	scaleCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
 	scaleCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	addWaitFlags(scaleCmd)
 	root.AddCommand(scaleCmd)
 
 	imageCmd := &cobra.Command{
@@ -261,12 +268,14 @@ func NewRoot(cfg Config) *cobra.Command {
 			}
 			now, _ := cmd.Flags().GetBool("now")
 			message, _ := cmd.Flags().GetString("message")
+			wait, timeout := waitFlags(cmd)
 			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{imageChange(args[0])}, now, message,
-				fmt.Sprintf("Staged image %s", args[0]))
+				fmt.Sprintf("Staged image %s", args[0]), wait, timeout)
 		},
 	}
 	imageCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
 	imageCmd.Flags().StringP("message", "m", "", "release description (with --now)")
+	addWaitFlags(imageCmd)
 	root.AddCommand(imageCmd)
 
 	root.AddCommand(&cobra.Command{
@@ -385,13 +394,14 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printDeployResult(result)
-			return nil
+			wait, timeout := waitFlags(cmd)
+			return maybeWaitForDeploy(cmd.Context(), client, result, wait, timeout)
 		},
 	}
 	deployCmd.Flags().String("image", "", "stage container image then deploy")
 	deployCmd.Flags().String("scale", "", "stage scale change then deploy, e.g. web=3")
 	deployCmd.Flags().StringP("message", "m", "", "release description")
+	addWaitFlags(deployCmd)
 	root.AddCommand(deployCmd)
 
 	root.AddCommand(&cobra.Command{
@@ -466,6 +476,17 @@ func effectiveEnv(cfg Config) string {
 		return cfg.Environment
 	}
 	return "dev"
+}
+
+func addWaitFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("wait", false, "wait for deploy job to finish")
+	cmd.Flags().Duration("timeout", 5*time.Minute, "max wait time with --wait")
+}
+
+func waitFlags(cmd *cobra.Command) (bool, time.Duration) {
+	wait, _ := cmd.Flags().GetBool("wait")
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	return wait, timeout
 }
 
 func configPath() (string, error) {
