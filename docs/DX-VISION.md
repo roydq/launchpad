@@ -91,7 +91,7 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 |------|-----|
 | `launchpad run` / env pull for local process | Local ↔ remote config parity |
 | Ephemeral / PR environments | Category-defining; DOMAIN already has `ephemeral` |
-| Env bootstrap copy (clone config shape) | Faster second env (careful with secrets) |
+| Env bootstrap copy (clone config shape) | **Blocked on secrets:** do not clone config until secrets are stored/typed differently from plain config values |
 
 ### P4 — Agent and integration surface
 
@@ -114,7 +114,7 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 ## Suggested sequencing (DX-obsessed)
 
-1. **Multi-env 2a** — context + per-env config/deploy (in progress: design)
+1. **Multi-env 2a** — context + per-env config/deploy ([spec](superpowers/specs/2026-07-11-multi-env-design.md))
 2. **Deploy wait/follow + basic logs** — make multi-env *feel* real
 3. **Layered config 2b *or* rollback** — pick by dogfood pain
 4. **MCP + project-local context** — agent + repo gravity
@@ -132,4 +132,4 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 | Work | Spec |
 |------|------|
-| Multi-environment (phase 2a) | *design in progress* |
+| Multi-environment (phase 2a) | `docs/superpowers/specs/2026-07-11-multi-env-design.md` |
