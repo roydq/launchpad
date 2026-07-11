@@ -48,13 +48,13 @@ type releaseDTO struct {
 }
 
 type environmentDTO struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	TargetType string         `json:"target_type"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	TargetType   string          `json:"target_type"`
 	TargetConfig json.RawMessage `json:"target_config"`
-	Ephemeral bool            `json:"ephemeral"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	Ephemeral    bool            `json:"ephemeral"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 type jobDTO struct {
