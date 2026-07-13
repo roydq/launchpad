@@ -13,6 +13,9 @@ import (
 	"github.com/launchpad/launchpad/internal/auth"
 	"github.com/launchpad/launchpad/internal/service"
 	"github.com/launchpad/launchpad/internal/store"
+	"github.com/launchpad/launchpad/internal/target"
+	k8starget "github.com/launchpad/launchpad/internal/target/kubernetes"
+	"github.com/launchpad/launchpad/internal/target/stub"
 )
 
 func main() {
@@ -40,7 +43,20 @@ func main() {
 	configSvc := service.NewConfigService(st, projectSvc)
 	releaseSvc := service.NewReleaseService(st, projectSvc)
 	changesetSvc := service.NewChangesetService(st, projectSvc, releaseSvc)
-	server := api.NewServer(projectSvc, configSvc, releaseSvc, changesetSvc, authSvc, st)
+
+	registry := target.NewRegistry()
+	registry.Register(stub.New())
+	if os.Getenv("LAUNCHPAD_ENABLE_KUBERNETES") != "false" {
+		if k8s, err := k8starget.NewFromEnv(); err != nil {
+			logger.Warn("kubernetes target unavailable for logs", "error", err)
+		} else {
+			registry.Register(k8s)
+			logger.Info("kubernetes target registered for logs")
+		}
+	}
+	runtimeSvc := service.NewRuntimeService(st, projectSvc, registry)
+
+	server := api.NewServer(projectSvc, configSvc, releaseSvc, changesetSvc, runtimeSvc, authSvc, st)
 
 	addr := envOr("LAUNCHPAD_API_ADDR", ":8080")
 	httpServer := &http.Server{Addr: addr, Handler: server.Routes()}

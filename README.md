@@ -99,6 +99,19 @@ Health check:
 launchpad doctor
 ```
 
+Process logs (current env; default process `web`):
+
+```bash
+launchpad logs
+launchpad logs web
+```
+
+One-page project@env view:
+
+```bash
+launchpad inspect
+```
+
 Immediate release when staging is empty (`--now` on mutation commands only):
 
 ```bash

@@ -64,6 +64,8 @@ Include:
 
 **Gate:** Human approval before implementation. For agent sessions, present the design and wait for explicit approval.
 
+**Autonomous mode (when user authorizes a feature program):** agent may self-approve the recommended approach after the [spec self-review](#) checklist (no open TBDs, scope one plan, no contradictions). Still write the spec and plan to `docs/superpowers/`. Still open a PR for human dogfood; do not force-merge unless asked. See `docs/DX-VISION.md` → *Autonomous feature program*.
+
 ### 1.3 Update domain doc (if needed)
 
 If the feature changes the product mental model, update `docs/DOMAIN.md` in the same PR series as the spec (can be a separate `docs:` commit on the feature branch).
