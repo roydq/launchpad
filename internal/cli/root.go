@@ -278,13 +278,21 @@ func NewRoot(cfg Config) *cobra.Command {
 	addWaitFlags(imageCmd)
 	root.AddCommand(imageCmd)
 
-	root.AddCommand(&cobra.Command{
+	diffCmd := &cobra.Command{
 		Use:   "diff",
-		Short: "Show pending staged changes vs last release",
+		Short: "Show pending staged changes vs last deploy (or compare two releases)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
 				return err
+			}
+			fromV, _ := cmd.Flags().GetInt("from-release")
+			toV, _ := cmd.Flags().GetInt("to-release")
+			if fromV > 0 || toV > 0 {
+				if fromV < 1 || toV < 1 {
+					return fmt.Errorf("both --from-release and --to-release are required for release compare")
+				}
+				return printReleaseDiff(cmd.Context(), client, project, fromV, toV)
 			}
 			cs, err := loadPending(cmd.Context(), client, project)
 			if err != nil {
@@ -301,7 +309,10 @@ func NewRoot(cfg Config) *cobra.Command {
 			fmt.Print(formatDiff(folded, baseline))
 			return nil
 		},
-	})
+	}
+	diffCmd.Flags().Int("from-release", 0, "compare release versions (baseline)")
+	diffCmd.Flags().Int("to-release", 0, "compare release versions (target)")
+	root.AddCommand(diffCmd)
 
 	root.AddCommand(&cobra.Command{
 		Use:   "status",
@@ -443,23 +454,43 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
-	root.AddCommand(&cobra.Command{
+	releasesCmd := &cobra.Command{
 		Use:   "releases",
-		Short: "List releases for the active project",
+		Short: "List or show releases for the active project",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listReleasesJSON(cmd.Context(), client, cfg)
+		},
+	}
+	releasesCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List releases (JSON)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listReleasesJSON(cmd.Context(), client, cfg)
+		},
+	})
+	releasesCmd.AddCommand(&cobra.Command{
+		Use:   "show [version]",
+		Short: "Show full release snapshot for a version",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			releases, err := client.ListReleases(cmd.Context(), project)
+			var version int
+			if _, err := fmt.Sscanf(args[0], "%d", &version); err != nil || version < 1 {
+				return fmt.Errorf("version must be a positive integer")
+			}
+			rel, err := findReleaseByVersion(cmd.Context(), client, project, version)
 			if err != nil {
 				return err
 			}
-			b, _ := json.MarshalIndent(releases, "", "  ")
+			b, _ := json.MarshalIndent(rel, "", "  ")
 			fmt.Println(string(b))
 			return nil
 		},
 	})
+	root.AddCommand(releasesCmd)
 
 	rollbackCmd := &cobra.Command{
 		Use:   "rollback [version]",

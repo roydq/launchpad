@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -8,6 +9,66 @@ import (
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
 )
+
+func findReleaseByVersion(ctx context.Context, client *apiclient.Client, project string, version int) (*apiclient.Release, error) {
+	releases, err := client.ListReleases(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	for i := range releases {
+		if releases[i].Version == version {
+			return &releases[i], nil
+		}
+	}
+	return nil, fmt.Errorf("release v%d not found", version)
+}
+
+func releaseToFolded(r *apiclient.Release) FoldedPending {
+	out := FoldedPending{
+		Config: make(map[string]*string),
+		Scales: make(map[string]int),
+	}
+	if r == nil {
+		return out
+	}
+	out.Image = r.ArtifactRef
+	for k, v := range r.ConfigResolved {
+		val := v
+		out.Config[k] = &val
+	}
+	for name, snap := range r.ProcessSnapshot {
+		out.Scales[name] = snap.Quantity
+	}
+	return out
+}
+
+func printReleaseDiff(ctx context.Context, client *apiclient.Client, project string, fromV, toV int) error {
+	from, err := findReleaseByVersion(ctx, client, project, fromV)
+	if err != nil {
+		return err
+	}
+	to, err := findReleaseByVersion(ctx, client, project, toV)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("# release v%d → v%d\n", fromV, toV)
+	fmt.Print(formatDiff(releaseToFolded(to), from))
+	return nil
+}
+
+func listReleasesJSON(ctx context.Context, client *apiclient.Client, cfg Config) error {
+	project, err := requireProject(cfg)
+	if err != nil {
+		return err
+	}
+	releases, err := client.ListReleases(ctx, project)
+	if err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(releases, "", "  ")
+	fmt.Println(string(b))
+	return nil
+}
 
 // FoldedPending is the effective staged batch after last-write-wins folding.
 type FoldedPending struct {

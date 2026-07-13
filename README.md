@@ -38,6 +38,8 @@ launchpad deploy --image my-api:v1 -m "staging"
 
 launchpad ps
 launchpad releases
+launchpad releases show 1
+launchpad diff --from-release 1 --to-release 2
 ```
 
 ## Kubernetes target
