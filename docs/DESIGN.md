@@ -17,17 +17,18 @@ The system separates **control plane** (API, auth, persistence, job queue) from 
 
 **Domain model is defined in [`DOMAIN.md`](DOMAIN.md).** This document covers control-plane architecture, storage, async execution, and operational concerns.
 
-### Shipped today (MVP)
+### Shipped today (MVP + DX waves)
 
-- Project / environment (`dev`) / service / process hierarchy
+- Project / environment / service / process hierarchy
 - Image-only releases, deploy worker, changeset workflow
-- Stub and Kubernetes targets
+- Multi-env (ambient header + CLI `env *`), layered config (shared + service)
+- Stub and Kubernetes targets; process logs via target
 - SQLite + Postgres storage, bootstrap token auth
-- CLI: `projects create`, `use`, `config`, `changeset`, `deploy`, `ps`, `releases`
+- CLI: `projects create`, `use`, `config`, `changeset`, `deploy --wait`, `ps`, `releases show`, `diff`, `inspect`, `logs`, `rollback`, `doctor`
 
 ### Roadmap
 
-See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md) for multi-environment, multi-service, bindings, and promotion.
+See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Next:** promotion. Deferred: multi-service, bindings.
 
 ---
 
@@ -292,11 +293,12 @@ Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API
 | Phase | Status | Deliverable |
 |-------|--------|-------------|
 | **1 — MVP core** | **Shipped** | Project/env/service model, changeset, deploy, stub+K8s |
-| **1b — Release invariants** | **In progress** | Snapshot-only deploy, atomic push, API DTOs (see domain doc) |
-| **2 — Multi-env config** | Planned | `staging`/`prod`, shared/workspace config layers |
+| **1b — Release invariants** | **Shipped** | Snapshot-only deploy, atomic push, API DTOs (see domain doc) |
+| **2a — Multi-env** | **Shipped** | Ambient env, env CRUD, CLI `env *` |
+| **2b — Layered config** | **Shipped** | Shared + service layers; resolve at release |
 | **3 — Multi-service** | Planned | Multiple services, ReleaseSet, coordination modes |
 | **4 — Bindings** | Planned | `${{ ref }}` config linking between services |
-| **5 — Promotion** | Planned | `promote` across environments |
+| **5 — Promotion** | **Next** | `promote` across environments |
 | **6 — Integrations** | Planned | `launchpad.yaml` import/export, agent/MCP hooks |
 
 Each phase updates domain → store → service → worker → api → cli → target together. Canonical phase narrative: [`DOMAIN.md`](DOMAIN.md).
