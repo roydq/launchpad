@@ -54,7 +54,7 @@ North star: **the mise of runtime application management** — zero ceremony for
 | **2b** | Layered config | **Shipped** |
 | **3** | Multi-service + ReleaseSet | Planned (deferred — do not half-build) |
 | **4** | Bindings | Planned (deferred — do not half-build) |
-| **5** | Promote | **Next** (after 2b) |
+| **5** | Promote | **Shipped** (primary service; re-resolve target config) |
 | **6** | `launchpad.yaml` | Planned |
 
 Do not half-build deferred phases. Each gets a spec.
@@ -122,8 +122,8 @@ Do not half-build deferred phases. Each gets a spec.
 
 1. ~~Logs + inspect + release archaeology~~ (**Shipped** — Wave 1 DX)
 2. ~~Layered config 2b~~ (**Shipped** — Wave 2 domain)
-3. **Promote** (Wave 3) — **Active / next**
-4. **Agent surface** small wins (problem+json hints, preview API) if promote is solid
+3. ~~Promote~~ (**Shipped** — Wave 3)
+4. **Agent surface** small wins (problem+json recovery hints, preview API) — **Active / next**
 5. **Multi-service** only after dogfood of 1–3 (hard deferred until then)
 
 ### Autonomous feature program
@@ -149,4 +149,5 @@ See program notes in session plans; update this section when cadence changes.
 
 | Work | Spec |
 |------|------|
-| Promote (Wave 3) | *pending — next* |
+| Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
+| Agent surface small wins | *next — problem+json hints / preview* |

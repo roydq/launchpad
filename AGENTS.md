@@ -88,7 +88,7 @@ Kind e2e (`make e2e-kind`) is optional/nightly — needs Docker, kind, and kubec
 
 ## MVP scope boundaries
 
-**In scope now:** multi-env (ambient header + CLI `env *`), layered config (shared + service), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, logs, inspect, release archaeology, doctor, project-local context, deploy worker, stub + K8s targets. **Next:** promote (cross-env).
+**In scope now:** multi-env (ambient header + CLI `env *`), layered config (shared + service), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, promote, logs, inspect, release archaeology, doctor, project-local context, deploy worker, stub + K8s targets.
 
 **Deferred (do not half-build):** multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace config layer, secrets-typed config, scale API (target-side), SSE/events, idempotency, builds, OpenAPI, Helm.
 
