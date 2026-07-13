@@ -78,6 +78,25 @@ One-shot (append mutations and deploy):
 launchpad deploy --image my-api:v1 PORT=8080 -m "bump"
 ```
 
+Wait for the worker to finish the job:
+
+```bash
+launchpad deploy --image my-api:v1 --wait
+launchpad deploy --image my-api:v1 --wait --timeout 2m
+```
+
+Rollback (new release from prior version; config re-resolved for current env):
+
+```bash
+launchpad rollback 1 --wait
+```
+
+Health check:
+
+```bash
+launchpad doctor
+```
+
 Immediate release when staging is empty (`--now` on mutation commands only):
 
 ```bash
@@ -141,6 +160,16 @@ Environment knobs: `LAUNCHPAD_E2E_IMAGE`, `LAUNCHPAD_E2E_NAMESPACE`, `LAUNCHPAD_
 | `LAUNCHPAD_ENV` | Active environment (overrides config file; default `dev`) |
 
 `launchpad use <project>` and `launchpad env use <name>` write sticky context to `~/.launchpad/config`. API calls send `X-Launchpad-Environment`.
+
+Optional **project-local** file (walk parents from cwd):
+
+```json
+// .launchpad/config
+{ "project": "my-api", "environment": "staging" }
+```
+
+Precedence: `LAUNCHPAD_PROJECT` / `LAUNCHPAD_ENV` → `.launchpad/config` → `~/.launchpad/config` → env default `dev`.  
+`launchpad context` prints the resolved stack.
 
 ## API (MVP)
 

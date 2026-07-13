@@ -60,8 +60,8 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 | Idea | Why |
 |------|-----|
-| `deploy --wait` / `--follow` | Enqueue → hope is not a product |
-| Job/deployment progress in CLI | Alive loop |
+| `deploy --wait` / `--follow` | **Shipped (wait)** on `feat/dx-stack` |
+| Job/deployment progress in CLI | Covered by `--wait` status lines |
 | Process `logs` (target-backed) | Debug without leaving Launchpad |
 
 ### P1 — Context and gravity
@@ -69,9 +69,9 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 | Idea | Why |
 |------|-----|
 | Multi-env context stack (`env use`, ambient env) | **Next feature (2a)** |
-| Project-local config (`.launchpad/` or `launchpad.toml`) | Auto-context on `cd` |
+| Project-local config (`.launchpad/` or `launchpad.toml`) | **Shipped** (JSON walk-up) on `feat/dx-stack` |
 | Shell prompt / status line awareness | Always know `project@env` |
-| `launchpad doctor` | API, auth, target reachability |
+| `launchpad doctor` | **Shipped** on `feat/dx-stack` |
 | `launchpad inspect` | One page: context, pending, running release, target |
 
 ### P2 — Trust and archaeology
@@ -81,7 +81,7 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 | Diff release↔release | Snapshot model already supports this |
 | Diff env↔env (running / last release) | Multi-env payoff |
 | `releases show N` full snapshot | “What’s in v12?” |
-| Rollback as first-class CLI | New release from prior snapshot |
+| Rollback as first-class CLI | **Shipped** on `feat/dx-stack` |
 | Unstage last mutation | Undo culture beyond full `reset` |
 | Confirmations for sensitive envs | Safe defaults without killing solo flow |
 
@@ -114,11 +114,13 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 ## Suggested sequencing (DX-obsessed)
 
-1. **Multi-env 2a** — context + per-env config/deploy ([spec](superpowers/specs/2026-07-11-multi-env-design.md))
-2. **Deploy wait/follow + basic logs** — make multi-env *feel* real
+1. **Multi-env 2a** — **shipped** ([spec](superpowers/specs/2026-07-11-multi-env-design.md))
+2. **Deploy wait** — **in progress** on `feat/dx-stack` ([spec](superpowers/specs/2026-07-11-deploy-wait-design.md)); logs next
 3. **Layered config 2b *or* rollback** — pick by dogfood pain
 4. **MCP + project-local context** — agent + repo gravity
 5. **Promote, bindings, multi-service, yaml** — composition once env model is solid
+
+**Integration branch:** `feat/dx-stack` — feature PRs merge here first, then stack → `main`.
 
 ---
 
