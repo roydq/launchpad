@@ -57,7 +57,7 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName
 		return nil, fmt.Errorf("%w: image is required", launchpad.ErrBadRequest)
 	}
 
-	config, err := s.store.ListConfigVars(ctx, svc.ID, env.ID)
+	config, err := s.store.ResolveConfig(ctx, project.ID, svc.ID, env.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (s *ReleaseService) Rollback(ctx context.Context, projectName, envName stri
 	if err != nil {
 		return nil, err
 	}
-	config, err := s.store.ListConfigVars(ctx, svc.ID, env.ID)
+	config, err := s.store.ResolveConfig(ctx, project.ID, svc.ID, env.ID)
 	if err != nil {
 		return nil, err
 	}

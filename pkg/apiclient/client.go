@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -189,8 +190,16 @@ func (c *Client) GetProject(ctx context.Context, name string) (*Project, error) 
 }
 
 func (c *Client) GetConfig(ctx context.Context, project string) (map[string]string, error) {
+	return c.GetConfigLayer(ctx, project, "")
+}
+
+func (c *Client) GetConfigLayer(ctx context.Context, project, layer string) (map[string]string, error) {
 	var config map[string]string
-	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/config", nil, &config)
+	path := "/v1/projects/" + project + "/config"
+	if layer != "" {
+		path += "?layer=" + url.QueryEscape(layer)
+	}
+	_, err := c.do(ctx, http.MethodGet, path, nil, &config)
 	return config, err
 }
 

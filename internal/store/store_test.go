@@ -106,6 +106,46 @@ func TestProjectBootstrapAndJobQueue(t *testing.T) {
 	}
 }
 
+func TestResolveConfigSharedThenService(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	s := New(db, driver)
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "cfg-layers"}
+	if err := s.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	svc, _ := s.GetServiceByProjectAndName(ctx, project.ID, project.PrimaryService)
+	env, _ := s.GetEnvironmentByProjectAndName(ctx, project.ID, "dev")
+	sharedVal := "from-shared"
+	svcVal := "from-service"
+	both := "service-wins"
+	_ = s.Transact(ctx, func(tx *sql.Tx) error {
+		if err := s.MergeSharedConfigVarsTx(ctx, tx, project.ID, env.ID, map[string]*string{
+			"LOG_LEVEL": &sharedVal, "BOTH": &sharedVal,
+		}); err != nil {
+			return err
+		}
+		return s.MergeConfigVarsTx(ctx, tx, svc.ID, env.ID, map[string]*string{
+			"PORT": &svcVal, "BOTH": &both,
+		})
+	})
+	resolved, err := s.ResolveConfig(ctx, project.ID, svc.ID, env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved["LOG_LEVEL"] != "from-shared" || resolved["PORT"] != "from-service" || resolved["BOTH"] != "service-wins" {
+		t.Fatalf("%+v", resolved)
+	}
+}
+
 func TestCreateSecondEnvironmentAndChangesetPin(t *testing.T) {
 	ctx := context.Background()
 	db, driver, err := Open(ctx, ":memory:")

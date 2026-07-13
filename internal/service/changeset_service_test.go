@@ -23,9 +23,12 @@ func TestMaterializeChanges(t *testing.T) {
 		{Type: domain.ChangeTypeImage, Payload: imagePayload},
 	}
 
-	cfg, scales, image, err := materializeChanges(changes)
+	shared, cfg, scales, image, err := materializeChanges(changes)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(shared) != 0 {
+		t.Fatalf("shared: %+v", shared)
 	}
 	if cfg["PORT"] == nil || *cfg["PORT"] != "3000" {
 		t.Fatalf("config: %+v", cfg)

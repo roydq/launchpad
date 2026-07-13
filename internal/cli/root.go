@@ -157,15 +157,22 @@ func NewRoot(cfg Config) *cobra.Command {
 	root.AddCommand(envCmd)
 
 	configCmd := &cobra.Command{Use: "config", Short: "Manage service config (stages by default)"}
-	configCmd.AddCommand(&cobra.Command{
+	configGetCmd := &cobra.Command{
 		Use:   "get",
-		Short: "Show live (applied) config vars",
+		Short: "Show config vars (resolved by default)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
 				return err
 			}
-			vars, err := client.GetConfig(cmd.Context(), project)
+			layer := ""
+			if shared, _ := cmd.Flags().GetBool("shared"); shared {
+				layer = "shared"
+			}
+			if serviceOnly, _ := cmd.Flags().GetBool("service"); serviceOnly {
+				layer = "service"
+			}
+			vars, err := client.GetConfigLayer(cmd.Context(), project, layer)
 			if err != nil {
 				return err
 			}
@@ -173,7 +180,10 @@ func NewRoot(cfg Config) *cobra.Command {
 			fmt.Println(string(b))
 			return nil
 		},
-	})
+	}
+	configGetCmd.Flags().Bool("shared", false, "show shared layer only")
+	configGetCmd.Flags().Bool("service", false, "show service layer only")
+	configCmd.AddCommand(configGetCmd)
 
 	configSetCmd := &cobra.Command{
 		Use:   "set [KEY=VALUE...]",
@@ -184,17 +194,26 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			changes, err := parseKEYVALArgs(args)
+			layer := "service"
+			if shared, _ := cmd.Flags().GetBool("shared"); shared {
+				layer = "shared"
+			}
+			changes, err := parseKEYVALArgsLayer(args, layer)
 			if err != nil {
 				return err
 			}
 			now, _ := cmd.Flags().GetBool("now")
 			message, _ := cmd.Flags().GetString("message")
 			wait, timeout := waitFlags(cmd)
+			label := "config"
+			if layer == "shared" {
+				label = "shared config"
+			}
 			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
-				fmt.Sprintf("Staged config %s", configKeysSummary(changes)), wait, timeout)
+				fmt.Sprintf("Staged %s %s", label, configKeysSummary(changes)), wait, timeout)
 		},
 	}
+	configSetCmd.Flags().Bool("shared", false, "stage into shared (project×env) layer")
 	configSetCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
 	configSetCmd.Flags().StringP("message", "m", "", "release description (with --now)")
 	addWaitFlags(configSetCmd)

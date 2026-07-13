@@ -11,17 +11,25 @@ import (
 )
 
 func parseKEYVALArgs(args []string) ([]map[string]any, error) {
+	return parseKEYVALArgsLayer(args, "service")
+}
+
+func parseKEYVALArgsLayer(args []string, layer string) ([]map[string]any, error) {
 	var changes []map[string]any
 	for _, arg := range args {
 		parts := strings.SplitN(arg, "=", 2)
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("expected KEY=VALUE, got %q", arg)
 		}
-		changes = append(changes, map[string]any{
+		ch := map[string]any{
 			"type":  "config",
 			"key":   parts[0],
 			"value": parts[1],
-		})
+		}
+		if layer == "shared" {
+			ch["layer"] = "shared"
+		}
+		changes = append(changes, ch)
 	}
 	return changes, nil
 }

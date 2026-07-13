@@ -18,9 +18,10 @@ const (
 type ChangeType string
 
 const (
-	ChangeTypeConfig ChangeType = "config"
-	ChangeTypeScale  ChangeType = "scale"
-	ChangeTypeImage  ChangeType = "image"
+	ChangeTypeConfig       ChangeType = "config"
+	ChangeTypeSharedConfig ChangeType = "shared_config"
+	ChangeTypeScale        ChangeType = "scale"
+	ChangeTypeImage        ChangeType = "image"
 )
 
 type Changeset struct {

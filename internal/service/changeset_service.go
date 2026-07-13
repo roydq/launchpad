@@ -29,6 +29,8 @@ type StageChangeInput struct {
 	Process  string  `json:"process,omitempty"`
 	Quantity *int    `json:"quantity,omitempty"`
 	Image    string  `json:"image,omitempty"`
+	// Layer is "service" (default) or "shared" for config-type changes.
+	Layer string `json:"layer,omitempty"`
 }
 
 type StageChangesInput struct {
@@ -155,7 +157,7 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 	}
 	env := reqEnv
 
-	configUpdates, scales, artifactRef, err := materializeChanges(cs.Changes)
+	sharedUpdates, configUpdates, scales, artifactRef, err := materializeChanges(cs.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +169,11 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 
 	var result CreateReleaseResult
 	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
+		if len(sharedUpdates) > 0 {
+			if err := s.store.MergeSharedConfigVarsTx(ctx, tx, project.ID, env.ID, sharedUpdates); err != nil {
+				return err
+			}
+		}
 		if len(configUpdates) > 0 {
 			if err := s.store.MergeConfigVarsTx(ctx, tx, svc.ID, env.ID, configUpdates); err != nil {
 				return err
@@ -187,7 +194,7 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 			resolvedArtifact = latest.ArtifactRef
 		}
 
-		config, err := s.store.ListConfigVarsTx(ctx, tx, svc.ID, env.ID)
+		config, err := s.store.ResolveConfigTx(ctx, tx, project.ID, svc.ID, env.ID)
 		if err != nil {
 			return err
 		}
@@ -225,8 +232,12 @@ func (s *ChangesetService) viewFor(ctx context.Context, cs *domain.Changeset) (*
 }
 
 func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
-	switch domain.ChangeType(input.Type) {
-	case domain.ChangeTypeConfig:
+	changeType := domain.ChangeType(input.Type)
+	if changeType == domain.ChangeTypeConfig && input.Layer == "shared" {
+		changeType = domain.ChangeTypeSharedConfig
+	}
+	switch changeType {
+	case domain.ChangeTypeConfig, domain.ChangeTypeSharedConfig:
 		if input.Key == "" {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: config change requires key", launchpad.ErrBadRequest)
 		}
@@ -234,7 +245,7 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 		if err != nil {
 			return domain.ChangesetChange{}, err
 		}
-		return domain.ChangesetChange{Type: domain.ChangeTypeConfig, Payload: payload}, nil
+		return domain.ChangesetChange{Type: changeType, Payload: payload}, nil
 	case domain.ChangeTypeScale:
 		if input.Process == "" || input.Quantity == nil {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: scale change requires process and quantity", launchpad.ErrBadRequest)
@@ -258,34 +269,40 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 	}
 }
 
-func materializeChanges(changes []domain.ChangesetChange) (map[string]*string, map[string]int, string, error) {
-	configUpdates := make(map[string]*string)
-	scales := make(map[string]int)
-	var artifactRef string
+func materializeChanges(changes []domain.ChangesetChange) (shared, config map[string]*string, scales map[string]int, artifactRef string, err error) {
+	shared = make(map[string]*string)
+	config = make(map[string]*string)
+	scales = make(map[string]int)
 
 	for _, c := range changes {
 		switch c.Type {
 		case domain.ChangeTypeConfig:
 			var p domain.ConfigChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, "", err
+				return nil, nil, nil, "", err
 			}
-			configUpdates[p.Key] = p.Value
+			config[p.Key] = p.Value
+		case domain.ChangeTypeSharedConfig:
+			var p domain.ConfigChangePayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return nil, nil, nil, "", err
+			}
+			shared[p.Key] = p.Value
 		case domain.ChangeTypeScale:
 			var p domain.ScaleChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, "", err
+				return nil, nil, nil, "", err
 			}
 			scales[p.Process] = p.Quantity
 		case domain.ChangeTypeImage:
 			var p domain.ImageChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, "", err
+				return nil, nil, nil, "", err
 			}
 			artifactRef = p.ArtifactRef
 		default:
-			return nil, nil, "", fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, c.Type)
+			return nil, nil, nil, "", fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, c.Type)
 		}
 	}
-	return configUpdates, scales, artifactRef, nil
+	return shared, config, scales, artifactRef, nil
 }

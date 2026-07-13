@@ -123,7 +123,8 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
-	vars, err := s.config.GetConfig(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r))
+	layer := r.URL.Query().Get("layer")
+	vars, err := s.config.GetConfig(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), layer)
 	if err != nil {
 		writeError(w, r, err)
 		return

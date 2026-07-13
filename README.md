@@ -25,7 +25,9 @@ Workspace
 ```bash
 launchpad projects create my-api
 launchpad use my-api                  # environment defaults to dev
+launchpad config set --shared LOG_LEVEL=info
 launchpad config set PORT=3000
+launchpad config get              # resolved: LOG_LEVEL + PORT
 launchpad image my-api:v1
 launchpad diff
 launchpad deploy -m "initial"
