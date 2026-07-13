@@ -323,6 +323,64 @@ func TestPromoteRejectsNeverDeployedToFrom(t *testing.T) {
 	}
 }
 
+func TestPromoteExplicitVersionAllowsSuperseded(t *testing.T) {
+	ctx, st, releaseSvc, projectSvc, workspaceID := setupPromoteFixture(t)
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "super-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{Name: "dev", TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := projectSvc.CreateEnvironment(ctx, "super-app", CreateEnvironmentInput{
+		Name: "staging", Target: TargetInput{Type: "stub"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := projectSvc.CreateEnvironment(ctx, "super-app", CreateEnvironmentInput{
+		Name: "production", Target: TargetInput{Type: "stub"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	v1, err := releaseSvc.CreateRelease(ctx, "super-app", "staging", CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "app:v1"}, Description: "v1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	markDeploySucceeded(t, ctx, st, v1.Deployment)
+
+	v2, err := releaseSvc.CreateRelease(ctx, "super-app", "staging", CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "app:v2"}, Description: "v2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Transact(ctx, func(tx *sql.Tx) error {
+		if err := st.UpdateDeploymentStatus(ctx, tx, v2.Deployment.ID, domain.DeploymentPending, domain.DeploymentDeploying, "go"); err != nil {
+			return err
+		}
+		return st.SupersedeRunningDeployments(ctx, tx, v2.Deployment.ServiceID, v2.Deployment.EnvironmentID, v2.Deployment.ID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Transact(ctx, func(tx *sql.Tx) error {
+		return st.UpdateDeploymentStatus(ctx, tx, v2.Deployment.ID, domain.DeploymentDeploying, domain.DeploymentRunning, "ok")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateReleaseStatus(ctx, nil, v2.Release.ID, domain.ReleaseStatusSucceeded); err != nil {
+		t.Fatal(err)
+	}
+
+	// Promote superseded v1 explicitly
+	promoted, err := releaseSvc.Promote(ctx, "super-app", "staging", "production", 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promoted.Release.ArtifactRef != "app:v1" {
+		t.Fatalf("want app:v1, got %s", promoted.Release.ArtifactRef)
+	}
+}
+
 func TestPromoteRejectsActiveDeployOnTarget(t *testing.T) {
 	ctx, st, releaseSvc, projectSvc, workspaceID := setupPromoteFixture(t)
 	project := &domain.Project{WorkspaceID: workspaceID, Name: "active-app"}

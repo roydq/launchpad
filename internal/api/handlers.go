@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -263,6 +264,8 @@ func (s *Server) promote(w http.ResponseWriter, r *http.Request) {
 		problem.BadRequest(w, "invalid json")
 		return
 	}
+	input.From = strings.TrimSpace(input.From)
+	input.To = strings.TrimSpace(input.To)
 	if input.From == "" {
 		problem.BadRequest(w, "from is required")
 		return

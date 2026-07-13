@@ -191,9 +191,6 @@ func (s *ReleaseService) selectPromoteSource(ctx context.Context, serviceID, fro
 		return rel, nil
 	}
 
-	if version < 1 {
-		return nil, fmt.Errorf("%w: version must be >= 1", launchpad.ErrBadRequest)
-	}
 	rel, err := s.store.GetReleaseByVersion(ctx, serviceID, version)
 	if err != nil {
 		return nil, err
