@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,7 @@ type Server struct {
 	config     *service.ConfigService
 	releases   *service.ReleaseService
 	changesets *service.ChangesetService
+	runtime    *service.RuntimeService
 	tokens     *auth.Service
 	jobs       *store.Store
 }
@@ -28,6 +30,7 @@ func NewServer(
 	config *service.ConfigService,
 	releases *service.ReleaseService,
 	changesets *service.ChangesetService,
+	runtime *service.RuntimeService,
 	tokens *auth.Service,
 	jobs *store.Store,
 ) *Server {
@@ -36,6 +39,7 @@ func NewServer(
 		config:     config,
 		releases:   releases,
 		changesets: changesets,
+		runtime:    runtime,
 		tokens:     tokens,
 		jobs:       jobs,
 	}
@@ -62,6 +66,7 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("project:write")).Patch("/projects/{project}/config", s.patchConfig)
 
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/processes", s.listProcesses)
+		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/logs", s.getLogs)
 
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/environments", s.listEnvironments)
 		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/environments", s.createEnvironment)
@@ -192,6 +197,26 @@ func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request) {
 		out = append(out, processResponse(p))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) getLogs(w http.ResponseWriter, r *http.Request) {
+	if s.runtime == nil {
+		problem.NotImplemented(w, "logs not configured")
+		return
+	}
+	process := r.URL.Query().Get("process")
+	if process == "" {
+		process = "web"
+	}
+	rc, err := s.runtime.Logs(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), process)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, rc)
 }
 
 func (s *Server) createRelease(w http.ResponseWriter, r *http.Request) {

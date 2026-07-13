@@ -444,6 +444,36 @@ func NewRoot(cfg Config) *cobra.Command {
 	})
 
 	root.AddCommand(&cobra.Command{
+		Use:   "logs [process]",
+		Short: "Show process logs for the current environment (default web)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			process := "web"
+			if len(args) == 1 {
+				process = args[0]
+			}
+			body, err := client.GetLogs(cmd.Context(), project, process)
+			if err != nil {
+				return err
+			}
+			fmt.Print(body)
+			return nil
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
+		Use:   "inspect",
+		Short: "Show project@env snapshot: pending, last deploy, processes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runInspect(cmd.Context(), client, cfg)
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
 		Use:   "releases",
 		Short: "List releases for the active project",
 		RunE: func(cmd *cobra.Command, args []string) error {

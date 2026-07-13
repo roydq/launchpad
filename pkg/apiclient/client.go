@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -204,6 +205,37 @@ func (c *Client) ListProcesses(ctx context.Context, project string) ([]Process, 
 	var processes []Process
 	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/processes", nil, &processes)
 	return processes, err
+}
+
+// GetLogs returns process logs as plain text (current client Environment header).
+func (c *Client) GetLogs(ctx context.Context, project, process string) (string, error) {
+	if process == "" {
+		process = "web"
+	}
+	path := "/v1/projects/" + project + "/logs?process=" + url.QueryEscape(process)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		return "", err
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if c.Environment != "" {
+		req.Header.Set("X-Launchpad-Environment", c.Environment)
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("GET %s: status %d: %s", path, resp.StatusCode, truncate(string(data), 200))
+	}
+	return string(data), nil
 }
 
 func (c *Client) ListReleases(ctx context.Context, project string) ([]Release, error) {
