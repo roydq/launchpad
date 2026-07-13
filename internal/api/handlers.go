@@ -75,6 +75,7 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/releases", s.createRelease)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/releases", s.listReleases)
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/rollback", s.rollback)
+		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/promote", s.promote)
 
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/changeset", s.getChangeset)
 		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/changeset/changes", s.stageChanges)
@@ -244,6 +245,33 @@ func (s *Server) rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.releases.Rollback(r.Context(), chi.URLParam(r, "project"), environmentFromRequest(r), input.Version, input.Description)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, releaseJobResponse(result))
+}
+
+func (s *Server) promote(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		From        string `json:"from"`
+		To          string `json:"to"`
+		Version     int    `json:"version"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	if input.From == "" {
+		problem.BadRequest(w, "from is required")
+		return
+	}
+	to := input.To
+	if to == "" {
+		to = environmentFromRequest(r)
+	}
+	result, err := s.releases.Promote(r.Context(), chi.URLParam(r, "project"), input.From, to, input.Version, input.Description)
 	if err != nil {
 		writeError(w, r, err)
 		return
