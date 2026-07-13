@@ -26,7 +26,7 @@ type Detail struct {
 // Write encodes a basic problem response (no code/hints).
 func Write(w http.ResponseWriter, status int, title, detail, instance string) {
 	WriteDetail(w, Detail{
-		Type:     "https://launchpad.dev/errors/" + http.StatusText(status),
+		Type:     typeURI(status),
 		Title:    title,
 		Status:   status,
 		Detail:   detail,
@@ -37,7 +37,7 @@ func Write(w http.ResponseWriter, status int, title, detail, instance string) {
 // WriteDetail encodes a full problem document.
 func WriteDetail(w http.ResponseWriter, d Detail) {
 	if d.Type == "" {
-		d.Type = "https://launchpad.dev/errors/" + http.StatusText(d.Status)
+		d.Type = typeURI(d.Status)
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(d.Status)
@@ -69,7 +69,7 @@ func NotImplemented(w http.ResponseWriter, detail string) {
 func writeWithHints(w http.ResponseWriter, status int, title, detail string) {
 	code, hints := hintsForDetail(detail)
 	WriteDetail(w, Detail{
-		Type:   "https://launchpad.dev/errors/" + http.StatusText(status),
+		Type:   typeURI(status),
 		Title:  title,
 		Status: status,
 		Detail: detail,
@@ -83,7 +83,7 @@ func WriteError(w http.ResponseWriter, err error) {
 	status, title := statusTitle(err)
 	code, hints := HintsFor(err)
 	WriteDetail(w, Detail{
-		Type:   "https://launchpad.dev/errors/" + http.StatusText(status),
+		Type:   typeURI(status),
 		Title:  title,
 		Status: status,
 		Detail: err.Error(),

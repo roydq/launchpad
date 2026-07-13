@@ -9,17 +9,35 @@ import (
 )
 
 // HintsFor returns a stable error code and recovery hints for a known failure.
-// Unknown errors return empty code and nil hints.
+// Specific phrase matches win; sentinel fallbacks use errors.Is.
 func HintsFor(err error) (code string, hints []Hint) {
 	if err == nil {
 		return "", nil
 	}
-	return hintsForDetail(err.Error())
+	// Specific phrases first (may also match generic words).
+	if code, hints := matchSpecificPhrases(err.Error()); code != "" {
+		return code, hints
+	}
+	// Sentinel fallbacks via errors.Is (stable codes).
+	switch {
+	case errors.Is(err, launchpad.ErrNotFound):
+		return "not_found", []Hint{
+			{Action: "doctor", Message: "Verify API, token, project, and environment context.", Command: "launchpad doctor"},
+			{Action: "list_projects", Message: "Confirm the project name exists.", Command: "launchpad projects list"},
+		}
+	case errors.Is(err, launchpad.ErrConflict):
+		return "conflict", []Hint{
+			{Action: "inspect", Message: "Inspect project state and retry after resolving the conflict.", Command: "launchpad inspect"},
+		}
+	case errors.Is(err, launchpad.ErrBadRequest):
+		return "bad_request", nil
+	default:
+		return "", nil
+	}
 }
 
-func hintsForDetail(detail string) (code string, hints []Hint) {
+func matchSpecificPhrases(detail string) (code string, hints []Hint) {
 	d := strings.ToLower(detail)
-
 	switch {
 	case strings.Contains(d, "changeset is pinned to environment"):
 		return "changeset_env_mismatch", []Hint{
@@ -58,9 +76,17 @@ func hintsForDetail(detail string) (code string, hints []Hint) {
 		return "config_layer_invalid", []Hint{
 			{Action: "use_layer", Message: "Use layer shared, service, or resolved.", Command: "launchpad config get --layer shared"},
 		}
+	default:
+		return "", nil
 	}
+}
 
-	// Sentinel-only fallbacks when detail is just the base error string.
+// hintsForDetail is used by legacy helpers that only have a detail string (no error).
+func hintsForDetail(detail string) (code string, hints []Hint) {
+	if code, hints := matchSpecificPhrases(detail); code != "" {
+		return code, hints
+	}
+	d := strings.ToLower(detail)
 	switch {
 	case strings.Contains(d, "not found"):
 		return "not_found", []Hint{
@@ -94,5 +120,31 @@ func statusTitle(err error) (int, string) {
 		return http.StatusForbidden, "Forbidden"
 	default:
 		return http.StatusInternalServerError, "Internal Server Error"
+	}
+}
+
+func typeURI(status int) string {
+	slug := statusSlug(status)
+	return "https://launchpad.dev/errors/" + slug
+}
+
+func statusSlug(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad-request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not-found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusInternalServerError:
+		return "internal"
+	case http.StatusNotImplemented:
+		return "not-implemented"
+	default:
+		return strings.ToLower(strings.ReplaceAll(http.StatusText(status), " ", "-"))
 	}
 }

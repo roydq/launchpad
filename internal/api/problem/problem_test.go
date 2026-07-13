@@ -95,18 +95,48 @@ func TestHintsForCatalog(t *testing.T) {
 			wantCode: "not_found",
 			wantCmd:  "launchpad doctor",
 		},
+		{
+			err:      fmt.Errorf("%w: from and to environments must differ", launchpad.ErrBadRequest),
+			wantCode: "promote_same_env",
+			wantCmd:  "launchpad promote --from staging --to production",
+		},
+		{
+			err:      fmt.Errorf("%w: no running release in staging; pass version explicitly", launchpad.ErrBadRequest),
+			wantCode: "promote_no_running",
+			wantCmd:  "launchpad promote --from <env> --release <n>",
+		},
 	}
 	for _, tc := range cases {
 		code, hints := HintsFor(tc.err)
 		if code != tc.wantCode {
 			t.Fatalf("err=%v code=%q want %q", tc.err, code, tc.wantCode)
 		}
-		if len(hints) == 0 {
-			t.Fatalf("err=%v expected hints", tc.err)
+		if tc.wantCmd != "" {
+			if len(hints) == 0 {
+				t.Fatalf("err=%v expected hints", tc.err)
+			}
+			if hints[0].Command != tc.wantCmd {
+				t.Fatalf("err=%v first command %q want %q", tc.err, hints[0].Command, tc.wantCmd)
+			}
 		}
-		if hints[0].Command != tc.wantCmd {
-			t.Fatalf("err=%v first command %q want %q", tc.err, hints[0].Command, tc.wantCmd)
-		}
+	}
+}
+
+func TestHintsForUsesErrorsIsOverSubstring(t *testing.T) {
+	// Detail mentions "not found" but sentinel is conflict — must not mis-label.
+	err := fmt.Errorf("%w: resource not found in cache but conflict on write", launchpad.ErrConflict)
+	code, _ := HintsFor(err)
+	if code != "conflict" {
+		t.Fatalf("code=%q want conflict (errors.Is wins over substring)", code)
+	}
+}
+
+func TestTypeURISlug(t *testing.T) {
+	if got := typeURI(http.StatusNotFound); got != "https://launchpad.dev/errors/not-found" {
+		t.Fatalf("got %s", got)
+	}
+	if got := typeURI(http.StatusBadRequest); got != "https://launchpad.dev/errors/bad-request" {
+		t.Fatalf("got %s", got)
 	}
 }
 
