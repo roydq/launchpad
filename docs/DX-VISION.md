@@ -104,7 +104,7 @@ Do not half-build deferred phases. Each gets a spec.
 | Idea | Notes |
 |------|-------|
 | Server-side pending/diff preview | After promote / solid core loop |
-| Problem+json recovery hints | Small win |
+| Problem+json recovery hints | **Shipped** (`code` + `hints` extension) |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
 | Recipes / templates | Later |
@@ -123,8 +123,9 @@ Do not half-build deferred phases. Each gets a spec.
 1. ~~Logs + inspect + release archaeology~~ (**Shipped** — Wave 1 DX)
 2. ~~Layered config 2b~~ (**Shipped** — Wave 2 domain)
 3. ~~Promote~~ (**Shipped** — Wave 3)
-4. **Agent surface** small wins (problem+json recovery hints, preview API) — **Active / next**
-5. **Multi-service** only after dogfood of 1–3 (hard deferred until then)
+4. ~~Problem+json recovery hints~~ (**Shipped**)
+5. **Server-side pending/diff preview** — **Active / next** (agent surface)
+6. **Multi-service** only after dogfood of 1–3 (hard deferred until then)
 
 ### Autonomous feature program
 
@@ -150,4 +151,5 @@ See program notes in session plans; update this section when cadence changes.
 | Work | Spec |
 |------|------|
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
-| Agent surface small wins | *next — problem+json hints / preview* |
+| Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
+| Server-side pending/diff preview | *next* |

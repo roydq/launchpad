@@ -58,15 +58,62 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	if err != nil {
 		return resp.StatusCode, err
 	}
-	if out != nil && len(data) > 0 {
+	if out != nil && len(data) > 0 && resp.StatusCode < 400 {
 		if err := json.Unmarshal(data, out); err != nil {
 			return resp.StatusCode, err
 		}
 	}
 	if resp.StatusCode >= 400 {
-		return resp.StatusCode, fmt.Errorf("%s %s: status %d: %s", method, path, resp.StatusCode, truncate(string(data), 200))
+		return resp.StatusCode, parseAPIError(method, path, resp.StatusCode, data)
 	}
 	return resp.StatusCode, nil
+}
+
+// RecoveryHint is a server-provided recovery suggestion from problem+json.
+type RecoveryHint struct {
+	Action  string `json:"action"`
+	Message string `json:"message"`
+	Command string `json:"command,omitempty"`
+}
+
+// APIError is a structured problem+json failure from the control plane.
+type APIError struct {
+	Method  string
+	Path    string
+	Status  int
+	Type    string          `json:"type"`
+	Title   string          `json:"title"`
+	Detail  string          `json:"detail"`
+	Code    string          `json:"code"`
+	Hints   []RecoveryHint  `json:"hints"`
+	RawBody string
+}
+
+func (e *APIError) Error() string {
+	if e == nil {
+		return "api error"
+	}
+	msg := fmt.Sprintf("%s %s: status %d", e.Method, e.Path, e.Status)
+	if e.Detail != "" {
+		msg += ": " + e.Detail
+	} else if e.RawBody != "" {
+		msg += ": " + truncate(e.RawBody, 200)
+	}
+	if e.Code != "" {
+		msg += " [" + e.Code + "]"
+	}
+	if len(e.Hints) > 0 && e.Hints[0].Command != "" {
+		msg += " (try: " + e.Hints[0].Command + ")"
+	}
+	return msg
+}
+
+func parseAPIError(method, path string, status int, data []byte) error {
+	ae := &APIError{Method: method, Path: path, Status: status, RawBody: string(data)}
+	if len(data) > 0 {
+		_ = json.Unmarshal(data, ae)
+	}
+	return ae
 }
 
 func truncate(s string, n int) string {
