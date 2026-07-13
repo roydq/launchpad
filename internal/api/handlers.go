@@ -391,14 +391,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, launchpad.ErrNotFound):
-		problem.NotFound(w, err.Error())
-	case errors.Is(err, launchpad.ErrConflict):
-		problem.Conflict(w, err.Error())
-	case errors.Is(err, launchpad.ErrBadRequest):
-		problem.BadRequest(w, err.Error())
-	case errors.Is(err, launchpad.ErrNotImplemented):
-		problem.NotImplemented(w, err.Error())
+	case errors.Is(err, launchpad.ErrNotFound),
+		errors.Is(err, launchpad.ErrConflict),
+		errors.Is(err, launchpad.ErrBadRequest),
+		errors.Is(err, launchpad.ErrNotImplemented),
+		errors.Is(err, launchpad.ErrUnauthorized),
+		errors.Is(err, launchpad.ErrForbidden):
+		problem.WriteError(w, err)
 	default:
 		problem.Internal(w, "internal server error")
 	}
