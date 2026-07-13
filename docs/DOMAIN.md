@@ -23,7 +23,7 @@ Launchpad aims to be the **mise of runtime application management**: zero ceremo
 |---------------|--------------------------|
 | Design principles, entities, **Key Invariants** | **Yes** — product truth |
 | **MVP + 2a/2b** and shipped API/CLI tables | **Yes** — what runs on `main` |
-| Multi-service, bindings, promotion, full Target surface | **Planned** — do not half-implement (2a multi-env + 2b layered config **shipped**) |
+| Multi-service, bindings, full Target surface | **Planned** — do not half-implement (2a multi-env, 2b layered config, primary-service promote **shipped**) |
 | Phased implementation table | Roadmap; see “Known invariant debt” until closed |
 
 ---

@@ -103,7 +103,7 @@ Do not half-build deferred phases. Each gets a spec.
 
 | Idea | Notes |
 |------|-------|
-| Server-side pending/diff preview | After promote / solid core loop |
+| Server-side pending/diff preview | **Next** (after recovery hints) |
 | Problem+json recovery hints | **Shipped** (`code` + `hints` extension) |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
