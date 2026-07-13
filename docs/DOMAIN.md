@@ -487,14 +487,25 @@ On failure, deployment → `failed`; the previous running deployment remains liv
 Promote a succeeded release from one environment to another. The artifact and process topology stay identical; **all config layers are re-resolved** in the target environment. Do **not** copy `config_resolved` from the source release.
 
 ```bash
-launchpad promote --service api --from staging --to production --release 12
+launchpad env use production
+launchpad promote --from staging --wait
+# or fully explicit:
+launchpad promote --from staging --to production --release 12 -m "ship"
 ```
+
+**Selection rules:**
+
+1. Source release must be `succeeded`.
+2. Source must have a deployment in `from` with status `running` or `superseded`.
+3. `from` and `to` must differ.
+4. Omit `--release` / `version` → use the release of the latest `running` deployment in `from`.
+5. Ambient `X-Launchpad-Environment` (or CLI sticky env) defaults **`to`** when body/flag omits it.
 
 **Promotion flow:**
 
 1. Read source release (`artifact_ref`, `process_snapshot` only for portable desired topology).
-2. Re-resolve config against target environment's layers + bindings.
-3. Create new release (new monotonic version for that service) with re-resolved config.
+2. Re-resolve config against target environment's layers (+ bindings when they exist).
+3. Create **new** release (new monotonic version for that service) with re-resolved config.
 4. Enqueue deployment to target environment.
 
 ---
@@ -561,6 +572,7 @@ GET    /v1/projects/{project}/processes
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
 POST   /v1/projects/{project}/rollback
+POST   /v1/projects/{project}/promote
 GET    /v1/projects/{project}/logs
 GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
@@ -581,7 +593,6 @@ GET    /healthz
 
 ```
 /v1/workspaces/{workspace}/projects/{project}/...
-/v1/projects/{project}/promote                 # phase 5 — next
 ```
 
 ---
@@ -612,6 +623,7 @@ GET    /healthz
 | `launchpad diff --from N --to M` | Release↔release archaeology |
 | `launchpad rollback N` | New release from prior version; config re-resolved |
 | `launchpad config … --layer shared\|service` | Layered config (2b); workspace layer deferred |
+| `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |
 
 ### Planned (deltas from shipped)
 
@@ -620,7 +632,6 @@ GET    /healthz
 | `launchpad services list` | Multi-service projects |
 | `launchpad config set --workspace` | Workspace config layer |
 | `launchpad deploy --mode` / multi-service staging | Multi-service + coordination |
-| `launchpad promote` | Cross-env promote (phase 5) |
 
 ### Bootstrap defaults
 
@@ -661,7 +672,7 @@ On `POST /v1/projects`:
 | **2b — Layered config** | **Shipped** | Shared + service layers; resolve at release | Shared settings per env |
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
 | **4** | Planned | Bindings and ref resolution | Service linking |
-| **5** | **Next** | Promotion API + CLI | staging → production flow |
+| **5** | **Shipped** (primary-service promote) | Promotion API + CLI | staging → production flow |
 | **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
 
 Each phase updates API, store, worker, CLI, and target interface together.

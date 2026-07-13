@@ -305,6 +305,28 @@ func (c *Client) Rollback(ctx context.Context, project string, version int, desc
 	return &result, nil
 }
 
+// Promote creates a new release in the target environment from a source release.
+// to empty uses the client's Environment header (or API default) as target.
+// version 0 means use the running release in from.
+func (c *Client) Promote(ctx context.Context, project, from, to string, version int, description string) (*DeployResult, error) {
+	body := map[string]any{
+		"from":        from,
+		"description": description,
+	}
+	if to != "" {
+		body["to"] = to
+	}
+	if version > 0 {
+		body["version"] = version
+	}
+	var result DeployResult
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/promote", body, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (c *Client) GetChangeset(ctx context.Context, project string) (*Changeset, error) {
 	var result Changeset
 	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/changeset", nil, &result)

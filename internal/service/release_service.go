@@ -108,6 +108,136 @@ func (s *ReleaseService) Rollback(ctx context.Context, projectName, envName stri
 	})
 }
 
+// Promote copies artifact + process_snapshot from a succeeded release applied in
+// fromEnv, re-resolves config layers in toEnv, creates a new release, and deploys
+// to toEnv. Source config_resolved is never copied.
+//
+// version 0 means use the release of the latest running deployment in fromEnv.
+// toEnv empty defaults to DefaultEnvironment via resolvePrimaryService.
+func (s *ReleaseService) Promote(ctx context.Context, projectName, fromEnv, toEnv string, version int, description string) (*CreateReleaseResult, error) {
+	fromEnv = normalizeEnvName(fromEnv)
+	toEnv = normalizeEnvName(toEnv)
+	if fromEnv == toEnv {
+		return nil, fmt.Errorf("%w: from and to environments must differ", launchpad.ErrBadRequest)
+	}
+	if version < 0 {
+		return nil, fmt.Errorf("%w: version must be >= 0", launchpad.ErrBadRequest)
+	}
+
+	project, svc, targetEnv, err := s.projectService.resolvePrimaryService(ctx, projectName, toEnv)
+	if err != nil {
+		return nil, err
+	}
+	sourceEnv, err := s.store.GetEnvironmentByProjectAndName(ctx, project.ID, fromEnv)
+	if err != nil {
+		return nil, err
+	}
+
+	source, err := s.selectPromoteSource(ctx, svc.ID, sourceEnv.ID, fromEnv, version)
+	if err != nil {
+		return nil, err
+	}
+
+	// Target-env layers only — never source.ConfigResolved.
+	config, err := s.store.ResolveConfig(ctx, project.ID, svc.ID, targetEnv.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("Promote v%d from %s to %s", source.Version, fromEnv, toEnv)
+	}
+	snap := source.ProcessSnapshot
+	if snap == nil {
+		snap = map[string]domain.ProcessSnapshot{}
+	}
+
+	return s.enqueueRelease(ctx, project, svc, targetEnv, releasePlan{
+		ArtifactRef:     source.ArtifactRef,
+		Config:          config,
+		ProcessSnapshot: snap,
+		Description:     desc,
+	})
+}
+
+func (s *ReleaseService) selectPromoteSource(ctx context.Context, serviceID, fromEnvID uuid.UUID, fromEnvName string, version int) (*domain.Release, error) {
+	if version == 0 {
+		dep, err := s.store.GetLatestDeploymentForServiceEnv(ctx, serviceID, fromEnvID)
+		if err != nil {
+			if errors.Is(err, launchpad.ErrNotFound) {
+				return nil, fmt.Errorf("%w: no running release in %s; pass version explicitly", launchpad.ErrBadRequest, fromEnvName)
+			}
+			return nil, err
+		}
+		if dep.Status != domain.DeploymentRunning {
+			// Prefer a running deployment; scan list if latest is not running.
+			running, err := s.findRunningDeployment(ctx, serviceID, fromEnvID)
+			if err != nil {
+				return nil, err
+			}
+			if running == nil {
+				return nil, fmt.Errorf("%w: no running release in %s; pass version explicitly", launchpad.ErrBadRequest, fromEnvName)
+			}
+			dep = running
+		}
+		rel, err := s.store.GetReleaseByID(ctx, dep.ReleaseID)
+		if err != nil {
+			return nil, err
+		}
+		if rel.Status != domain.ReleaseStatusSucceeded {
+			return nil, fmt.Errorf("%w: release v%d is not succeeded", launchpad.ErrBadRequest, rel.Version)
+		}
+		return rel, nil
+	}
+
+	rel, err := s.store.GetReleaseByVersion(ctx, serviceID, version)
+	if err != nil {
+		return nil, err
+	}
+	if rel.Status != domain.ReleaseStatusSucceeded {
+		return nil, fmt.Errorf("%w: release v%d is not succeeded", launchpad.ErrBadRequest, version)
+	}
+	ok, err := s.releaseSuccessfullyDeployedTo(ctx, serviceID, fromEnvID, rel.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("%w: release v%d was never successfully deployed to %s", launchpad.ErrBadRequest, version, fromEnvName)
+	}
+	return rel, nil
+}
+
+func (s *ReleaseService) findRunningDeployment(ctx context.Context, serviceID, envID uuid.UUID) (*domain.Deployment, error) {
+	deps, err := s.store.ListDeploymentsForService(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range deps {
+		d := &deps[i]
+		if d.EnvironmentID == envID && d.Status == domain.DeploymentRunning {
+			return d, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *ReleaseService) releaseSuccessfullyDeployedTo(ctx context.Context, serviceID, envID, releaseID uuid.UUID) (bool, error) {
+	deps, err := s.store.ListDeploymentsForService(ctx, serviceID)
+	if err != nil {
+		return false, err
+	}
+	for _, d := range deps {
+		if d.EnvironmentID != envID || d.ReleaseID != releaseID {
+			continue
+		}
+		if d.Status == domain.DeploymentRunning || d.Status == domain.DeploymentSuperseded {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ReleaseDeploymentRef is a deployment of a release into an environment.
 type ReleaseDeploymentRef struct {
 	Environment string

@@ -298,7 +298,7 @@ Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API
 | **2b — Layered config** | **Shipped** | Shared + service layers; resolve at release |
 | **3 — Multi-service** | Planned | Multiple services, ReleaseSet, coordination modes |
 | **4 — Bindings** | Planned | `${{ ref }}` config linking between services |
-| **5 — Promotion** | **Next** | `promote` across environments |
+| **5 — Promotion** | **Shipped** (primary service) | `promote` across environments |
 | **6 — Integrations** | Planned | `launchpad.yaml` import/export, agent/MCP hooks |
 
 Each phase updates domain → store → service → worker → api → cli → target together. Canonical phase narrative: [`DOMAIN.md`](DOMAIN.md).
