@@ -102,6 +102,35 @@ func TestFormatDiffFirstRelease(t *testing.T) {
 	}
 }
 
+func TestReleaseToFoldedAndDiff(t *testing.T) {
+	from := &apiclient.Release{
+		Version:        1,
+		ArtifactRef:    "app:v1",
+		ConfigResolved: map[string]string{"PORT": "3000"},
+		ProcessSnapshot: map[string]apiclient.ProcessSnapshot{
+			"web": {Quantity: 1},
+		},
+	}
+	to := &apiclient.Release{
+		Version:        2,
+		ArtifactRef:    "app:v2",
+		ConfigResolved: map[string]string{"PORT": "8080"},
+		ProcessSnapshot: map[string]apiclient.ProcessSnapshot{
+			"web": {Quantity: 2},
+		},
+	}
+	out := formatDiff(releaseToFolded(to), from)
+	if !strings.Contains(out, "## Image") || !strings.Contains(out, "app:v2") {
+		t.Fatalf("image: %s", out)
+	}
+	if !strings.Contains(out, "PORT") {
+		t.Fatalf("config: %s", out)
+	}
+	if !strings.Contains(out, "## Scale") {
+		t.Fatalf("scale: %s", out)
+	}
+}
+
 func TestFormatDiffNoopVsBaseline(t *testing.T) {
 	port := "3000"
 	pending := FoldedPending{
