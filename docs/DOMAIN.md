@@ -642,7 +642,7 @@ On `POST /v1/projects`:
 |-------|--------|----------------|-------------|
 | **1 — MVP core** | **Shipped** (hierarchy, API, CLI, deploy loop) | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
 | **1b — Release invariants** | **Shipped** | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
-| **2a — Multi-env** | **Shipped** (this branch / PR) | Ambient env header; env CRUD; changeset env pin; CLI `env *` | `staging`/`prod` without app rename |
+| **2a — Multi-env** | **Shipped** | Ambient env header; env CRUD; changeset env pin; CLI `env *` | `staging`/`prod` without app rename |
 | **2b** | Planned | Layered config (workspace, shared, service) | Shared settings across envs |
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
 | **4** | Planned | Bindings and ref resolution | Service linking |

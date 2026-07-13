@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Living document |
-| **Date** | 2026-07-11 |
+| **Date** | 2026-07-13 |
 | **Related** | `docs/DOMAIN.md` (product model), `docs/FEATURE-DEVELOPMENT.md` |
 
 North star: **the mise of runtime application management** — zero ceremony for a solo engineer, composable depth for large systems. Crush DX so the control plane feels inevitable and invisible.
@@ -30,78 +30,80 @@ North star: **the mise of runtime application management** — zero ceremony for
 |------|-------|
 | Project / env / service / process model | Correct hierarchy vs app-per-env |
 | Implicit staging CLI | Stage by default; `diff` / `status` / `reset` / `deploy` |
+| Multi-env (phase 2a) | Ambient `X-Launchpad-Environment`; `env create/list/use`; changeset pin |
 | Release snapshot as deploy truth | Worker applies release only |
 | Atomic changeset push | Materialize + job in one TX |
 | Stub + Kubernetes targets | Pluggable runtime |
 | Tiered e2e (stub + kind) | CI confidence |
+| `deploy --wait` / `--timeout` | Poll job until terminal |
+| Project-local `.launchpad/config` | Walk-up context; `launchpad context` |
+| Rollback | New release from prior version; config re-resolved per env |
+| `launchpad doctor` | Healthz, token, project/env checks |
 
 ---
 
 ## Domain roadmap (from DOMAIN.md)
 
-| Phase | Focus | DX unlock |
-|-------|-------|-----------|
-| **2a** | **Multi-env (next)** | `env create/use`; config + deploy per env |
-| **2b** | Layered config | workspace / shared / service layers |
-| **3** | Multi-service + ReleaseSet | Coordinated multi-service deploys |
-| **4** | Bindings | `${{ refs }}` service linking |
-| **5** | Promote | staging → production as a product moment |
-| **6** | `launchpad.yaml` | CI / agent import-export |
+| Phase | Focus | Status |
+|-------|-------|--------|
+| **2a** | Multi-env | **Shipped** |
+| **2b** | Layered config | Planned (next domain wave) |
+| **3** | Multi-service + ReleaseSet | Planned |
+| **4** | Bindings | Planned |
+| **5** | Promote | Planned (after 2b preferred) |
+| **6** | `launchpad.yaml` | Planned |
 
 Do not half-build deferred phases. Each gets a spec.
 
 ---
 
-## DX backlog (beyond / beside the phase table)
+## DX backlog
 
-Priorities are **guidance**, not tickets. Promote items into specs when starting work.
+### P0 — Feedback loop
 
-### P0 — Feedback loop (high leverage)
-
-| Idea | Why |
-|------|-----|
-| `deploy --wait` / `--follow` | **Shipped (wait)** on `feat/dx-stack` |
-| Job/deployment progress in CLI | Covered by `--wait` status lines |
-| Process `logs` (target-backed) | Debug without leaving Launchpad |
+| Idea | Status |
+|------|--------|
+| `deploy --wait` | **Shipped** |
+| Process `logs` (target-backed) | **Next** |
+| Job progress lines | Covered by `--wait` |
 
 ### P1 — Context and gravity
 
-| Idea | Why |
-|------|-----|
-| Multi-env context stack (`env use`, ambient env) | **Next feature (2a)** |
-| Project-local config (`.launchpad/` or `launchpad.toml`) | **Shipped** (JSON walk-up) on `feat/dx-stack` |
-| Shell prompt / status line awareness | Always know `project@env` |
-| `launchpad doctor` | **Shipped** on `feat/dx-stack` |
-| `launchpad inspect` | One page: context, pending, running release, target |
+| Idea | Status |
+|------|--------|
+| Multi-env context stack | **Shipped** |
+| Project-local config | **Shipped** |
+| `launchpad doctor` | **Shipped** |
+| `launchpad inspect` | Planned (Wave 1) |
+| Shell prompt awareness | Later |
 
 ### P2 — Trust and archaeology
 
-| Idea | Why |
-|------|-----|
-| Diff release↔release | Snapshot model already supports this |
-| Diff env↔env (running / last release) | Multi-env payoff |
-| `releases show N` full snapshot | “What’s in v12?” |
-| Rollback as first-class CLI | **Shipped** on `feat/dx-stack` |
-| Unstage last mutation | Undo culture beyond full `reset` |
-| Confirmations for sensitive envs | Safe defaults without killing solo flow |
+| Idea | Status |
+|------|--------|
+| Rollback CLI | **Shipped** |
+| `releases show N` | Planned (Wave 1) |
+| Diff release↔release / env↔env | Planned (Wave 1) |
+| Unstage last mutation | Later |
+| Sensitive-env confirmations | Later |
 
 ### P3 — Local parity and previews
 
-| Idea | Why |
-|------|-----|
-| `launchpad run` / env pull for local process | Local ↔ remote config parity |
-| Ephemeral / PR environments | Category-defining; DOMAIN already has `ephemeral` |
-| Env bootstrap copy (clone config shape) | **Blocked on secrets:** do not clone config until secrets are stored/typed differently from plain config values |
+| Idea | Notes |
+|------|-------|
+| `launchpad run` / env pull | Later |
+| Ephemeral / PR environments | Later |
+| Env clone | **Blocked** until secrets ≠ plain config |
 
-### P4 — Agent and integration surface
+### P4 — Agent surface
 
-| Idea | Why |
-|------|-----|
-| Launchpad MCP server | Agents drive create/stage/deploy without curl |
-| Server-side pending/diff preview API | Reuse beyond CLI |
-| Idempotency keys | Safe agent retries |
-| Problem+json with recovery hints | Actionable errors for humans and agents |
-| Recipes / templates (`--recipe web`) | Zero blank-page syndrome |
+| Idea | Notes |
+|------|-------|
+| Server-side pending/diff preview | After archaeology |
+| Problem+json recovery hints | Small win |
+| MCP server | After core DX loop solid |
+| Idempotency keys | Later |
+| Recipes / templates | Later |
 
 ### Explicit non-goals (for now)
 
@@ -112,15 +114,24 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 ---
 
-## Suggested sequencing (DX-obsessed)
+## Suggested sequencing (current)
 
-1. **Multi-env 2a** — **shipped** ([spec](superpowers/specs/2026-07-11-multi-env-design.md))
-2. **Deploy wait** — **in progress** on `feat/dx-stack` ([spec](superpowers/specs/2026-07-11-deploy-wait-design.md)); logs next
-3. **Layered config 2b *or* rollback** — pick by dogfood pain
-4. **MCP + project-local context** — agent + repo gravity
-5. **Promote, bindings, multi-service, yaml** — composition once env model is solid
+1. **Logs + inspect + release archaeology** (Wave 1 DX)
+2. **Layered config 2b** (Wave 2 domain)
+3. **Promote** (Wave 3)
+4. **Agent surface** (preview API / MCP)
+5. **Multi-service** only after dogfood of 1–3
 
-**Integration branch:** `feat/dx-stack` — feature PRs merge here first, then stack → `main`.
+### Autonomous feature program
+
+Agents may ship recommended options without per-feature design debates when authorized. Rules:
+
+- Spec + plan still required for medium+ features; self-approve after checklist
+- Mandatory review + `make test` / `build` / `vet` before PR
+- Open PR to `main` (do not force-merge) for human dogfood
+- Hard stop: new deferred-boundary ambiguity, secrets/auth model, 3× verification failure
+
+See program notes in session plans; update this section when cadence changes.
 
 ---
 
@@ -128,10 +139,10 @@ Priorities are **guidance**, not tickets. Promote items into specs when starting
 
 - When brainstorming a feature, check this list for related DX wins to fold in or explicitly defer.
 - When a backlog item starts, write `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` and link it here.
-- Update **Shipped** when PRs merge; move ideas out of the backlog.
+- Update **Shipped** when PRs merge.
 
 ### Active / next
 
 | Work | Spec |
 |------|------|
-| Multi-environment (phase 2a) | `docs/superpowers/specs/2026-07-11-multi-env-design.md` |
+| Process logs | *pending Wave 1* |
