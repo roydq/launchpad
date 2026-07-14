@@ -214,7 +214,7 @@ Agents may ship recommended options without per-feature design debates when auth
 
 | Work | Spec |
 |------|------|
-| Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` |
-| Server-side pending/diff preview | *queued after dogfood* |
+| Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
+| Server-side pending/diff preview | *next* |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
 | Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
