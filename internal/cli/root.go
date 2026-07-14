@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -387,6 +388,9 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := confirmSensitiveEnv(effectiveEnv(cfg), yesFlag(cmd)); err != nil {
+				return err
+			}
 			var changes []map[string]any
 			if len(args) > 0 {
 				kv, err := parseKEYVALArgs(args)
@@ -432,6 +436,7 @@ func NewRoot(cfg Config) *cobra.Command {
 	deployCmd.Flags().String("scale", "", "stage scale change then deploy, e.g. web=3")
 	deployCmd.Flags().StringP("message", "m", "", "release description")
 	addWaitFlags(deployCmd)
+	addYesFlag(deployCmd)
 	root.AddCommand(deployCmd)
 
 	root.AddCommand(&cobra.Command{
@@ -550,6 +555,9 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := confirmSensitiveEnv(effectiveEnv(cfg), yesFlag(cmd)); err != nil {
+				return err
+			}
 			var version int
 			if _, err := fmt.Sscanf(args[0], "%d", &version); err != nil || version < 1 {
 				return fmt.Errorf("version must be a positive integer")
@@ -565,6 +573,7 @@ func NewRoot(cfg Config) *cobra.Command {
 	}
 	rollbackCmd.Flags().StringP("message", "m", "", "release description")
 	addWaitFlags(rollbackCmd)
+	addYesFlag(rollbackCmd)
 	root.AddCommand(rollbackCmd)
 
 	promoteCmd := &cobra.Command{
@@ -583,6 +592,9 @@ func NewRoot(cfg Config) *cobra.Command {
 			if to == "" {
 				to = effectiveEnv(cfg)
 			}
+			if err := confirmSensitiveEnv(to, yesFlag(cmd)); err != nil {
+				return err
+			}
 			version, _ := cmd.Flags().GetInt("release")
 			message, _ := cmd.Flags().GetString("message")
 			result, err := client.Promote(cmd.Context(), project, from, to, version, message)
@@ -599,6 +611,7 @@ func NewRoot(cfg Config) *cobra.Command {
 	promoteCmd.Flags().StringP("message", "m", "", "release description")
 	_ = promoteCmd.MarkFlagRequired("from")
 	addWaitFlags(promoteCmd)
+	addYesFlag(promoteCmd)
 	root.AddCommand(promoteCmd)
 
 	root.AddCommand(&cobra.Command{
@@ -736,7 +749,66 @@ func envOr(key, fallback string) string {
 
 func MustRun(cfg Config) {
 	if err := NewRoot(cfg).Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprint(os.Stderr, formatCLIError(err))
 		os.Exit(1)
 	}
+}
+
+// formatCLIError renders API problem+json recovery hints for humans and agents.
+func formatCLIError(err error) string {
+	var ae *apiclient.APIError
+	if errors.As(err, &ae) && ae != nil {
+		var b strings.Builder
+		b.WriteString("error: ")
+		b.WriteString(ae.Error())
+		b.WriteByte('\n')
+		if len(ae.Hints) > 0 {
+			b.WriteString("recovery:\n")
+			for _, h := range ae.Hints {
+				b.WriteString("  - ")
+				if h.Message != "" {
+					b.WriteString(h.Message)
+				} else {
+					b.WriteString(h.Action)
+				}
+				if h.Command != "" {
+					b.WriteString("\n    try: ")
+					b.WriteString(h.Command)
+				}
+				b.WriteByte('\n')
+			}
+		}
+		return b.String()
+	}
+	return fmt.Sprintf("error: %v\n", err)
+}
+
+// sensitiveEnvironments require explicit --yes for mutating CLI deploy paths.
+var sensitiveEnvironments = map[string]struct{}{
+	"production": {},
+	"prod":       {},
+}
+
+func isSensitiveEnv(name string) bool {
+	_, ok := sensitiveEnvironments[strings.ToLower(strings.TrimSpace(name))]
+	return ok
+}
+
+func addYesFlag(cmd *cobra.Command) {
+	cmd.Flags().Bool("yes", false, "confirm mutations to sensitive environments (production)")
+}
+
+func yesFlag(cmd *cobra.Command) bool {
+	yes, _ := cmd.Flags().GetBool("yes")
+	return yes
+}
+
+func confirmSensitiveEnv(env string, yes bool) error {
+	if !isSensitiveEnv(env) {
+		return nil
+	}
+	if yes {
+		return nil
+	}
+	return fmt.Errorf("refusing to modify sensitive environment %q without --yes (set LAUNCHPAD_ENV or --to to a non-production env, or pass --yes)", env)
 }
