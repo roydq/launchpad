@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Living document |
-| **Date** | 2026-07-13 |
-| **Related** | `docs/DOMAIN.md` (product model), `docs/FEATURE-DEVELOPMENT.md` |
+| **Date** | 2026-07-14 |
+| **Related** | `docs/DOMAIN.md`, `docs/FEATURE-DEVELOPMENT.md`, `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` |
 
 North star: **the mise of runtime application management** — zero ceremony for a solo engineer, composable depth for large systems. Crush DX so the control plane feels inevitable and invisible.
 
@@ -20,7 +20,7 @@ North star: **the mise of runtime application management** — zero ceremony for
 4. **Safe by default, fast when solo** — prod can be careful later; dev never feels heavy.
 5. **Agent-native** — humans and coding agents are equal-class users of the API/CLI.
 6. **Progressive disclosure** — day-one path stays short; power appears when needed.
-7. **Anti-features** — no early GitOps reconciliation wars, Helm surface, multi-service theater, or OpenAPI-as-product.
+7. **Anti-features** — no early GitOps reconciliation wars, Helm surface, multi-service theater, or OpenAPI-as-product before dogfood.
 
 ---
 
@@ -38,11 +38,13 @@ North star: **the mise of runtime application management** — zero ceremony for
 | `deploy --wait` / `--timeout` | Poll job until terminal |
 | Project-local `.launchpad/config` | Walk-up context; `launchpad context` |
 | Rollback | New release from prior version; config re-resolved per env |
+| Promote (Wave 3) | Artifact + process topology; **re-resolve** target config |
 | `launchpad doctor` | Healthz, token, project/env checks |
 | Process `logs` (target-backed) | API `GET …/logs`, CLI `launchpad logs` |
 | `launchpad inspect` | Project@env snapshot: pending, last deploy, processes |
 | Release archaeology | `releases show N`, release↔release `diff` |
 | Layered config (phase 2b) | Shared + service layers; resolve at release; `?layer=` |
+| Problem+json recovery hints | `code` + `hints[]` on API errors; structured apiclient errors |
 
 ---
 
@@ -54,14 +56,70 @@ North star: **the mise of runtime application management** — zero ceremony for
 | **2b** | Layered config | **Shipped** |
 | **3** | Multi-service + ReleaseSet | Planned (deferred — do not half-build) |
 | **4** | Bindings | Planned (deferred — do not half-build) |
-| **5** | Promote | **Shipped** (primary service; re-resolve target config) |
+| **5** | Promote | **Shipped** (primary service) |
 | **6** | `launchpad.yaml` | Planned |
 
 Do not half-build deferred phases. Each gets a spec.
 
 ---
 
-## DX backlog
+## Program tracks (world-class OSS → hosted)
+
+Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and SaaS build on a stable API.
+
+### Track A — Core DX loop (product)
+
+| Item | Status |
+|------|--------|
+| Promote + layered config dogfood | **Shipped** (main) |
+| Problem+json recovery hints | **Shipped** |
+| CLI prints recovery hints | **In progress** (prod-readiness) |
+| Sensitive-env confirmations (`production` + `--yes`) | **In progress** (prod-readiness) |
+| Server-side pending/diff preview | **Next** after dogfood slice |
+| Recipes / `launchpad new` templates | Later |
+| MCP server | After core loop solid |
+
+### Track B — Confidence (engineering)
+
+| Item | Status |
+|------|--------|
+| Unit + service invariants | **Shipped** |
+| e2e-stub happy path (CI) | **Shipped** |
+| e2e multi-env + promote + config re-resolution | **In progress** (prod-readiness) |
+| Failure-path e2e (409, pin mismatch) | Later |
+| OpenAPI + CI contract drift | Later |
+| Postgres matrix in CI | Later |
+| Target conformance suite (stub/k8s/…) | Later |
+| Worker lease/supersede stress tests | Later |
+
+### Track C — Surfaces (CLI → TUI → web → docs)
+
+| Item | Status |
+|------|--------|
+| CLI verbs + wait + context | **Shipped** |
+| Completions / man pages | Later |
+| TUI (inspect / deploy / releases) | Later — same apiclient |
+| Docs site (get-started + mental model) | Later |
+| `examples/` + 60s path CI | Later |
+| Web dashboard MVP | Later — OpenAPI + auth first |
+
+### Track D — Platform readiness (slow burn → hosted)
+
+| Item | Status |
+|------|--------|
+| Workspace-scoped tokens | **Shipped** |
+| Secrets-typed config | Design before env clone / multi-tenant |
+| Idempotency keys | Later |
+| Deployment events / SSE | Later |
+| HA workers / packaging | Later |
+| OIDC / richer RBAC | Hosted path |
+| **Hosted control plane** | Future: same binary; BYO data plane |
+
+**Hosted thesis:** we run the control plane; customers point environments at their clusters (or free-tier stub). Do not build multi-region billing or dual domain models early.
+
+---
+
+## DX backlog (detail)
 
 ### P0 — Feedback loop
 
@@ -86,15 +144,18 @@ Do not half-build deferred phases. Each gets a spec.
 | Idea | Status |
 |------|--------|
 | Rollback CLI | **Shipped** |
+| Promote CLI | **Shipped** |
 | `releases show N` | **Shipped** |
-| Diff release↔release / env↔env | **Shipped** (release↔release); env↔env later |
+| Diff release↔release | **Shipped** |
+| Diff env↔env | Later |
 | Unstage last mutation | Later |
-| Sensitive-env confirmations | Later |
+| Sensitive-env confirmations | **In progress** |
 
 ### P3 — Local parity and previews
 
 | Idea | Notes |
 |------|-------|
+| Server-side pending/diff preview | **Next** product slice after prod-readiness dogfood PR |
 | `launchpad run` / env pull | Later |
 | Ephemeral / PR environments | Later |
 | Env clone | **Blocked** until secrets ≠ plain config |
@@ -103,8 +164,8 @@ Do not half-build deferred phases. Each gets a spec.
 
 | Idea | Notes |
 |------|-------|
-| Server-side pending/diff preview | **Next** (after recovery hints) |
-| Problem+json recovery hints | **Shipped** (`code` + `hints` extension) |
+| Problem+json recovery hints | **Shipped** |
+| CLI surfaces hints | **In progress** |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
 | Recipes / templates | Later |
@@ -115,34 +176,34 @@ Do not half-build deferred phases. Each gets a spec.
 - Helm as primary UX
 - Full build system
 - Multi-cloud target sprawl before multi-env DX is excellent
+- Multi-service theater before single-service dogfood is boring
 
 ---
 
 ## Suggested sequencing (current)
 
-1. ~~Logs + inspect + release archaeology~~ (**Shipped** — Wave 1 DX)
-2. ~~Layered config 2b~~ (**Shipped** — Wave 2 domain)
-3. ~~Promote~~ (**Shipped** — Wave 3)
-4. ~~Problem+json recovery hints~~ (**Shipped**)
-5. **Server-side pending/diff preview** — **Active / next** (agent surface)
-6. **Multi-service** only after dogfood of 1–3 (hard deferred until then)
+1. ~~Wave 1 DX + 2b config + Promote + recovery hints~~ (**Shipped** on `main`)
+2. **Prod-readiness dogfood** — e2e promote multi-env, CLI hints + production `--yes` (**Active**)
+3. **Server-side pending/diff preview**
+4. OpenAPI contract + failure e2e + examples/60s path
+5. Secrets design (unlocks clone / safer SaaS story)
+6. Surfaces (docs site → TUI → dashboard) only with stable API
+7. **Multi-service** only after dogfood of 1–4
 
 ### Autonomous feature program
 
 Agents may ship recommended options without per-feature design debates when authorized. Rules:
 
 - Spec + plan still required for medium+ features; self-approve after checklist
-- Mandatory review + `make test` / `build` / `vet` before PR
-- Open PR to integration/spike branch when running a spike program; otherwise PR to `main` for human dogfood
+- Mandatory review + `make test` / `build` / `vet` before PR; deploy-path → e2e-stub
+- Open PR to `main` for human dogfood (spike programs may use an integration branch)
 - Hard stop: new deferred-boundary ambiguity, secrets/auth model, 3× verification failure
-
-See program notes in session plans; update this section when cadence changes.
 
 ---
 
 ## How to use this doc
 
-- When brainstorming a feature, check this list for related DX wins to fold in or explicitly defer.
+- When brainstorming a feature, check tracks A–D and fold into or defer explicitly.
 - When a backlog item starts, write `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` and link it here.
 - Update **Shipped** when PRs merge.
 
@@ -150,6 +211,7 @@ See program notes in session plans; update this section when cadence changes.
 
 | Work | Spec |
 |------|------|
+| Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` |
+| Server-side pending/diff preview | *queued after dogfood* |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
 | Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
-| Server-side pending/diff preview | *next* |
