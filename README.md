@@ -95,16 +95,19 @@ Rollback (new release from prior version; config re-resolved for current env):
 launchpad rollback 1 --wait
 ```
 
-Promote a succeeded release across environments (artifact + process topology; config re-resolved in target):
+Promote a succeeded release across environments (artifact + process topology; config re-resolved in target).
+Mutating **production** / **prod** requires `--yes`:
 
 ```bash
 launchpad env create staging --target stub
+launchpad env create production --target stub
 launchpad env use staging
 launchpad deploy --image my-api:v1 --wait
-launchpad env use production   # create production first if needed
-launchpad promote --from staging --wait
-# or: launchpad promote --from staging --to production --release 1 -m "ship" --wait
+launchpad promote --from staging --to production --wait --yes
+# or: launchpad promote --from staging --to production --release 1 -m "ship" --wait --yes
 ```
+
+API errors print recovery **hints** when the control plane returns problem+json `code` / `hints`.
 
 Health check:
 
