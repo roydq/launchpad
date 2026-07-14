@@ -567,6 +567,40 @@ func NewRoot(cfg Config) *cobra.Command {
 	addWaitFlags(rollbackCmd)
 	root.AddCommand(rollbackCmd)
 
+	promoteCmd := &cobra.Command{
+		Use:   "promote",
+		Short: "Promote a succeeded release from one env to another (re-resolves target config)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			from, _ := cmd.Flags().GetString("from")
+			if from == "" {
+				return fmt.Errorf("--from is required")
+			}
+			to, _ := cmd.Flags().GetString("to")
+			if to == "" {
+				to = effectiveEnv(cfg)
+			}
+			version, _ := cmd.Flags().GetInt("release")
+			message, _ := cmd.Flags().GetString("message")
+			result, err := client.Promote(cmd.Context(), project, from, to, version, message)
+			if err != nil {
+				return err
+			}
+			wait, timeout := waitFlags(cmd)
+			return maybeWaitForDeploy(cmd.Context(), client, result, wait, timeout)
+		},
+	}
+	promoteCmd.Flags().String("from", "", "source environment (required)")
+	promoteCmd.Flags().String("to", "", "target environment (default: current env context)")
+	promoteCmd.Flags().Int("release", 0, "source release version (default: running in --from)")
+	promoteCmd.Flags().StringP("message", "m", "", "release description")
+	_ = promoteCmd.MarkFlagRequired("from")
+	addWaitFlags(promoteCmd)
+	root.AddCommand(promoteCmd)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "doctor",
 		Short: "Check API connectivity, auth, and context",

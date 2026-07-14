@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Active (revision 3) |
-| **Date** | 2026-07-09 |
+| **Date** | 2026-07-13 |
 | **Related** | `docs/DESIGN.md` — control plane architecture and operational design |
 | **Related** | `docs/superpowers/specs/2026-07-11-multi-env-design.md` — multi-env phase 2a |
 
@@ -22,8 +22,8 @@ Launchpad aims to be the **mise of runtime application management**: zero ceremo
 | Section focus | Binding on current code? |
 |---------------|--------------------------|
 | Design principles, entities, **Key Invariants** | **Yes** — product truth |
-| **MVP (phase 1)** subsection and shipped API/CLI | **Yes** — what runs today / on `feat/release-invariants` |
-| Multi-env, multi-service, bindings, promotion, full Target surface | **Planned** — do not half-implement |
+| **MVP + 2a/2b** and shipped API/CLI tables | **Yes** — what runs on `main` |
+| Multi-service, bindings, full Target surface | **Planned** — do not half-implement (2a multi-env, 2b layered config, primary-service promote **shipped**) |
 | Phased implementation table | Roadmap; see “Known invariant debt” until closed |
 
 ---
@@ -487,14 +487,25 @@ On failure, deployment → `failed`; the previous running deployment remains liv
 Promote a succeeded release from one environment to another. The artifact and process topology stay identical; **all config layers are re-resolved** in the target environment. Do **not** copy `config_resolved` from the source release.
 
 ```bash
-launchpad promote --service api --from staging --to production --release 12
+launchpad env use production
+launchpad promote --from staging --wait
+# or fully explicit:
+launchpad promote --from staging --to production --release 12 -m "ship"
 ```
+
+**Selection rules:**
+
+1. Source release must be `succeeded`.
+2. Source must have a deployment in `from` with status `running` or `superseded`.
+3. `from` and `to` must differ.
+4. Omit `--release` / `version` → use the release of the latest `running` deployment in `from`.
+5. Ambient `X-Launchpad-Environment` (or CLI sticky env) defaults **`to`** when body/flag omits it.
 
 **Promotion flow:**
 
 1. Read source release (`artifact_ref`, `process_snapshot` only for portable desired topology).
-2. Re-resolve config against target environment's layers + bindings.
-3. Create new release (new monotonic version for that service) with re-resolved config.
+2. Re-resolve config against target environment's layers (+ bindings when they exist).
+3. Create **new** release (new monotonic version for that service) with re-resolved config.
 4. Enqueue deployment to target environment.
 
 ---
@@ -525,9 +536,11 @@ Workers **must not** populate `Processes` / `Config` from live `processes` or `c
 | Capability | MVP control plane | Target implementations today |
 |------------|-------------------|------------------------------|
 | `Deploy` | **Used** | Required |
-| `Scale` / `Destroy` / `Rollback` / `Status` / `Logs` | **Not exposed** via API/worker jobs | May exist as stubs or helpers for later phases |
+| `Logs` | **Shipped** (API/CLI read path) | stub + kubernetes |
+| `Status` | Partial (`ps` / inspect via control plane) | stub helpers |
+| `Scale` / `Destroy` / target-side `Rollback` | **Not exposed** as worker jobs | May exist as stubs or helpers for later phases |
 
-Do not grow control-plane callers for Scale/Logs until those features are in-scope. Optional interface split can follow then.
+Do not grow control-plane callers for Scale/Destroy until those features are in-scope. Optional interface split can follow then.
 
 Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` within the environment's namespace.
 
@@ -550,7 +563,7 @@ Workspace is implicit from the auth token. Environment is selected via **`X-Laun
 POST   /v1/projects
 GET    /v1/projects
 GET    /v1/projects/{project}
-GET    /v1/projects/{project}/config
+GET    /v1/projects/{project}/config          # ?layer=shared|service|resolved
 PATCH  /v1/projects/{project}/config
 GET    /v1/projects/{project}/environments
 POST   /v1/projects/{project}/environments
@@ -558,6 +571,9 @@ GET    /v1/projects/{project}/environments/{name}
 GET    /v1/projects/{project}/processes
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
+POST   /v1/projects/{project}/rollback
+POST   /v1/projects/{project}/promote
+GET    /v1/projects/{project}/logs
 GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
 DELETE /v1/projects/{project}/changeset
@@ -577,7 +593,6 @@ GET    /healthz
 
 ```
 /v1/workspaces/{workspace}/projects/{project}/...
-/v1/projects/{project}/promote
 ```
 
 ---
@@ -598,14 +613,25 @@ GET    /healthz
 | `launchpad ps` | Process definitions |
 | `launchpad releases` | Release history with per-env deployment annotations |
 
+### Shipped (post-MVP deltas)
+
+| Command | Notes |
+|---------|-------|
+| `launchpad logs [process]` | Target-backed process logs |
+| `launchpad inspect` | Project@env snapshot |
+| `launchpad releases show N` | Full release snapshot |
+| `launchpad diff --from N --to M` | Release↔release archaeology |
+| `launchpad rollback N` | New release from prior version; config re-resolved |
+| `launchpad config … --layer shared\|service` | Layered config (2b); workspace layer deferred |
+| `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |
+
 ### Planned (deltas from shipped)
 
 | Command | Action |
 |---------|--------|
 | `launchpad services list` | Multi-service projects |
-| `launchpad config set [--shared\|--workspace]` | Layered config |
+| `launchpad config set --workspace` | Workspace config layer |
 | `launchpad deploy --mode` / multi-service staging | Multi-service + coordination |
-| `launchpad rollback / promote / logs` | Deferred ops (still release-backed where they change runtime) |
 
 ### Bootstrap defaults
 
@@ -643,10 +669,10 @@ On `POST /v1/projects`:
 | **1 — MVP core** | **Shipped** (hierarchy, API, CLI, deploy loop) | Project / Environment / Service; bootstrap; changeset; deploy | Solo-engineer project workflow |
 | **1b — Release invariants** | **Shipped** | Snapshot-only deploy; atomic push; full process snapshot; snake_case API DTOs | Domain promises match runtime |
 | **2a — Multi-env** | **Shipped** | Ambient env header; env CRUD; changeset env pin; CLI `env *` | `staging`/`prod` without app rename |
-| **2b — Layered config** | **In progress** (`feat/layered-config-2b`) | Shared + service layers; resolve at release | Shared settings per env |
+| **2b — Layered config** | **Shipped** | Shared + service layers; resolve at release | Shared settings per env |
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy |
 | **4** | Planned | Bindings and ref resolution | Service linking |
-| **5** | Planned | Promotion API | staging → production flow |
+| **5** | **Shipped** (primary-service promote) | Promotion API + CLI | staging → production flow |
 | **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
 
 Each phase updates API, store, worker, CLI, and target interface together.

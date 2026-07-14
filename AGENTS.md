@@ -88,9 +88,9 @@ Kind e2e (`make e2e-kind`) is optional/nightly — needs Docker, kind, and kubec
 
 ## MVP scope boundaries
 
-**In scope now:** multi-env (ambient header + CLI `env *`), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, doctor, project-local context, deploy worker, stub + K8s targets.
+**In scope now:** multi-env (ambient header + CLI `env *`), layered config (shared + service), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, promote, logs, inspect, release archaeology, doctor, project-local context, deploy worker, stub + K8s targets.
 
-**Deferred (do not half-build):** promotion, multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace/shared config layers, secrets-typed config, scale API (target-side), SSE/events, idempotency, builds, OpenAPI, Helm.
+**Deferred (do not half-build):** multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace config layer, secrets-typed config, scale API (target-side), SSE/events, idempotency, builds, OpenAPI, Helm.
 
 If a task crosses a deferred boundary, update `docs/DOMAIN.md` or write a new spec in `docs/superpowers/specs/` first.
 

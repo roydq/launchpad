@@ -39,6 +39,10 @@ North star: **the mise of runtime application management** — zero ceremony for
 | Project-local `.launchpad/config` | Walk-up context; `launchpad context` |
 | Rollback | New release from prior version; config re-resolved per env |
 | `launchpad doctor` | Healthz, token, project/env checks |
+| Process `logs` (target-backed) | API `GET …/logs`, CLI `launchpad logs` |
+| `launchpad inspect` | Project@env snapshot: pending, last deploy, processes |
+| Release archaeology | `releases show N`, release↔release `diff` |
+| Layered config (phase 2b) | Shared + service layers; resolve at release; `?layer=` |
 
 ---
 
@@ -47,10 +51,10 @@ North star: **the mise of runtime application management** — zero ceremony for
 | Phase | Focus | Status |
 |-------|-------|--------|
 | **2a** | Multi-env | **Shipped** |
-| **2b** | Layered config | Planned (next domain wave) |
-| **3** | Multi-service + ReleaseSet | Planned |
-| **4** | Bindings | Planned |
-| **5** | Promote | Planned (after 2b preferred) |
+| **2b** | Layered config | **Shipped** |
+| **3** | Multi-service + ReleaseSet | Planned (deferred — do not half-build) |
+| **4** | Bindings | Planned (deferred — do not half-build) |
+| **5** | Promote | **Shipped** (primary service; re-resolve target config) |
 | **6** | `launchpad.yaml` | Planned |
 
 Do not half-build deferred phases. Each gets a spec.
@@ -64,7 +68,7 @@ Do not half-build deferred phases. Each gets a spec.
 | Idea | Status |
 |------|--------|
 | `deploy --wait` | **Shipped** |
-| Process `logs` (target-backed) | **Next** |
+| Process `logs` (target-backed) | **Shipped** |
 | Job progress lines | Covered by `--wait` |
 
 ### P1 — Context and gravity
@@ -74,7 +78,7 @@ Do not half-build deferred phases. Each gets a spec.
 | Multi-env context stack | **Shipped** |
 | Project-local config | **Shipped** |
 | `launchpad doctor` | **Shipped** |
-| `launchpad inspect` | Planned (Wave 1) |
+| `launchpad inspect` | **Shipped** |
 | Shell prompt awareness | Later |
 
 ### P2 — Trust and archaeology
@@ -82,8 +86,8 @@ Do not half-build deferred phases. Each gets a spec.
 | Idea | Status |
 |------|--------|
 | Rollback CLI | **Shipped** |
-| `releases show N` | Planned (Wave 1) |
-| Diff release↔release / env↔env | Planned (Wave 1) |
+| `releases show N` | **Shipped** |
+| Diff release↔release / env↔env | **Shipped** (release↔release); env↔env later |
 | Unstage last mutation | Later |
 | Sensitive-env confirmations | Later |
 
@@ -99,8 +103,8 @@ Do not half-build deferred phases. Each gets a spec.
 
 | Idea | Notes |
 |------|-------|
-| Server-side pending/diff preview | After archaeology |
-| Problem+json recovery hints | Small win |
+| Server-side pending/diff preview | **Next** (after recovery hints) |
+| Problem+json recovery hints | **Shipped** (`code` + `hints` extension) |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
 | Recipes / templates | Later |
@@ -116,11 +120,12 @@ Do not half-build deferred phases. Each gets a spec.
 
 ## Suggested sequencing (current)
 
-1. **Logs + inspect + release archaeology** (Wave 1 DX)
-2. **Layered config 2b** (Wave 2 domain)
-3. **Promote** (Wave 3)
-4. **Agent surface** (preview API / MCP)
-5. **Multi-service** only after dogfood of 1–3
+1. ~~Logs + inspect + release archaeology~~ (**Shipped** — Wave 1 DX)
+2. ~~Layered config 2b~~ (**Shipped** — Wave 2 domain)
+3. ~~Promote~~ (**Shipped** — Wave 3)
+4. ~~Problem+json recovery hints~~ (**Shipped**)
+5. **Server-side pending/diff preview** — **Active / next** (agent surface)
+6. **Multi-service** only after dogfood of 1–3 (hard deferred until then)
 
 ### Autonomous feature program
 
@@ -128,7 +133,7 @@ Agents may ship recommended options without per-feature design debates when auth
 
 - Spec + plan still required for medium+ features; self-approve after checklist
 - Mandatory review + `make test` / `build` / `vet` before PR
-- Open PR to `main` (do not force-merge) for human dogfood
+- Open PR to integration/spike branch when running a spike program; otherwise PR to `main` for human dogfood
 - Hard stop: new deferred-boundary ambiguity, secrets/auth model, 3× verification failure
 
 See program notes in session plans; update this section when cadence changes.
@@ -145,4 +150,6 @@ See program notes in session plans; update this section when cadence changes.
 
 | Work | Spec |
 |------|------|
-| Process logs | *pending Wave 1* |
+| Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
+| Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
+| Server-side pending/diff preview | *next* |
