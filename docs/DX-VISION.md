@@ -45,6 +45,9 @@ North star: **the mise of runtime application management** — zero ceremony for
 | Release archaeology | `releases show N`, release↔release `diff` |
 | Layered config (phase 2b) | Shared + service layers; resolve at release; `?layer=` |
 | Problem+json recovery hints | `code` + `hints[]` on API errors; structured apiclient errors |
+| CLI recovery hint printing | Multi-line `recovery:` from `*APIError` |
+| Sensitive-env CLI gate | `production`/`prod` deploy/promote/rollback need `--yes` |
+| e2e multi-env promote | Stub CI asserts target config re-resolution |
 
 ---
 
@@ -73,9 +76,9 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 |------|--------|
 | Promote + layered config dogfood | **Shipped** (main) |
 | Problem+json recovery hints | **Shipped** |
-| CLI prints recovery hints | **In progress** (prod-readiness) |
-| Sensitive-env confirmations (`production` + `--yes`) | **In progress** (prod-readiness) |
-| Server-side pending/diff preview | **Next** after dogfood slice |
+| CLI prints recovery hints | **Shipped** |
+| Sensitive-env confirmations (`production` + `--yes`) | **Shipped** (CLI policy) |
+| Server-side pending/diff preview | **Next** |
 | Recipes / `launchpad new` templates | Later |
 | MCP server | After core loop solid |
 
@@ -85,7 +88,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 |------|--------|
 | Unit + service invariants | **Shipped** |
 | e2e-stub happy path (CI) | **Shipped** |
-| e2e multi-env + promote + config re-resolution | **In progress** (prod-readiness) |
+| e2e multi-env + promote + config re-resolution | **Shipped** (`TestPromoteReResolvesTargetConfig`) |
 | Failure-path e2e (409, pin mismatch) | Later |
 | OpenAPI + CI contract drift | Later |
 | Postgres matrix in CI | Later |
@@ -149,7 +152,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Diff release↔release | **Shipped** |
 | Diff env↔env | Later |
 | Unstage last mutation | Later |
-| Sensitive-env confirmations | **In progress** |
+| Sensitive-env confirmations | **Shipped** (`--yes` on production) |
 
 ### P3 — Local parity and previews
 
@@ -165,7 +168,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Idea | Notes |
 |------|-------|
 | Problem+json recovery hints | **Shipped** |
-| CLI surfaces hints | **In progress** |
+| CLI surfaces hints | **Shipped** |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
 | Recipes / templates | Later |
@@ -182,9 +185,9 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 
 ## Suggested sequencing (current)
 
-1. ~~Wave 1 DX + 2b config + Promote + recovery hints~~ (**Shipped** on `main`)
-2. **Prod-readiness dogfood** — e2e promote multi-env, CLI hints + production `--yes` (**Active**)
-3. **Server-side pending/diff preview**
+1. ~~Wave 1 DX + 2b config + Promote + recovery hints~~ (**Shipped**)
+2. ~~Prod-readiness dogfood~~ (**Shipped** — e2e promote, CLI hints, production `--yes`)
+3. **Server-side pending/diff preview** — **Active / next**
 4. OpenAPI contract + failure e2e + examples/60s path
 5. Secrets design (unlocks clone / safer SaaS story)
 6. Surfaces (docs site → TUI → dashboard) only with stable API
