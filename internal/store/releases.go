@@ -50,13 +50,20 @@ func (s *Store) CreateRelease(ctx context.Context, tx *sql.Tx, release *domain.R
 	if err != nil {
 		return err
 	}
+	var createdByPrincipal, createdByToken any
+	if release.CreatedByPrincipalID != nil {
+		createdByPrincipal = release.CreatedByPrincipalID.String()
+	}
+	if release.CreatedByTokenID != nil {
+		createdByToken = release.CreatedByTokenID.String()
+	}
 	exec := s.exec(tx)
 	_, err = exec.ExecContext(ctx, s.q(`
-		INSERT INTO releases (id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		INSERT INTO releases (id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at, created_by_principal_id, created_by_token_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		release.ID.String(), release.ServiceID.String(), release.Version, release.ArtifactRef,
 		string(configResolved), string(processSnapshot), string(release.Status), release.Description,
-		formatTime(s.driver, release.CreatedAt),
+		formatTime(s.driver, release.CreatedAt), createdByPrincipal, createdByToken,
 	)
 	return err
 }
@@ -159,23 +166,25 @@ func (s *Store) UpdateDeploymentStatus(ctx context.Context, tx *sql.Tx, id uuid.
 	return nil
 }
 
+const releaseSelectCols = `id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at, created_by_principal_id, created_by_token_id`
+
 func (s *Store) GetReleaseByID(ctx context.Context, id uuid.UUID) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		SELECT `+releaseSelectCols+`
 		FROM releases WHERE id = ?`), id.String())
 	return scanRelease(row, s.driver)
 }
 
 func (s *Store) GetReleaseByVersion(ctx context.Context, serviceID uuid.UUID, version int) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		SELECT `+releaseSelectCols+`
 		FROM releases WHERE service_id = ? AND version = ?`), serviceID.String(), version)
 	return scanRelease(row, s.driver)
 }
 
 func (s *Store) GetLatestSucceededRelease(ctx context.Context, serviceID uuid.UUID) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		SELECT `+releaseSelectCols+`
 		FROM releases WHERE service_id = ? AND status = 'succeeded'
 		ORDER BY version DESC LIMIT 1`), serviceID.String())
 	return scanRelease(row, s.driver)
@@ -183,7 +192,7 @@ func (s *Store) GetLatestSucceededRelease(ctx context.Context, serviceID uuid.UU
 
 func (s *Store) ListReleases(ctx context.Context, serviceID uuid.UUID) ([]domain.Release, error) {
 	rows, err := s.db.QueryContext(ctx, s.q(`
-		SELECT id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at
+		SELECT `+releaseSelectCols+`
 		FROM releases WHERE service_id = ? ORDER BY version DESC`), serviceID.String())
 	if err != nil {
 		return nil, err
@@ -272,8 +281,9 @@ func scanDeployment(scanner interface{ Scan(...any) error }, driver Driver) (*do
 func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Release, error) {
 	var id, serviceID, artifactRef, configResolved, processSnapshot, status, description, createdAt string
 	var version int
+	var createdByPrincipal, createdByToken sql.NullString
 	if err := scanner.Scan(&id, &serviceID, &version, &artifactRef, &configResolved, &processSnapshot,
-		&status, &description, &createdAt); err != nil {
+		&status, &description, &createdAt, &createdByPrincipal, &createdByToken); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
 		}
@@ -283,7 +293,7 @@ func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domai
 	_ = json.Unmarshal([]byte(configResolved), &config)
 	var snapshot map[string]domain.ProcessSnapshot
 	_ = json.Unmarshal([]byte(processSnapshot), &snapshot)
-	return &domain.Release{
+	rel := &domain.Release{
 		ID:              uuid.MustParse(id),
 		ServiceID:       uuid.MustParse(serviceID),
 		Version:         version,
@@ -293,5 +303,14 @@ func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domai
 		Status:          domain.ReleaseStatus(status),
 		Description:     description,
 		CreatedAt:       parseTime(driver, createdAt),
-	}, nil
+	}
+	if createdByPrincipal.Valid && createdByPrincipal.String != "" {
+		pid := uuid.MustParse(createdByPrincipal.String)
+		rel.CreatedByPrincipalID = &pid
+	}
+	if createdByToken.Valid && createdByToken.String != "" {
+		tid := uuid.MustParse(createdByToken.String)
+		rel.CreatedByTokenID = &tid
+	}
+	return rel, nil
 }

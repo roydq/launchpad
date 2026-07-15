@@ -18,11 +18,13 @@ var migrationFiles = map[Driver][]string{
 		"001_initial.sqlite.up.sql",
 		"002_changeset_environment.sqlite.up.sql",
 		"003_shared_config.sqlite.up.sql",
+		"004_identity_principals.sqlite.up.sql",
 	},
 	DriverPostgres: {
 		"001_initial.postgres.up.sql",
 		"002_changeset_environment.postgres.up.sql",
 		"003_shared_config.postgres.up.sql",
+		"004_identity_principals.postgres.up.sql",
 	},
 }
 

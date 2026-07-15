@@ -9,6 +9,7 @@ import (
 type APIToken struct {
 	ID          uuid.UUID
 	WorkspaceID uuid.UUID
+	PrincipalID *uuid.UUID
 	Name        string
 	TokenHash   []byte
 	Scopes      []string
