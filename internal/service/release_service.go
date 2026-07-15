@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/launchpad/launchpad/internal/auth"
 	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/pkg/launchpad"
@@ -43,6 +45,7 @@ type releasePlan struct {
 	Config          map[string]string
 	ProcessSnapshot map[string]domain.ProcessSnapshot
 	Description     string
+	AuditAction     domain.AuditAction
 }
 
 func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName string, input CreateReleaseInput) (*CreateReleaseResult, error) {
@@ -71,6 +74,7 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName
 		ArtifactRef: input.Source.Image,
 		Config:      config,
 		Description: desc,
+		AuditAction: domain.AuditActionReleaseCreate,
 	})
 }
 
@@ -105,6 +109,7 @@ func (s *ReleaseService) Rollback(ctx context.Context, projectName, envName stri
 		Config:          config,
 		ProcessSnapshot: snap,
 		Description:     desc,
+		AuditAction:     domain.AuditActionReleaseRollback,
 	})
 }
 
@@ -158,6 +163,7 @@ func (s *ReleaseService) Promote(ctx context.Context, projectName, fromEnv, toEn
 		Config:          config,
 		ProcessSnapshot: snap,
 		Description:     desc,
+		AuditAction:     domain.AuditActionReleasePromote,
 	})
 }
 
@@ -357,13 +363,15 @@ func (s *ReleaseService) enqueueReleaseTx(ctx context.Context, tx *sql.Tx, proje
 	}
 
 	release := &domain.Release{
-		ServiceID:       svc.ID,
-		Version:         version,
-		ArtifactRef:     plan.ArtifactRef,
-		ConfigResolved:  config,
-		ProcessSnapshot: processSnapshot,
-		Status:          domain.ReleaseStatusPending,
-		Description:     plan.Description,
+		ServiceID:            svc.ID,
+		Version:              version,
+		ArtifactRef:          plan.ArtifactRef,
+		ConfigResolved:       config,
+		ProcessSnapshot:      processSnapshot,
+		Status:               domain.ReleaseStatusPending,
+		Description:          plan.Description,
+		CreatedByPrincipalID: auth.PrincipalIDFromContext(ctx),
+		CreatedByTokenID:     auth.TokenIDFromContext(ctx),
 	}
 	if err := s.store.CreateRelease(ctx, tx, release); err != nil {
 		return zero, err
@@ -402,7 +410,73 @@ func (s *ReleaseService) enqueueReleaseTx(ctx context.Context, tx *sql.Tx, proje
 		return zero, err
 	}
 
+	action := plan.AuditAction
+	if action == "" {
+		action = domain.AuditActionReleaseCreate
+	}
+	auditDetail := map[string]string{
+		"version":     strconv.Itoa(release.Version),
+		"environment": env.Name,
+		"artifact":    release.ArtifactRef,
+	}
+	if err := s.store.CreateAuditEvent(ctx, tx, &domain.AuditEvent{
+		WorkspaceID:  project.WorkspaceID,
+		PrincipalID:  release.CreatedByPrincipalID,
+		TokenID:      release.CreatedByTokenID,
+		Action:       action,
+		ResourceType: "release",
+		ResourceID:   release.ID,
+		ProjectName:  project.Name,
+		Detail:       auditDetail,
+	}); err != nil {
+		return zero, err
+	}
+
 	return CreateReleaseResult{Release: *release, Deployment: *deployment, Job: *job}, nil
+}
+
+// ListAuditEvents returns recent workspace audit rows for the caller's workspace.
+func (s *ReleaseService) ListAuditEvents(ctx context.Context, limit int) ([]domain.AuditEvent, error) {
+	workspaceID := auth.TeamIDFromContext(ctx)
+	if workspaceID == uuid.Nil {
+		return nil, fmt.Errorf("%w: workspace required", launchpad.ErrUnauthorized)
+	}
+	return s.store.ListAuditEvents(ctx, workspaceID, limit)
+}
+
+// ResolveCreatedBy loads principal display info for a release (best-effort).
+func (s *ReleaseService) ResolveCreatedBy(ctx context.Context, rel domain.Release) *CreatedBy {
+	if rel.CreatedByPrincipalID == nil {
+		return nil
+	}
+	p, err := s.store.GetPrincipal(ctx, *rel.CreatedByPrincipalID)
+	if err != nil {
+		return &CreatedBy{
+			PrincipalID: rel.CreatedByPrincipalID.String(),
+			TokenID:     uuidPtrString(rel.CreatedByTokenID),
+		}
+	}
+	return &CreatedBy{
+		PrincipalID: p.ID.String(),
+		Kind:        string(p.Kind),
+		DisplayName: p.DisplayName,
+		TokenID:     uuidPtrString(rel.CreatedByTokenID),
+	}
+}
+
+// CreatedBy is API-facing actor attribution on a release.
+type CreatedBy struct {
+	PrincipalID string `json:"principal_id"`
+	Kind        string `json:"kind,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	TokenID     string `json:"token_id,omitempty"`
+}
+
+func uuidPtrString(id *uuid.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }
 
 func (s *ReleaseService) buildProcessSnapshot(ctx context.Context, serviceID uuid.UUID) (map[string]domain.ProcessSnapshot, error) {

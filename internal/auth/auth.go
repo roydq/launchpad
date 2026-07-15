@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -19,14 +20,23 @@ import (
 type contextKey string
 
 const (
-	ContextTeamID  contextKey = "team_id"
-	ContextScopes  contextKey = "scopes"
-	ContextTokenID contextKey = "token_id"
+	ContextTeamID      contextKey = "team_id" // workspace ID (legacy key name)
+	ContextScopes      contextKey = "scopes"
+	ContextTokenID     contextKey = "token_id"
+	ContextPrincipalID contextKey = "principal_id"
 )
 
+// AuthInfo is the resolved credential for a request.
+type AuthInfo struct {
+	WorkspaceID uuid.UUID
+	Scopes      []string
+	TokenID     *uuid.UUID
+	PrincipalID *uuid.UUID
+}
+
 type Service struct {
-	store           *store.Store
-	bootstrapToken  string
+	store          *store.Store
+	bootstrapToken string
 }
 
 func NewService(s *store.Store, bootstrapToken string) *Service {
@@ -46,48 +56,93 @@ func (s *Service) GenerateToken() (string, error) {
 	return "lp_" + hex.EncodeToString(b), nil
 }
 
-func (s *Service) Authenticate(ctx context.Context, rawToken string) (uuid.UUID, []string, error) {
+func (s *Service) Authenticate(ctx context.Context, rawToken string) (*AuthInfo, error) {
 	if rawToken == s.bootstrapToken && s.bootstrapToken != "" {
 		workspace, err := s.store.GetWorkspaceByName(ctx, "default")
 		if err != nil {
-			return uuid.Nil, nil, err
+			return nil, err
 		}
-		return workspace.ID, []string{"admin"}, nil
+		return &AuthInfo{
+			WorkspaceID: workspace.ID,
+			Scopes:      []string{"admin"},
+		}, nil
 	}
 
 	token, err := s.store.GetTokenByHash(ctx, s.HashToken(rawToken))
 	if err != nil {
-		return uuid.Nil, nil, launchpad.ErrUnauthorized
+		return nil, launchpad.ErrUnauthorized
 	}
 	if token.RevokedAt != nil {
-		return uuid.Nil, nil, launchpad.ErrUnauthorized
+		return nil, launchpad.ErrUnauthorized
 	}
 	if token.ExpiresAt != nil && token.ExpiresAt.Before(time.Now()) {
-		return uuid.Nil, nil, launchpad.ErrUnauthorized
+		return nil, launchpad.ErrUnauthorized
 	}
-	return token.WorkspaceID, token.Scopes, nil
+	tid := token.ID
+	info := &AuthInfo{
+		WorkspaceID: token.WorkspaceID,
+		Scopes:      token.Scopes,
+		TokenID:     &tid,
+	}
+	if token.PrincipalID != nil {
+		info.PrincipalID = token.PrincipalID
+	}
+	return info, nil
 }
 
-func (s *Service) CreateToken(ctx context.Context, workspaceName, name string, scopes []string) (string, *domain.APIToken, error) {
+// CreateToken mints a workspace API token and a service account principal for attribution.
+func (s *Service) CreateToken(ctx context.Context, workspaceName, name string, scopes []string) (string, *domain.APIToken, *domain.Principal, error) {
 	workspace, err := s.store.GetWorkspaceByName(ctx, workspaceName)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
+	}
+	if strings.TrimSpace(name) == "" {
+		return "", nil, nil, fmt.Errorf("%w: token name is required", launchpad.ErrBadRequest)
 	}
 	plaintext, err := s.GenerateToken()
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
+	}
+
+	role := domain.WorkspaceRoleOperator
+	for _, sc := range scopes {
+		if sc == "admin" {
+			role = domain.WorkspaceRoleAdmin
+			break
+		}
+	}
+
+	principal := &domain.Principal{
+		Kind:        domain.PrincipalKindServiceAccount,
+		DisplayName: name,
+		Status:      domain.PrincipalStatusActive,
 	}
 	token := &domain.APIToken{
-		ID:          uuid.New(),
 		WorkspaceID: workspace.ID,
 		Name:        name,
 		TokenHash:   s.HashToken(plaintext),
 		Scopes:      scopes,
 	}
-	if err := s.store.CreateToken(ctx, token); err != nil {
-		return "", nil, err
+
+	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
+		if err := s.store.CreatePrincipal(ctx, tx, principal); err != nil {
+			return err
+		}
+		if err := s.store.AddWorkspaceMember(ctx, tx, &domain.WorkspaceMember{
+			WorkspaceID: workspace.ID,
+			PrincipalID: principal.ID,
+			Role:        role,
+		}); err != nil {
+			return err
+		}
+		pid := principal.ID
+		token.PrincipalID = &pid
+		return s.store.CreateTokenTx(ctx, tx, token)
+	})
+	if err != nil {
+		return "", nil, nil, err
 	}
-	return plaintext, token, nil
+	return plaintext, token, principal, nil
 }
 
 func Middleware(authSvc *Service) func(http.Handler) http.Handler {
@@ -98,14 +153,20 @@ func Middleware(authSvc *Service) func(http.Handler) http.Handler {
 				problemUnauthorized(w, "missing bearer token")
 				return
 			}
-			teamID, scopes, err := authSvc.Authenticate(r.Context(), raw)
+			info, err := authSvc.Authenticate(r.Context(), raw)
 			if err != nil {
 				problemUnauthorized(w, "invalid token")
 				return
 			}
 			ctx := r.Context()
-			ctx = context.WithValue(ctx, ContextTeamID, teamID)
-			ctx = context.WithValue(ctx, ContextScopes, scopes)
+			ctx = context.WithValue(ctx, ContextTeamID, info.WorkspaceID)
+			ctx = context.WithValue(ctx, ContextScopes, info.Scopes)
+			if info.TokenID != nil {
+				ctx = context.WithValue(ctx, ContextTokenID, *info.TokenID)
+			}
+			if info.PrincipalID != nil {
+				ctx = context.WithValue(ctx, ContextPrincipalID, *info.PrincipalID)
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -134,6 +195,24 @@ func TeamIDFromContext(ctx context.Context) uuid.UUID {
 func ScopesFromContext(ctx context.Context) []string {
 	v, _ := ctx.Value(ContextScopes).([]string)
 	return v
+}
+
+func TokenIDFromContext(ctx context.Context) *uuid.UUID {
+	v, ok := ctx.Value(ContextTokenID).(uuid.UUID)
+	if !ok || v == uuid.Nil {
+		return nil
+	}
+	id := v
+	return &id
+}
+
+func PrincipalIDFromContext(ctx context.Context) *uuid.UUID {
+	v, ok := ctx.Value(ContextPrincipalID).(uuid.UUID)
+	if !ok || v == uuid.Nil {
+		return nil
+	}
+	id := v
+	return &id
 }
 
 func bearerToken(r *http.Request) string {

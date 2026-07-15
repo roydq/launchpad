@@ -7,15 +7,17 @@ import (
 )
 
 type Release struct {
-	ID              uuid.UUID
-	ServiceID       uuid.UUID
-	Version         int
-	ArtifactRef     string
-	ConfigResolved  map[string]string
-	ProcessSnapshot map[string]ProcessSnapshot
-	Status          ReleaseStatus
-	Description     string
-	CreatedAt       time.Time
+	ID                   uuid.UUID
+	ServiceID            uuid.UUID
+	Version              int
+	ArtifactRef          string
+	ConfigResolved       map[string]string
+	ProcessSnapshot      map[string]ProcessSnapshot
+	Status               ReleaseStatus
+	Description          string
+	CreatedByPrincipalID *uuid.UUID
+	CreatedByTokenID     *uuid.UUID
+	CreatedAt            time.Time
 }
 
 type Deployment struct {

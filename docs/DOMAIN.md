@@ -173,6 +173,26 @@ Isolation and authentication boundary. Stored in the `workspaces` table. (Some a
 
 - Owns projects and workspace-scoped config.
 - API tokens are scoped to a workspace.
+- Principals (users and service accounts) gain access via **workspace membership**.
+
+### Principal (identity phase 1)
+
+A **principal** is who acts: a human **user** or a non-human **service account** (CLI token, CI, agent).
+
+| Field | Description |
+|-------|-------------|
+| `kind` | `user` \| `service_account` |
+| `display_name` | Human-readable name (token name for SAs) |
+| `email` | Optional; typical for users |
+| `status` | `active` \| `disabled` |
+
+**WorkspaceMember** links principal ↔ workspace with a role (`owner`, `admin`, `operator`, `viewer`). Phase 1 still authorizes API calls via **token scopes**; roles are stored for future policy and OIDC group mapping.
+
+**APIToken** remains the automation credential and may reference `principal_id`. Creating a token mints a service account principal when none is supplied.
+
+**Release attribution:** optional `created_by_principal_id` / `created_by_token_id` on releases. **AuditEvent** append-only log records mutating actions (deploy, promote, rollback, push).
+
+**Deferred:** OIDC `Identity` links (Azure AD, Google, …), session login, SCIM. Spec: `docs/superpowers/specs/2026-07-14-identity-principals-design.md`.
 
 ### Project
 
@@ -580,6 +600,7 @@ DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
 GET    /v1/jobs/{id}
 POST   /v1/tokens
+GET    /v1/audit
 GET    /healthz
 ```
 

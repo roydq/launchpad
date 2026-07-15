@@ -208,6 +208,7 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 			Config:          config,
 			ProcessSnapshot: processSnapshot,
 			Description:     desc,
+			AuditAction:     domain.AuditActionChangesetPush,
 		})
 		if err != nil {
 			return err

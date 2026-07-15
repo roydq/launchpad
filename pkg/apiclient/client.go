@@ -150,6 +150,13 @@ type ReleaseDeployment struct {
 	ID          string `json:"id"`
 }
 
+type CreatedBy struct {
+	PrincipalID string `json:"principal_id"`
+	Kind        string `json:"kind,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	TokenID     string `json:"token_id,omitempty"`
+}
+
 type Release struct {
 	ID              string                     `json:"id"`
 	Version         int                        `json:"version"`
@@ -158,6 +165,7 @@ type Release struct {
 	ProcessSnapshot map[string]ProcessSnapshot `json:"process_snapshot"`
 	Status          string                     `json:"status"`
 	Description     string                     `json:"description"`
+	CreatedBy       *CreatedBy                 `json:"created_by,omitempty"`
 	Deployments     []ReleaseDeployment        `json:"deployments,omitempty"`
 }
 
@@ -416,11 +424,35 @@ func (c *Client) GetJob(ctx context.Context, id string) (*Job, error) {
 }
 
 type TokenCreateResult struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Workspace string   `json:"workspace"`
-	Scopes    []string `json:"scopes"`
-	Token     string   `json:"token"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Workspace      string   `json:"workspace"`
+	Scopes         []string `json:"scopes"`
+	Token          string   `json:"token"`
+	PrincipalID    string   `json:"principal_id,omitempty"`
+	PrincipalKind  string   `json:"principal_kind,omitempty"`
+}
+
+type AuditEvent struct {
+	ID           string            `json:"id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	PrincipalID  string            `json:"principal_id,omitempty"`
+	TokenID      string            `json:"token_id,omitempty"`
+	ProjectName  string            `json:"project_name,omitempty"`
+	Detail       map[string]string `json:"detail,omitempty"`
+	CreatedAt    string            `json:"created_at"`
+}
+
+func (c *Client) ListAudit(ctx context.Context, limit int) ([]AuditEvent, error) {
+	path := "/v1/audit"
+	if limit > 0 {
+		path += "?limit=" + url.QueryEscape(fmt.Sprintf("%d", limit))
+	}
+	var events []AuditEvent
+	_, err := c.do(ctx, http.MethodGet, path, nil, &events)
+	return events, err
 }
 
 func (c *Client) Healthz(ctx context.Context) error {
