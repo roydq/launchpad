@@ -34,6 +34,13 @@ type releaseDeploymentDTO struct {
 	ID          string `json:"id"`
 }
 
+type createdByDTO struct {
+	PrincipalID string `json:"principal_id"`
+	Kind        string `json:"kind,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	TokenID     string `json:"token_id,omitempty"`
+}
+
 type releaseDTO struct {
 	ID              string                            `json:"id"`
 	ServiceID       string                            `json:"service_id"`
@@ -44,7 +51,20 @@ type releaseDTO struct {
 	Status          string                            `json:"status"`
 	Description     string                            `json:"description"`
 	CreatedAt       time.Time                         `json:"created_at"`
+	CreatedBy       *createdByDTO                     `json:"created_by,omitempty"`
 	Deployments     []releaseDeploymentDTO            `json:"deployments,omitempty"`
+}
+
+type auditEventDTO struct {
+	ID           string            `json:"id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	PrincipalID  string            `json:"principal_id,omitempty"`
+	TokenID      string            `json:"token_id,omitempty"`
+	ProjectName  string            `json:"project_name,omitempty"`
+	Detail       map[string]string `json:"detail,omitempty"`
+	CreatedAt    time.Time         `json:"created_at"`
 }
 
 type environmentDTO struct {
@@ -150,8 +170,21 @@ func releaseResponse(r domain.Release) releaseDTO {
 	}
 }
 
-func releaseWithDeploymentsResponse(item service.ReleaseWithDeployments) releaseDTO {
-	dto := releaseResponse(item.Release)
+func releaseResponseWithActor(r domain.Release, createdBy *service.CreatedBy) releaseDTO {
+	dto := releaseResponse(r)
+	if createdBy != nil {
+		dto.CreatedBy = &createdByDTO{
+			PrincipalID: createdBy.PrincipalID,
+			Kind:        createdBy.Kind,
+			DisplayName: createdBy.DisplayName,
+			TokenID:     createdBy.TokenID,
+		}
+	}
+	return dto
+}
+
+func releaseWithDeploymentsResponse(item service.ReleaseWithDeployments, createdBy *service.CreatedBy) releaseDTO {
+	dto := releaseResponseWithActor(item.Release, createdBy)
 	if len(item.Deployments) == 0 {
 		return dto
 	}
@@ -162,6 +195,25 @@ func releaseWithDeploymentsResponse(item service.ReleaseWithDeployments) release
 			Status:      d.Status,
 			ID:          d.ID.String(),
 		})
+	}
+	return dto
+}
+
+func auditEventResponse(ev domain.AuditEvent) auditEventDTO {
+	dto := auditEventDTO{
+		ID:           ev.ID.String(),
+		Action:       string(ev.Action),
+		ResourceType: ev.ResourceType,
+		ResourceID:   ev.ResourceID.String(),
+		ProjectName:  ev.ProjectName,
+		Detail:       ev.Detail,
+		CreatedAt:    ev.CreatedAt,
+	}
+	if ev.PrincipalID != nil {
+		dto.PrincipalID = ev.PrincipalID.String()
+	}
+	if ev.TokenID != nil {
+		dto.TokenID = ev.TokenID.String()
 	}
 	return dto
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -57,6 +58,7 @@ func (s *Server) Routes() chi.Router {
 		r.Use(auth.Middleware(s.tokens))
 
 		r.With(auth.RequireScope("admin")).Post("/tokens", s.createToken)
+		r.With(auth.RequireScope("project:read")).Get("/audit", s.listAudit)
 		r.With(auth.RequireScope("project:read")).Get("/jobs/{id}", s.getJob)
 
 		r.With(auth.RequireScope("project:write")).Post("/projects", s.createProject)
@@ -290,7 +292,8 @@ func (s *Server) listReleases(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]releaseDTO, 0, len(releases))
 	for _, rel := range releases {
-		out = append(out, releaseWithDeploymentsResponse(rel))
+		createdBy := s.releases.ResolveCreatedBy(r.Context(), rel.Release)
+		out = append(out, releaseWithDeploymentsResponse(rel, createdBy))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -354,6 +357,25 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, jobResponse(job))
 }
 
+func (s *Server) listAudit(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	events, err := s.releases.ListAuditEvents(r.Context(), limit)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out := make([]auditEventDTO, 0, len(events))
+	for _, ev := range events {
+		out = append(out, auditEventResponse(ev))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name      string   `json:"name"`
@@ -372,15 +394,20 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	if workspace == "" {
 		workspace = "default"
 	}
-	plaintext, token, err := s.tokens.CreateToken(r.Context(), workspace, input.Name, input.Scopes)
+	plaintext, token, principal, err := s.tokens.CreateToken(r.Context(), workspace, input.Name, input.Scopes)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{
+	out := map[string]any{
 		"id": token.ID, "name": token.Name, "workspace": workspace,
 		"scopes": token.Scopes, "token": plaintext,
-	})
+	}
+	if principal != nil {
+		out["principal_id"] = principal.ID.String()
+		out["principal_kind"] = string(principal.Kind)
+	}
+	writeJSON(w, http.StatusCreated, out)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
