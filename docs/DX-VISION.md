@@ -111,11 +111,13 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Item | Status |
 |------|--------|
 | Workspace-scoped tokens | **Shipped** |
+| Principals + membership + audit (phase 1) | **Shipped** (service accounts on tokens; release `created_by`; `GET /v1/audit`) |
+| OIDC (Azure AD / Google / generic) | After phase 1 principals |
 | Secrets-typed config | Design before env clone / multi-tenant |
 | Idempotency keys | Later |
 | Deployment events / SSE | Later |
 | HA workers / packaging | Later |
-| OIDC / richer RBAC | Hosted path |
+| Richer RBAC / env policy | After roles + OIDC |
 | **Hosted control plane** | Future: same binary; BYO data plane |
 
 **Hosted thesis:** we run the control plane; customers point environments at their clusters (or free-tier stub). Do not build multi-region billing or dual domain models early.
