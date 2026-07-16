@@ -17,5 +17,7 @@ jobs:
         run: mise exec -- make test
       - name: Vet
         run: mise exec -- go vet ./...
+      - name: OpenAPI contract
+        run: mise exec -- make openapi-check
       - name: E2E stub
         run: mise exec -- make e2e-stub

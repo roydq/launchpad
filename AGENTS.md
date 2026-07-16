@@ -90,7 +90,7 @@ Kind e2e (`make e2e-kind`) is optional/nightly — needs Docker, kind, and kubec
 
 **In scope now:** multi-env (ambient header + CLI `env *`), layered config (shared + service), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, promote, logs, inspect, release archaeology, doctor, project-local context, deploy worker, stub + K8s targets. Identity phase 1: service-account principals on tokens, release attribution, audit events.
 
-**Deferred (do not half-build):** multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace config layer, secrets-typed config, OIDC login (after principals phase 1), scale API (target-side), SSE/events, idempotency, builds, OpenAPI, Helm.
+**Deferred (do not half-build):** multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace config layer, secrets-typed config, OIDC login (after principals phase 1), scale API (target-side), SSE/events, idempotency, builds, Helm. OpenAPI skeleton is shipped (`docs/openapi.yaml`); keep it in sync when adding routes.
 
 If a task crosses a deferred boundary, update `docs/DOMAIN.md` or write a new spec in `docs/superpowers/specs/` first.
 
