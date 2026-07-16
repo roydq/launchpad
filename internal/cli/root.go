@@ -312,21 +312,20 @@ func NewRoot(cfg Config) *cobra.Command {
 				if fromV < 1 || toV < 1 {
 					return fmt.Errorf("both --from-release and --to-release are required for release compare")
 				}
-				return printReleaseDiff(cmd.Context(), client, project, fromV, toV)
+				prev, err := client.PreviewReleases(cmd.Context(), project, fromV, toV)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("# release v%d → v%d\n", fromV, toV)
+				fmt.Print(prev.Summary)
+				return nil
 			}
-			cs, err := loadPending(cmd.Context(), client, project)
+			// Server-side fold/diff (agents use the same API).
+			prev, err := client.PreviewPending(cmd.Context(), project)
 			if err != nil {
 				return err
 			}
-			folded, err := foldChanges(cs.Changes)
-			if err != nil {
-				return err
-			}
-			baseline, err := latestReleaseForEnv(cmd.Context(), client, project, effectiveEnv(cfg))
-			if err != nil {
-				return err
-			}
-			fmt.Print(formatDiff(folded, baseline))
+			fmt.Print(prev.Summary)
 			return nil
 		},
 	}

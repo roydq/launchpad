@@ -84,6 +84,7 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/changeset/changes", s.stageChanges)
 		r.With(auth.RequireScope("project:write")).Delete("/projects/{project}/changeset", s.discardChangeset)
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/changeset/push", s.pushChangeset)
+		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/preview", s.preview)
 	})
 	return r
 }
@@ -305,6 +306,34 @@ func (s *Server) getChangeset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, changesetViewResponse(cs))
+}
+
+func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	env := environmentFromRequest(r)
+	fromStr := r.URL.Query().Get("from_release")
+	toStr := r.URL.Query().Get("to_release")
+	if fromStr != "" || toStr != "" {
+		fromV, err1 := strconv.Atoi(fromStr)
+		toV, err2 := strconv.Atoi(toStr)
+		if err1 != nil || err2 != nil {
+			problem.BadRequest(w, "from_release and to_release must be integers")
+			return
+		}
+		result, err := s.changesets.PreviewReleases(r.Context(), project, env, fromV, toV)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	result, err := s.changesets.PreviewPending(r.Context(), project, env)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
