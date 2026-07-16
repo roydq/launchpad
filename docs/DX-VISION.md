@@ -89,9 +89,8 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Unit + service invariants | **Shipped** |
 | e2e-stub happy path (CI) | **Shipped** |
 | e2e multi-env + promote + config re-resolution | **Shipped** (`TestPromoteReResolvesTargetConfig`) |
-| Failure-path e2e (409, pin mismatch) | Later |
-| OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) |
-| Postgres matrix in CI | Later |
+| Failure-path e2e (409, pin mismatch) | **Shipped** |
+| OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) || Postgres matrix in CI | Later |
 | Target conformance suite (stub/k8s/…) | Later |
 | Worker lease/supersede stress tests | Later |
 
