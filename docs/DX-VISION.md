@@ -89,8 +89,8 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Unit + service invariants | **Shipped** |
 | e2e-stub happy path (CI) | **Shipped** |
 | e2e multi-env + promote + config re-resolution | **Shipped** (`TestPromoteReResolvesTargetConfig`) |
-| Failure-path e2e (409, pin mismatch) | Later |
-| OpenAPI + CI contract drift | Later |
+| Failure-path e2e (409, pin mismatch) | **Shipped** |
+| OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) |
 | Postgres matrix in CI | Later |
 | Target conformance suite (stub/k8s/…) | Later |
 | Worker lease/supersede stress tests | Later |
@@ -190,11 +190,11 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 1. ~~Wave 1 DX + 2b config + Promote + recovery hints~~ (**Shipped**)
 2. ~~Prod-readiness dogfood~~ (**Shipped** — e2e promote, CLI hints, production `--yes`)
 3. ~~Server-side pending/diff preview~~ (**Shipped**)
-4. OpenAPI contract + failure e2e + examples/60s path — **Active / next**
-5. Secrets design (unlocks clone / safer SaaS story)
+4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
+5. Secrets design (unlocks clone / safer SaaS story) — **Active / next**
 6. Surfaces (docs site → TUI → dashboard) only with stable API
 7. OIDC (after principals phase 1 dogfood)
-8. **Multi-service** only after dogfood of 1–4
+8. **Multi-service** only after dogfood of core loop
 
 ### Autonomous feature program
 
@@ -219,6 +219,9 @@ Agents may ship recommended options without per-feature design debates when auth
 |------|------|
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
 | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |
-| OpenAPI + failure e2e | *next* |
+| Failure-path e2e | **Shipped** (#22) |
+| OpenAPI contract | **Shipped** (#23) |
+| Examples/60s path | **Shipped** (this PR / #24) |
+| Secrets design | *next* |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
 | Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |

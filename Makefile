@@ -1,4 +1,4 @@
-.PHONY: build test lint migrate-up run-api run-worker e2e-stub e2e-kind example-60s
+.PHONY: build test lint migrate-up run-api run-worker e2e-stub e2e-kind openapi-check example-60s
 
 BIN_DIR := bin
 DATABASE_URL ?= file:launchpad.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)
@@ -11,6 +11,9 @@ build:
 
 test:
 	go test ./...
+
+openapi-check:
+	go test ./internal/api/ -run 'TestOpenAPI|TestHandlersRoutes' -count=1
 
 lint:
 	golangci-lint run ./... 2>/dev/null || go vet ./...
