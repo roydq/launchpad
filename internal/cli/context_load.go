@@ -7,10 +7,24 @@ import (
 )
 
 // findProjectLocalConfig walks from dir toward root for .launchpad/config.
+// It skips the user home config path so ~/.launchpad/config is only loaded as
+// the global layer (not accidentally as a higher-precedence "project-local").
 func findProjectLocalConfig(startDir string) (localConfig, string, error) {
+	homeConfig := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		homeConfig = filepath.Clean(filepath.Join(home, ".launchpad", "config"))
+	}
 	dir := startDir
 	for {
-		path := filepath.Join(dir, ".launchpad", "config")
+		path := filepath.Clean(filepath.Join(dir, ".launchpad", "config"))
+		if homeConfig != "" && path == homeConfig {
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				return localConfig{}, "", nil
+			}
+			dir = parent
+			continue
+		}
 		data, err := os.ReadFile(path)
 		if err == nil {
 			var cfg localConfig

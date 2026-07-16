@@ -20,6 +20,17 @@ Workspace
     └── Changeset (0..1 open)
 ```
 
+## Quick start (60 seconds, stub)
+
+From a clean checkout with [mise](https://mise.jdx.dev/) available:
+
+```bash
+./scripts/example-60s-stub.sh
+# or: make example-60s
+```
+
+Walkthrough: [`examples/hello-stub/README.md`](examples/hello-stub/README.md).
+
 ## Solo-engineer workflow
 
 ```bash

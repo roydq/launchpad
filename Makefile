@@ -1,4 +1,4 @@
-.PHONY: build test lint migrate-up run-api run-worker e2e-stub e2e-kind openapi-check
+.PHONY: build test lint migrate-up run-api run-worker e2e-stub e2e-kind openapi-check example-60s
 
 BIN_DIR := bin
 DATABASE_URL ?= file:launchpad.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)
@@ -32,3 +32,6 @@ e2e-stub:
 
 e2e-kind:
 	./scripts/e2e-kind.sh
+
+example-60s:
+	./scripts/example-60s-stub.sh
