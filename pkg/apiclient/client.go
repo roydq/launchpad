@@ -391,6 +391,55 @@ func (c *Client) GetChangeset(ctx context.Context, project string) (*Changeset, 
 	return &result, nil
 }
 
+// Preview is the server-side pending or release-compare diff.
+type Preview struct {
+	Mode            string `json:"mode"`
+	Environment     string `json:"environment,omitempty"`
+	BaselineVersion *int   `json:"baseline_version,omitempty"`
+	FromVersion     *int   `json:"from_version,omitempty"`
+	ToVersion       *int   `json:"to_version,omitempty"`
+	HasPending      bool   `json:"has_pending"`
+	MatchesBaseline bool   `json:"matches_baseline"`
+	Pending *struct {
+		Image  string             `json:"image,omitempty"`
+		Config map[string]*string `json:"config,omitempty"`
+		Scales map[string]int     `json:"scales,omitempty"`
+	} `json:"pending,omitempty"`
+	Diff struct {
+		Image *struct {
+			From string `json:"from"`
+			To   string `json:"to"`
+		} `json:"image,omitempty"`
+		Config []struct {
+			Op   string  `json:"op"`
+			Key  string  `json:"key"`
+			From *string `json:"from,omitempty"`
+			To   *string `json:"to,omitempty"`
+		} `json:"config,omitempty"`
+		Scale []struct {
+			Process string `json:"process"`
+			From    *int   `json:"from,omitempty"`
+			To      int    `json:"to"`
+		} `json:"scale,omitempty"`
+	} `json:"diff"`
+	Summary string `json:"summary"`
+}
+
+// PreviewPending returns structured pending-vs-baseline preview for the client Environment.
+func (c *Client) PreviewPending(ctx context.Context, project string) (*Preview, error) {
+	var out Preview
+	_, err := c.do(ctx, http.MethodGet, "/v1/projects/"+project+"/preview", nil, &out)
+	return &out, err
+}
+
+// PreviewReleases compares two release versions.
+func (c *Client) PreviewReleases(ctx context.Context, project string, fromV, toV int) (*Preview, error) {
+	path := fmt.Sprintf("/v1/projects/%s/preview?from_release=%d&to_release=%d", project, fromV, toV)
+	var out Preview
+	_, err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return &out, err
+}
+
 func (c *Client) StageChanges(ctx context.Context, project string, changes []map[string]any) (*Changeset, error) {
 	var result Changeset
 	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/changeset/changes", map[string]any{"changes": changes}, &result)

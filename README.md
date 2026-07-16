@@ -128,6 +128,14 @@ One-page project@env view:
 launchpad inspect
 ```
 
+Server-side pending preview (same fold/diff as CLI; agents should use the API):
+
+```bash
+launchpad diff
+# GET /v1/projects/{project}/preview
+# GET /v1/projects/{project}/preview?from_release=1&to_release=2
+```
+
 Immediate release when staging is empty (`--now` on mutation commands only):
 
 ```bash
