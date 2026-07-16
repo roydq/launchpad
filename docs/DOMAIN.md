@@ -598,6 +598,7 @@ GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
 DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
+GET    /v1/projects/{project}/preview   # pending vs baseline; ?from_release=&to_release=
 GET    /v1/jobs/{id}
 POST   /v1/tokens
 GET    /v1/audit
