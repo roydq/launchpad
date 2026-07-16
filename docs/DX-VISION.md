@@ -103,7 +103,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Completions / man pages | Later |
 | TUI (inspect / deploy / releases) | Later — same apiclient |
 | Docs site (get-started + mental model) | Later |
-| `examples/` + 60s path CI | Later |
+| `examples/` + 60s path CI | **Shipped** (`examples/hello-stub`, `make example-60s`) |
 | Web dashboard MVP | Later — OpenAPI + auth first |
 
 ### Track D — Platform readiness (slow burn → hosted)

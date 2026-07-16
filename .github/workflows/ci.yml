@@ -19,3 +19,5 @@ jobs:
         run: mise exec -- go vet ./...
       - name: E2E stub
         run: mise exec -- make e2e-stub
+      - name: Example 60s path (stub)
+        run: mise exec -- make example-60s
