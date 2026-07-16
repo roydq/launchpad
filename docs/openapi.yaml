@@ -1,0 +1,539 @@
+openapi: 3.0.3
+info:
+  title: Launchpad Control Plane API
+  description: |
+    Self-hosted deployment control plane. Workspace isolation via bearer tokens.
+    Ambient environment via `X-Launchpad-Environment` (default `dev`).
+    Errors use RFC 7807 `application/problem+json` with optional `code` and `hints`.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+    description: Local default
+security:
+  - bearerAuth: []
+tags:
+  - name: health
+  - name: tokens
+  - name: projects
+  - name: environments
+  - name: config
+  - name: releases
+  - name: changeset
+  - name: jobs
+  - name: audit
+  - name: runtime
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      security: []
+      summary: Liveness
+      responses:
+        "200":
+          description: OK
+  /v1/tokens:
+    post:
+      tags: [tokens]
+      summary: Create API token (mints service account principal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                workspace: { type: string, default: default }
+                scopes:
+                  type: array
+                  items: { type: string }
+      responses:
+        "201":
+          description: Token created (plaintext shown once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenCreate"
+        "401":
+          $ref: "#/components/responses/Problem"
+  /v1/audit:
+    get:
+      tags: [audit]
+      summary: List recent workspace audit events
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEvent"
+  /v1/jobs/{id}:
+    get:
+      tags: [jobs]
+      summary: Get job by ID
+      parameters:
+        - $ref: "#/components/parameters/JobID"
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/projects:
+    get:
+      tags: [projects]
+      summary: List projects
+      responses:
+        "200":
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      tags: [projects]
+      summary: Create project (bootstrap dev env + primary service)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProject"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+  /v1/projects/{project}:
+    get:
+      tags: [projects]
+      summary: Get project
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+  /v1/projects/{project}/config:
+    get:
+      tags: [config]
+      summary: Get config (resolved or layer)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+        - name: layer
+          in: query
+          schema:
+            type: string
+            enum: [shared, service, resolved]
+      responses:
+        "200":
+          description: Config map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+    patch:
+      tags: [config]
+      summary: Patch service-layer config vars
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+                nullable: true
+      responses:
+        "200":
+          description: Resolved config after patch
+  /v1/projects/{project}/processes:
+    get:
+      tags: [projects]
+      summary: List process definitions
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+      responses:
+        "200":
+          description: Processes
+  /v1/projects/{project}/logs:
+    get:
+      tags: [runtime]
+      summary: Process logs (target-backed)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+        - name: process
+          in: query
+          schema: { type: string, default: web }
+      responses:
+        "200":
+          description: Plain text log stream/body
+  /v1/projects/{project}/environments:
+    get:
+      tags: [environments]
+      summary: List environments
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+      responses:
+        "200":
+          description: Environments
+    post:
+      tags: [environments]
+      summary: Create environment
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEnvironment"
+      responses:
+        "201":
+          description: Created
+  /v1/projects/{project}/environments/{name}:
+    get:
+      tags: [environments]
+      summary: Get environment
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Environment
+  /v1/projects/{project}/releases:
+    get:
+      tags: [releases]
+      summary: List releases (with deployment annotations)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      responses:
+        "200":
+          description: Releases
+    post:
+      tags: [releases]
+      summary: Create image release and deploy
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRelease"
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseJob"
+        "409":
+          $ref: "#/components/responses/Problem"
+  /v1/projects/{project}/rollback:
+    post:
+      tags: [releases]
+      summary: Rollback to prior release version
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: integer, minimum: 1 }
+                description: { type: string }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseJob"
+  /v1/projects/{project}/promote:
+    post:
+      tags: [releases]
+      summary: Promote release across environments (re-resolve target config)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from]
+              properties:
+                from: { type: string }
+                to: { type: string }
+                version: { type: integer }
+                description: { type: string }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseJob"
+  /v1/projects/{project}/changeset:
+    get:
+      tags: [changeset]
+      summary: Get open changeset
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      responses:
+        "200":
+          description: Changeset
+    delete:
+      tags: [changeset]
+      summary: Discard open changeset
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+      responses:
+        "204":
+          description: Discarded
+  /v1/projects/{project}/changeset/changes:
+    post:
+      tags: [changeset]
+      summary: Stage changes
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                changes:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: Updated changeset
+        "409":
+          $ref: "#/components/responses/Problem"
+  /v1/projects/{project}/changeset/push:
+    post:
+      tags: [changeset]
+      summary: Push staged changeset (materialize + deploy)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description: { type: string }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseJob"
+  /v1/projects/{project}/preview:
+    get:
+      tags: [changeset]
+      summary: Pending vs baseline or release↔release structured preview
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+        - name: from_release
+          in: query
+          schema: { type: integer }
+        - name: to_release
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preview"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Workspace API token (`lp_…`) or bootstrap token
+  parameters:
+    ProjectName:
+      name: project
+      in: path
+      required: true
+      schema: { type: string }
+    JobID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Environment:
+      name: X-Launchpad-Environment
+      in: header
+      schema: { type: string, default: dev }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50 }
+  responses:
+    Problem:
+      description: RFC 7807 problem+json
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        hints:
+          type: array
+          items:
+            type: object
+            properties:
+              action: { type: string }
+              message: { type: string }
+              command: { type: string }
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        primary_service: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+    CreateProject:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        target:
+          type: object
+          properties:
+            type: { type: string }
+            namespace: { type: string }
+            cluster: { type: string }
+    CreateEnvironment:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        ephemeral: { type: boolean }
+        target:
+          type: object
+          properties:
+            type: { type: string }
+            namespace: { type: string }
+    CreateRelease:
+      type: object
+      properties:
+        source:
+          type: object
+          properties:
+            type: { type: string, enum: [image] }
+            image: { type: string }
+        description: { type: string }
+    ReleaseJob:
+      type: object
+      properties:
+        deployment:
+          type: object
+          properties:
+            id: { type: string }
+            status: { type: string }
+            release:
+              type: object
+              properties:
+                version: { type: integer }
+        job:
+          type: object
+          properties:
+            id: { type: string }
+            type: { type: string }
+            status: { type: string }
+    Job:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        status: { type: string }
+        last_error: { type: string }
+    TokenCreate:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        workspace: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        token: { type: string }
+        principal_id: { type: string }
+        principal_kind: { type: string }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        principal_id: { type: string }
+        token_id: { type: string }
+        project_name: { type: string }
+        detail:
+          type: object
+          additionalProperties: { type: string }
+        created_at: { type: string, format: date-time }
+    Preview:
+      type: object
+      properties:
+        mode: { type: string, enum: [pending, releases] }
+        environment: { type: string }
+        has_pending: { type: boolean }
+        matches_baseline: { type: boolean }
+        summary: { type: string }
+        diff: { type: object }
