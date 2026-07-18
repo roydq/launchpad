@@ -113,7 +113,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Workspace-scoped tokens | **Shipped** |
 | Principals + membership + audit (phase 1) | **Shipped** (service accounts on tokens; release `created_by`; `GET /v1/audit`) |
 | OIDC (Azure AD / Google / generic) | After phase 1 principals |
-| Secrets-typed config | Design before env clone / multi-tenant |
+| Secrets-typed config | **Design in review** — [`2026-07-18-secrets-typed-config-design.md`](superpowers/specs/2026-07-18-secrets-typed-config-design.md); S1 typing+redaction after human model accept |
 | Idempotency keys | Later |
 | Deployment events / SSE | Later |
 | HA workers / packaging | Later |
@@ -191,7 +191,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 2. ~~Prod-readiness dogfood~~ (**Shipped** — e2e promote, CLI hints, production `--yes`)
 3. ~~Server-side pending/diff preview~~ (**Shipped**)
 4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
-5. Secrets design (unlocks clone / safer SaaS story) — **Active / next**
+5. Secrets design (unlocks clone / safer SaaS story) — **Active / next** — design PR `feat/secrets-design`; [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) (human model review before S1)
 6. Surfaces (docs site → TUI → dashboard) only with stable API
 7. OIDC (after principals phase 1 dogfood)
 8. **Multi-service** only after dogfood of core loop
@@ -226,7 +226,7 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **Secrets-typed config (design)** | QUEUE `secrets-design` — *next*; hard stop before implementation |
+| **Secrets-typed config (design)** | QUEUE `secrets-design` — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md); hard stop before S1 without human model accept |
 | ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
 | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |
