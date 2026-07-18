@@ -1,6 +1,6 @@
 # Secrets S1: typing + redaction — implementation plan
 
-> **Status: In Progress** — branch `feat/secrets-s1`
+> **Status: Completed** — branch `feat/secrets-s1`
 
 **Goal:** Sensitivity `plain`|`secret` on config layers; redact control-plane reads; CLI `--secret`/`--plain`; release sensitivity snapshot. No encryption (S2).
 
