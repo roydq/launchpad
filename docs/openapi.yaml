@@ -132,7 +132,7 @@ paths:
   /v1/projects/{project}/config:
     get:
       tags: [config]
-      summary: Get config (resolved or layer)
+      summary: Get config (resolved or layer); secrets redacted as "***"
       parameters:
         - $ref: "#/components/parameters/ProjectName"
         - $ref: "#/components/parameters/Environment"
@@ -141,18 +141,23 @@ paths:
           schema:
             type: string
             enum: [shared, service, resolved]
+        - name: view
+          in: query
+          description: "typed returns {value,sensitivity,set} per key; secret values are null"
+          schema:
+            type: string
+            enum: [typed]
       responses:
         "200":
-          description: Config map
+          description: Config map (secret values are "***") or typed entries when view=typed
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties:
-                  type: string
+                additionalProperties: true
     patch:
       tags: [config]
-      summary: Patch service-layer config vars
+      summary: Patch service-layer config vars (sticky sensitivity; response redacted)
       parameters:
         - $ref: "#/components/parameters/ProjectName"
         - $ref: "#/components/parameters/Environment"
@@ -167,7 +172,7 @@ paths:
                 nullable: true
       responses:
         "200":
-          description: Resolved config after patch
+          description: Resolved config after patch (secrets as "***")
   /v1/projects/{project}/processes:
     get:
       tags: [projects]

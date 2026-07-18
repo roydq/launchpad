@@ -153,6 +153,8 @@ func releaseResponse(r domain.Release) releaseDTO {
 	if cfg == nil {
 		cfg = map[string]string{}
 	}
+	// Redact secrets using snapshot sensitivity (legacy releases with nil map → all plain).
+	cfg = domain.RedactConfigMap(cfg, r.ConfigSensitivity)
 	snap := r.ProcessSnapshot
 	if snap == nil {
 		snap = map[string]domain.ProcessSnapshot{}
