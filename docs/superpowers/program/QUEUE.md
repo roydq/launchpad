@@ -10,7 +10,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | secrets-design | Secrets-typed config (**design only**) | D | implementing | Spec: `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` — **hard stop before S1 code** until human accepts model | `feat/secrets-design` |
+| 1 | secrets-design | Secrets-typed config (**design only**) | D | pr-open | Spec: `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` — **hard stop before S1 code** until human accepts model | `feat/secrets-design` |
 | 2 | diff-env-env | Diff env↔env (release archaeology) | A | ready | DX backlog P2; after secrets design if it depends on resolved config story | — |
 | 3 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
 | 4 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
