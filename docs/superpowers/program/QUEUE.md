@@ -10,7 +10,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | secrets-s1 | Secrets S1: typing + redaction + CLI `--secret` | D | ready | Spec: `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` (human-accepted model). Sensitivity column, sticky rules, redact config/release/preview DTOs, release sensitivity snapshot. **No encryption yet.** | — |
+| 1 | secrets-s1 | Secrets S1: typing + redaction + CLI `--secret` | D | implementing | Spec: `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`. Sensitivity column, sticky rules, redact config/release/preview DTOs, release sensitivity snapshot. **No encryption yet.** | `feat/secrets-s1` |
 | 2 | secrets-s2 | Secrets S2: AES-GCM at rest | D | ready | After S1 ships. `LAUNCHPAD_SECRETS_KEY`; encrypt secret rows; worker decrypt. Same spec § S2. | — |
 | 3 | diff-env-env | Diff env↔env (release archaeology) | A | ready | DX backlog P2; may need redaction awareness if secrets S1 shipped first | — |
 | 4 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
