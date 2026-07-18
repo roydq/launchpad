@@ -703,7 +703,7 @@ Each phase updates API, store, worker, CLI, and target interface together.
 
 ## Open Questions
 
-1. **Secrets-typed config (design).** Config is plaintext today; sensitivity (`plain` \| `secret`), redaction, encryption-at-rest, and env-clone policy are specified in [`docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`](superpowers/specs/2026-07-18-secrets-typed-config-design.md). **Do not implement** until that model is human-accepted. Recommendation: sensitivity on existing layers (not a parallel secrets API); S1 redaction before S2 encryption.
+1. **Secrets-typed config.** Model **human-accepted** (2026-07-18): sensitivity (`plain` \| `secret`) on existing layers; redact on control-plane reads; S1 typing+redaction before S2 AES-GCM; env-clone copies secret keys without values. Spec: [`docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`](superpowers/specs/2026-07-18-secrets-typed-config-design.md). Implementation: QUEUE `secrets-s1` then `secrets-s2`.
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.
