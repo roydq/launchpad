@@ -41,11 +41,12 @@ type CreateReleaseResult struct {
 }
 
 type releasePlan struct {
-	ArtifactRef     string
-	Config          map[string]string
-	ProcessSnapshot map[string]domain.ProcessSnapshot
-	Description     string
-	AuditAction     domain.AuditAction
+	ArtifactRef       string
+	Config            map[string]string
+	ConfigSensitivity map[string]string
+	ProcessSnapshot   map[string]domain.ProcessSnapshot
+	Description       string
+	AuditAction       domain.AuditAction
 }
 
 func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName string, input CreateReleaseInput) (*CreateReleaseResult, error) {
@@ -60,7 +61,7 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName
 		return nil, fmt.Errorf("%w: image is required", launchpad.ErrBadRequest)
 	}
 
-	config, err := s.store.ResolveConfig(ctx, project.ID, svc.ID, env.ID)
+	config, configSens, err := s.store.ResolveConfigWithSensitivity(ctx, project.ID, svc.ID, env.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,10 +72,11 @@ func (s *ReleaseService) CreateRelease(ctx context.Context, projectName, envName
 	}
 
 	return s.enqueueRelease(ctx, project, svc, env, releasePlan{
-		ArtifactRef: input.Source.Image,
-		Config:      config,
-		Description: desc,
-		AuditAction: domain.AuditActionReleaseCreate,
+		ArtifactRef:       input.Source.Image,
+		Config:            config,
+		ConfigSensitivity: configSens,
+		Description:       desc,
+		AuditAction:       domain.AuditActionReleaseCreate,
 	})
 }
 
@@ -92,7 +94,7 @@ func (s *ReleaseService) Rollback(ctx context.Context, projectName, envName stri
 	if err != nil {
 		return nil, err
 	}
-	config, err := s.store.ResolveConfig(ctx, project.ID, svc.ID, env.ID)
+	config, configSens, err := s.store.ResolveConfigWithSensitivity(ctx, project.ID, svc.ID, env.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,11 +107,12 @@ func (s *ReleaseService) Rollback(ctx context.Context, projectName, envName stri
 		snap = map[string]domain.ProcessSnapshot{}
 	}
 	return s.enqueueRelease(ctx, project, svc, env, releasePlan{
-		ArtifactRef:     prior.ArtifactRef,
-		Config:          config,
-		ProcessSnapshot: snap,
-		Description:     desc,
-		AuditAction:     domain.AuditActionReleaseRollback,
+		ArtifactRef:       prior.ArtifactRef,
+		Config:            config,
+		ConfigSensitivity: configSens,
+		ProcessSnapshot:   snap,
+		Description:       desc,
+		AuditAction:       domain.AuditActionReleaseRollback,
 	})
 }
 
@@ -144,7 +147,7 @@ func (s *ReleaseService) Promote(ctx context.Context, projectName, fromEnv, toEn
 	}
 
 	// Target-env layers only — never source.ConfigResolved.
-	config, err := s.store.ResolveConfig(ctx, project.ID, svc.ID, targetEnv.ID)
+	config, configSens, err := s.store.ResolveConfigWithSensitivity(ctx, project.ID, svc.ID, targetEnv.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -159,11 +162,12 @@ func (s *ReleaseService) Promote(ctx context.Context, projectName, fromEnv, toEn
 	}
 
 	return s.enqueueRelease(ctx, project, svc, targetEnv, releasePlan{
-		ArtifactRef:     source.ArtifactRef,
-		Config:          config,
-		ProcessSnapshot: snap,
-		Description:     desc,
-		AuditAction:     domain.AuditActionReleasePromote,
+		ArtifactRef:       source.ArtifactRef,
+		Config:            config,
+		ConfigSensitivity: configSens,
+		ProcessSnapshot:   snap,
+		Description:       desc,
+		AuditAction:       domain.AuditActionReleasePromote,
 	})
 }
 
@@ -356,6 +360,10 @@ func (s *ReleaseService) enqueueReleaseTx(ctx context.Context, tx *sql.Tx, proje
 	if config == nil {
 		config = map[string]string{}
 	}
+	configSens := plan.ConfigSensitivity
+	if configSens == nil {
+		configSens = map[string]string{}
+	}
 
 	version, err := s.store.NextReleaseVersion(ctx, tx, svc.ID)
 	if err != nil {
@@ -367,6 +375,7 @@ func (s *ReleaseService) enqueueReleaseTx(ctx context.Context, tx *sql.Tx, proje
 		Version:              version,
 		ArtifactRef:          plan.ArtifactRef,
 		ConfigResolved:       config,
+		ConfigSensitivity:    configSens,
 		ProcessSnapshot:      processSnapshot,
 		Status:               domain.ReleaseStatusPending,
 		Description:          plan.Description,
