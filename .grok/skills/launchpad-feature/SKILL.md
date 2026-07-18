@@ -37,6 +37,8 @@ Invoke `/launchpad-domain` for entity, schema, or API design questions.
 
 **Gate:** Do not write implementation code until spec is approved.
 
+**Autonomous exception:** If the user authorized ADM (`/launchpad-autonomous`, `docs/AUTONOMOUS-MODE.md`), self-approve only after that protocol’s spec self-review checklist. Still write spec + plan; still open a PR; do not merge unless asked.
+
 ## Phase 2: Plan
 
 ```
@@ -141,5 +143,6 @@ When the spec decomposes into independent subsystems, use `/execute-plan` on the
 
 | Skill | When |
 |-------|------|
+| `launchpad-autonomous` | User-authorized low-input / multi-step ADM loop |
 | `launchpad-domain` | Entity design, invariants, MVP scope |
 | `launchpad-dev` | Build, test, smoke, local API/worker |

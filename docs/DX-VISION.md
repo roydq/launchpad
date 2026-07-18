@@ -78,7 +78,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Problem+json recovery hints | **Shipped** |
 | CLI prints recovery hints | **Shipped** |
 | Sensitive-env confirmations (`production` + `--yes`) | **Shipped** (CLI policy) |
-| Server-side pending/diff preview | **Next** |
+| Server-side pending/diff preview | **Shipped** |
 | Recipes / `launchpad new` templates | Later |
 | MCP server | After core loop solid |
 
@@ -198,12 +198,21 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 
 ### Autonomous feature program
 
-Agents may ship recommended options without per-feature design debates when authorized. Rules:
+Agents may ship recommended options without per-feature design debates when the user **explicitly authorizes** Autonomous Development Mode (ADM).
 
-- Spec + plan still required for medium+ features; self-approve after checklist
-- Mandatory review + `make test` / `build` / `vet` before PR; deploy-path → e2e-stub
-- Open PR to `main` for human dogfood (spike programs may use an integration branch)
-- Hard stop: new deferred-boundary ambiguity, secrets/auth model, 3× verification failure
+**Canonical protocol:** [`docs/AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md) · skill: `/launchpad-autonomous`
+
+Summary:
+
+- Spec + plan still required for medium+ features; self-approve only after the protocol checklist
+- Subagents for implement + review; docs sync (DOMAIN / OpenAPI / DX-VISION) in the same PR series
+- Verification ladder: `make test` / `build` / `vet`; deploy-path → `e2e-stub`; routes → OpenAPI check
+- Open PR for human dogfood; **no force-merge** unless asked
+- Hard stops: deferred-boundary ambiguity, secrets/auth model forks, 3× verification failure, budget exhausted
+- Program files: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md), [`IDEAS.md`](superpowers/program/IDEAS.md), [`PERSONA-SCRIPTS.md`](superpowers/program/PERSONA-SCRIPTS.md)
+- Persona dogfood + scout → feedback/ and IDEAS; no silent scope expansion
+
+Experimental while the project is early; refine the protocol from real runs. When ADM starts an item, prefer updating **QUEUE** status and link the spec here under Active / next.
 
 ---
 
@@ -215,13 +224,16 @@ Agents may ship recommended options without per-feature design debates when auth
 
 ### Active / next
 
-| Work | Spec |
-|------|------|
+| Work | Spec / queue |
+|------|----------------|
+| **Secrets-typed config (design)** | QUEUE `secrets-design` — *next*; hard stop before implementation |
+| ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
 | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |
 | Failure-path e2e | **Shipped** (#22) |
 | OpenAPI contract | **Shipped** (#23) |
-| Examples/60s path | **Shipped** (this PR / #24) |
-| Secrets design | *next* |
+| Examples/60s path | **Shipped** (#24) |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
 | Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
+
+Ordered agent work: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md).

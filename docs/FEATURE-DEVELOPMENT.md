@@ -64,7 +64,11 @@ Include:
 
 **Gate:** Human approval before implementation. For agent sessions, present the design and wait for explicit approval.
 
-**Autonomous mode (when user authorizes a feature program):** agent may self-approve the recommended approach after the [spec self-review](#) checklist (no open TBDs, scope one plan, no contradictions). Still write the spec and plan to `docs/superpowers/`. Still open a PR for human dogfood; do not force-merge unless asked. See `docs/DX-VISION.md` → *Autonomous feature program*.
+**Autonomous mode (when user authorizes ADM):** agent may self-approve the recommended approach after the [spec self-review checklist](AUTONOMOUS-MODE.md#spec-self-review-self-approve-gate) (no open TBDs, single-plan scope, no DOMAIN contradictions, MVP boundary respected). Still write the spec and plan to `docs/superpowers/`. Still open a PR for human dogfood; do not force-merge unless asked.
+
+Canonical protocol: [`docs/AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md). Invoke `/launchpad-autonomous`.
+
+Program files: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md) (work selection), [`IDEAS.md`](superpowers/program/IDEAS.md) (scout), [`PERSONA-SCRIPTS.md`](superpowers/program/PERSONA-SCRIPTS.md) (synthetic user). Brief backlog note: `docs/DX-VISION.md` → *Autonomous feature program*.
 
 ### 1.3 Update domain doc (if needed)
 
@@ -179,8 +183,9 @@ Rules:
 | Inline | Small plans, single session | Execute tasks directly; commit per task |
 | Subagent per task | Medium plans in one session | Fresh subagent per plan task + review between tasks |
 | Stacked PRs | Large plans with independent subsystems | `/execute-plan` on the design doc |
+| **Autonomous (ADM)** | User authorizes low-input multi-step work | Self-approve recommended path; subagents; docs sync; verification ladder; hard stops — [`docs/AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md) |
 
-Invoke `/launchpad-feature` at the start of agent-driven feature work.
+Invoke `/launchpad-feature` for interactive feature work. Invoke `/launchpad-autonomous` when the user authorizes ADM.
 
 ## Phase 5: Verify
 
@@ -277,10 +282,13 @@ If scope changed mid-flight, update the spec and plan **before** writing more co
 | Domain questions? | `/launchpad-domain` + `docs/DOMAIN.md` |
 | Local dev / smoke? | `/launchpad-dev` |
 | Start a feature? | `/launchpad-feature` |
+| Autonomous / low-input program? | `/launchpad-autonomous` + `docs/AUTONOMOUS-MODE.md` |
 
 ## Related docs
 
 - `AGENTS.md` — agent conventions and architecture
 - `docs/DOMAIN.md` — domain model (north star)
 - `docs/DESIGN.md` — control-plane architecture
+- `docs/AUTONOMOUS-MODE.md` — experimental autonomous development protocol
 - `.grok/skills/launchpad-feature/SKILL.md` — agent skill for this workflow
+- `.grok/skills/launchpad-autonomous/SKILL.md` — ADM skill

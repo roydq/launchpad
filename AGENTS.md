@@ -17,6 +17,7 @@ Launchpad is a self-hosted deployment control plane: Heroku-style developer expe
 | 3 | `README.md` | Running locally, CLI examples |
 | 4 | `docs/DESIGN.md` | Control-plane architecture, jobs, auth, roadmap |
 | 5 | `docs/FEATURE-DEVELOPMENT.md` | Starting a feature, branching, specs, plans, commits, PRs |
+| 6 | `docs/AUTONOMOUS-MODE.md` | User-authorized autonomous / low-input multi-step agent work |
 
 Do not reintroduce the old `App` model, `/v1/apps` routes, or per-environment duplicate apps.
 
@@ -111,10 +112,13 @@ Invoke `/launchpad-feature` at the start of agent-driven feature work.
 | Skill | When to use |
 |-------|-------------|
 | `launchpad-feature` | New features, specs, plans, branching, long-horizon tasks |
+| `launchpad-autonomous` | User-authorized ADM: low-input multi-step work, self-approve recommended path, subagents |
 | `launchpad-domain` | Entity changes, API design, invariants |
 | `launchpad-dev` | Build, test, local API/worker, smoke deploy |
 
-Invoke via `/launchpad-feature`, `/launchpad-domain`, `/launchpad-dev`, or let auto-invocation match the skill description.
+Invoke via `/launchpad-feature`, `/launchpad-autonomous`, `/launchpad-domain`, `/launchpad-dev`, or let auto-invocation match the skill description.
+
+**ADM protocol:** `docs/AUTONOMOUS-MODE.md` — only when the user explicitly authorizes autonomous mode. Work queue / ideas / persona: `docs/superpowers/program/`.
 
 ## Suggested future tooling (not yet implemented)
 
