@@ -12,6 +12,9 @@ type Release struct {
 	Version              int
 	ArtifactRef          string
 	ConfigResolved       map[string]string
+	// ConfigSensitivity maps resolved keys to plain|secret at snapshot time (for redaction).
+	// Nil/empty means legacy release: treat all keys as plain on read.
+	ConfigSensitivity    map[string]string
 	ProcessSnapshot      map[string]ProcessSnapshot
 	Status               ReleaseStatus
 	Description          string

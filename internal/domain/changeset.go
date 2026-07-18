@@ -48,6 +48,8 @@ type ChangesetChange struct {
 type ConfigChangePayload struct {
 	Key   string  `json:"key"`
 	Value *string `json:"value"`
+	// Sensitivity is optional: "plain" | "secret". Nil means sticky on apply (new keys → plain).
+	Sensitivity *string `json:"sensitivity,omitempty"`
 }
 
 type ScaleChangePayload struct {
