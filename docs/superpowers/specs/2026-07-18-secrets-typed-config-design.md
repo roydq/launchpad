@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Approved for human model review (autonomous design) — **not** approved for implementation |
+| **Status** | **Approved (human)** — model accepted 2026-07-18; S1 implementation authorized |
 | **Date** | 2026-07-18 |
 | **Domain** | `docs/DOMAIN.md` |
 | **Scope** | Design only: sensitivity model, redaction, encryption, clone policy, phased implementation. **No product code in this PR.** |
@@ -449,14 +449,14 @@ If the human rejects **A** in favor of **B** (parallel secrets API), stop and re
 | 6. Recommended path recorded | Pass — A recommended; B/C rejected with rationale |
 | 7. Test strategy present | Pass — for future S1/S2 PRs |
 
-**Status:** `Approved for human model review (autonomous design)`.  
-**Hard stop:** Do **not** start S1 implementation until a human accepts (or amends) this model in PR review.
+**Status:** `Approved (human)` — model accepted 2026-07-18 (PR #26 merged; recommended Approach A + defaults).  
+**Implementation:** S1 (`secrets-s1`) and S2 (`secrets-s2`) are `ready` on the program queue. One vertical slice per PR.
 
 ---
 
 ## Approval
 
 - [x] Design self-reviewed under ADM (design-only deliverable)
-- [ ] **Human reviewed and accepted model** (required before S1 code)
-- [ ] Amendments from review folded into this spec
-- [ ] S1 implementation PR may begin only after the above
+- [x] **Human reviewed and accepted model** (2026-07-18; recommended defaults)
+- [x] Amendments from review folded into this spec (none — accepted as written)
+- [x] S1 implementation PR may begin (QUEUE `secrets-s1`)
