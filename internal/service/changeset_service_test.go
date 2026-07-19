@@ -30,7 +30,7 @@ func TestMaterializeChanges(t *testing.T) {
 	if len(shared) != 0 {
 		t.Fatalf("shared: %+v", shared)
 	}
-	if cfg["PORT"] == nil || *cfg["PORT"] != "3000" {
+	if cfg["PORT"].Value == nil || *cfg["PORT"].Value != "3000" {
 		t.Fatalf("config: %+v", cfg)
 	}
 	if scales["web"] != 3 {

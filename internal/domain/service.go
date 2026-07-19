@@ -20,6 +20,7 @@ type ConfigVar struct {
 	EnvironmentID uuid.UUID
 	Key           string
 	Value         string
+	Sensitivity   string // plain | secret
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }

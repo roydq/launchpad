@@ -11,10 +11,10 @@ import (
 )
 
 func parseKEYVALArgs(args []string) ([]map[string]any, error) {
-	return parseKEYVALArgsLayer(args, "service")
+	return parseKEYVALArgsLayer(args, "service", "")
 }
 
-func parseKEYVALArgsLayer(args []string, layer string) ([]map[string]any, error) {
+func parseKEYVALArgsLayer(args []string, layer, sensitivity string) ([]map[string]any, error) {
 	var changes []map[string]any
 	for _, arg := range args {
 		parts := strings.SplitN(arg, "=", 2)
@@ -28,6 +28,9 @@ func parseKEYVALArgsLayer(args []string, layer string) ([]map[string]any, error)
 		}
 		if layer == "shared" {
 			ch["layer"] = "shared"
+		}
+		if sensitivity != "" {
+			ch["sensitivity"] = sensitivity
 		}
 		changes = append(changes, ch)
 	}

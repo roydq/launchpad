@@ -314,7 +314,7 @@ Each change targets a specific service:
 
 | Type | Payload | Example |
 |------|---------|---------|
-| `config` | `{ key, value? }` | `PORT=3000`; `value: null` deletes |
+| `config` | `{ key, value?, sensitivity? }` | `PORT=3000`; `value: null` deletes; `sensitivity: secret\|plain` |
 | `scale` | `{ process, quantity }` | `web=3` |
 | `image` | `{ artifact_ref }` | `api:v2.1.0` |
 | `binding` | `{ key, ref }` | `DATABASE_URL → services.postgres.config.DATABASE_URL` |
@@ -360,6 +360,28 @@ workspace → shared(environment) → service → platform refs
 ```
 
 Resolution produces the `config_resolved` map stored on the release. Targets receive only resolved values, never raw binding expressions.
+
+### Config sensitivity (S1)
+
+Each config entry in **shared** and **service** layers has a sensitivity:
+
+| Sensitivity | Default | Control-plane reads | Storage (S1) | Deploy |
+|-------------|---------|---------------------|--------------|--------|
+| `plain` | yes | value returned | plaintext | full value |
+| `secret` | no | value redacted as `***` | plaintext until S2 encryption | full value in process |
+
+**Rules:**
+
+1. Sticky type on key: once `secret`, later sets without an explicit demote stay `secret`.
+2. Promote to secret: `sensitivity: secret` or CLI `--secret`.
+3. Demote to plain: requires explicit `sensitivity: plain` / CLI `--plain` (and a new value).
+4. Each release stores `config_sensitivity` (map of key → type) alongside `config_resolved` for accurate archaeology when live types change later.
+5. Workers still apply full plaintext from the release snapshot; targets are unchanged.
+6. Winning layer sensitivity applies (service override of shared is total).
+
+CLI: `launchpad config set --secret KEY=VAL`, `config get` shows `[secret]`. API: `GET …/config` redacts; `?view=typed` returns `{value, sensitivity, set}` (secret values null).
+
+Encryption at rest is **S2** (`LAUNCHPAD_SECRETS_KEY`). Env clone remains blocked until S1 (min) or S2 (preferred).
 
 ### Bindings (service linking)
 
@@ -703,7 +725,7 @@ Each phase updates API, store, worker, CLI, and target interface together.
 
 ## Open Questions
 
-1. **Secrets-typed config.** Model **human-accepted** (2026-07-18): sensitivity (`plain` \| `secret`) on existing layers; redact on control-plane reads; S1 typing+redaction before S2 AES-GCM; env-clone copies secret keys without values. Spec: [`docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`](superpowers/specs/2026-07-18-secrets-typed-config-design.md). Implementation: QUEUE `secrets-s1` then `secrets-s2`.
+1. **Secrets encryption (S2).** S1 typing+redaction is shipping; AES-GCM at rest and `LAUNCHPAD_SECRETS_KEY` remain QUEUE `secrets-s2`. Spec: [`docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`](superpowers/specs/2026-07-18-secrets-typed-config-design.md).
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.

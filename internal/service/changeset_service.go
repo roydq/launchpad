@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/pkg/launchpad"
@@ -31,6 +32,8 @@ type StageChangeInput struct {
 	Image    string  `json:"image,omitempty"`
 	// Layer is "service" (default) or "shared" for config-type changes.
 	Layer string `json:"layer,omitempty"`
+	// Sensitivity is optional "plain" | "secret" for config changes.
+	Sensitivity *string `json:"sensitivity,omitempty"`
 }
 
 type StageChangesInput struct {
@@ -157,7 +160,7 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 	}
 	env := reqEnv
 
-	sharedUpdates, configUpdates, scales, artifactRef, err := materializeChanges(cs.Changes)
+	sharedWrites, configWrites, scales, artifactRef, err := materializeChanges(cs.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -169,13 +172,13 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 
 	var result CreateReleaseResult
 	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
-		if len(sharedUpdates) > 0 {
-			if err := s.store.MergeSharedConfigVarsTx(ctx, tx, project.ID, env.ID, sharedUpdates); err != nil {
+		if len(sharedWrites) > 0 {
+			if err := s.store.MergeConfigWritesTx(ctx, tx, "shared", uuid.Nil, env.ID, project.ID, sharedWrites); err != nil {
 				return err
 			}
 		}
-		if len(configUpdates) > 0 {
-			if err := s.store.MergeConfigVarsTx(ctx, tx, svc.ID, env.ID, configUpdates); err != nil {
+		if len(configWrites) > 0 {
+			if err := s.store.MergeConfigWritesTx(ctx, tx, "service", svc.ID, env.ID, uuid.Nil, configWrites); err != nil {
 				return err
 			}
 		}
@@ -194,7 +197,7 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 			resolvedArtifact = latest.ArtifactRef
 		}
 
-		config, err := s.store.ResolveConfigTx(ctx, tx, project.ID, svc.ID, env.ID)
+		config, configSens, err := s.store.ResolveConfigWithSensitivityTx(ctx, tx, project.ID, svc.ID, env.ID)
 		if err != nil {
 			return err
 		}
@@ -204,11 +207,12 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 		}
 
 		result, err = s.releaseService.enqueueReleaseTx(ctx, tx, project, svc, env, releasePlan{
-			ArtifactRef:     resolvedArtifact,
-			Config:          config,
-			ProcessSnapshot: processSnapshot,
-			Description:     desc,
-			AuditAction:     domain.AuditActionChangesetPush,
+			ArtifactRef:       resolvedArtifact,
+			Config:            config,
+			ConfigSensitivity: configSens,
+			ProcessSnapshot:   processSnapshot,
+			Description:       desc,
+			AuditAction:       domain.AuditActionChangesetPush,
 		})
 		if err != nil {
 			return err
@@ -242,7 +246,16 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 		if input.Key == "" {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: config change requires key", launchpad.ErrBadRequest)
 		}
-		payload, err := json.Marshal(domain.ConfigChangePayload{Key: input.Key, Value: input.Value})
+		if input.Sensitivity != nil {
+			if domain.NormalizeSensitivity(*input.Sensitivity) == "" {
+				return domain.ChangesetChange{}, fmt.Errorf("%w: sensitivity must be plain or secret", launchpad.ErrBadRequest)
+			}
+		}
+		payload, err := json.Marshal(domain.ConfigChangePayload{
+			Key:         input.Key,
+			Value:       input.Value,
+			Sensitivity: input.Sensitivity,
+		})
 		if err != nil {
 			return domain.ChangesetChange{}, err
 		}
@@ -270,9 +283,9 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 	}
 }
 
-func materializeChanges(changes []domain.ChangesetChange) (shared, config map[string]*string, scales map[string]int, artifactRef string, err error) {
-	shared = make(map[string]*string)
-	config = make(map[string]*string)
+func materializeChanges(changes []domain.ChangesetChange) (shared, config map[string]store.ConfigWrite, scales map[string]int, artifactRef string, err error) {
+	shared = make(map[string]store.ConfigWrite)
+	config = make(map[string]store.ConfigWrite)
 	scales = make(map[string]int)
 
 	for _, c := range changes {
@@ -282,13 +295,13 @@ func materializeChanges(changes []domain.ChangesetChange) (shared, config map[st
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
 				return nil, nil, nil, "", err
 			}
-			config[p.Key] = p.Value
+			config[p.Key] = store.ConfigWrite{Value: p.Value, Sensitivity: p.Sensitivity}
 		case domain.ChangeTypeSharedConfig:
 			var p domain.ConfigChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
 				return nil, nil, nil, "", err
 			}
-			shared[p.Key] = p.Value
+			shared[p.Key] = store.ConfigWrite{Value: p.Value, Sensitivity: p.Sensitivity}
 		case domain.ChangeTypeScale:
 			var p domain.ScaleChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {

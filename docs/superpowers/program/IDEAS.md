@@ -34,6 +34,9 @@
 | 2026-07-18 | secrets-design | Optional `--include-secrets` on env clone (break-glass) | P2 | D | Default clone must not copy secret material |
 | 2026-07-18 | secrets-design | Forbid plain service override of shared secret without `--force` | P3 | A | Spec allows total service win; policy later |
 | 2026-07-18 | secrets-design | QUEUE rows `secrets-s1` / `secrets-s2` after human accepts model | P1 | D | **Promoted** to QUEUE (ready) after model accept |
+| 2026-07-18 | secrets-s1 | CLI `config get --typed` pretty printer for agents | P3 | A | After S1; default map + sentinel is enough for humans |
+| 2026-07-18 | secrets-s1 | Reject staging sensitivity without value on demote | P3 | D | Explicit plain demote already requires a value via KEY=VAL |
+| 2026-07-18 | secrets-s1 | Audit events for config set: key + sensitivity only | P2 | D | Not wired this PR; keys already not logging values |
 
 ## Severity guide
 

@@ -15,7 +15,9 @@ import (
 type FoldedPending struct {
 	Image  string             `json:"image,omitempty"`
 	Config map[string]*string `json:"config,omitempty"` // nil value means delete
-	Scales map[string]int     `json:"scales,omitempty"`
+	// ConfigSensitivity maps keys to plain|secret for staged config (when known).
+	ConfigSensitivity map[string]string `json:"config_sensitivity,omitempty"`
+	Scales            map[string]int    `json:"scales,omitempty"`
 }
 
 func (f FoldedPending) IsEmpty() bool {
@@ -24,10 +26,11 @@ func (f FoldedPending) IsEmpty() bool {
 
 // ConfigDiffOp is one effective config delta.
 type ConfigDiffOp struct {
-	Op   string  `json:"op"` // add | change | remove
-	Key  string  `json:"key"`
-	From *string `json:"from,omitempty"`
-	To   *string `json:"to,omitempty"`
+	Op          string  `json:"op"` // add | change | remove
+	Key         string  `json:"key"`
+	From        *string `json:"from,omitempty"`
+	To          *string `json:"to,omitempty"`
+	Sensitivity string  `json:"sensitivity,omitempty"` // plain | secret when known
 }
 
 // ScaleDiffOp is one effective scale delta.
@@ -71,8 +74,9 @@ type PreviewResult struct {
 // FoldChanges applies last-write-wins over changeset rows (shared_config treated as config for preview).
 func FoldChanges(changes []domain.ChangesetChange) (FoldedPending, error) {
 	out := FoldedPending{
-		Config: make(map[string]*string),
-		Scales: make(map[string]int),
+		Config:            make(map[string]*string),
+		ConfigSensitivity: make(map[string]string),
+		Scales:            make(map[string]int),
 	}
 	for _, c := range changes {
 		switch c.Type {
@@ -85,6 +89,11 @@ func FoldChanges(changes []domain.ChangesetChange) (FoldedPending, error) {
 				return FoldedPending{}, fmt.Errorf("%w: config change missing key", launchpad.ErrBadRequest)
 			}
 			out.Config[p.Key] = p.Value
+			if p.Sensitivity != nil {
+				if n := domain.NormalizeSensitivity(*p.Sensitivity); n != "" {
+					out.ConfigSensitivity[p.Key] = n
+				}
+			}
 		case domain.ChangeTypeScale:
 			var p domain.ScaleChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
@@ -111,18 +120,27 @@ func FoldChanges(changes []domain.ChangesetChange) (FoldedPending, error) {
 }
 
 // BuildDiff computes effective deltas of pending vs a baseline release (nil = empty baseline).
+// Secret values are redacted using baseline.ConfigSensitivity and pending.ConfigSensitivity.
 func BuildDiff(pending FoldedPending, baseline *domain.Release) EffectiveDiff {
 	var baselineImage string
 	baselineConfig := map[string]string{}
+	baselineSens := map[string]string{}
 	baselineScales := map[string]int{}
 	if baseline != nil {
 		baselineImage = baseline.ArtifactRef
 		if baseline.ConfigResolved != nil {
 			baselineConfig = baseline.ConfigResolved
 		}
+		if baseline.ConfigSensitivity != nil {
+			baselineSens = baseline.ConfigSensitivity
+		}
 		for name, snap := range baseline.ProcessSnapshot {
 			baselineScales[name] = snap.Quantity
 		}
+	}
+	pendingSens := pending.ConfigSensitivity
+	if pendingSens == nil {
+		pendingSens = map[string]string{}
 	}
 
 	var diff EffectiveDiff
@@ -138,24 +156,26 @@ func BuildDiff(pending FoldedPending, baseline *domain.Release) EffectiveDiff {
 	for _, key := range keys {
 		val := pending.Config[key]
 		old, had := baselineConfig[key]
+		sens := configDiffSensitivity(baselineSens[key], pendingSens[key])
 		if val == nil {
 			if !had {
 				continue
 			}
-			from := old
-			diff.Config = append(diff.Config, ConfigDiffOp{Op: "remove", Key: key, From: &from})
+			from := domain.RedactConfigValue(old, sens)
+			diff.Config = append(diff.Config, ConfigDiffOp{Op: "remove", Key: key, From: &from, Sensitivity: sens})
 			continue
 		}
 		if !had {
-			to := *val
-			diff.Config = append(diff.Config, ConfigDiffOp{Op: "add", Key: key, To: &to})
+			to := domain.RedactConfigValue(*val, sens)
+			diff.Config = append(diff.Config, ConfigDiffOp{Op: "add", Key: key, To: &to, Sensitivity: sens})
 			continue
 		}
 		if old == *val {
 			continue
 		}
-		from, to := old, *val
-		diff.Config = append(diff.Config, ConfigDiffOp{Op: "change", Key: key, From: &from, To: &to})
+		from := domain.RedactConfigValue(old, sens)
+		to := domain.RedactConfigValue(*val, sens)
+		diff.Config = append(diff.Config, ConfigDiffOp{Op: "change", Key: key, From: &from, To: &to, Sensitivity: sens})
 	}
 
 	var procs []string
@@ -202,11 +222,11 @@ func FormatDiffSummary(pending FoldedPending, baseline *domain.Release) string {
 		for _, c := range diff.Config {
 			switch c.Op {
 			case "remove":
-				fmt.Fprintf(&b, "  - %s (was %s)\n", c.Key, strOr(c.From, ""))
+				fmt.Fprintf(&b, "  - %s (was %s)\n", c.Key, displayConfigVal(strOr(c.From, "")))
 			case "add":
-				fmt.Fprintf(&b, "  + %s=%s\n", c.Key, strOr(c.To, ""))
+				fmt.Fprintf(&b, "  + %s=%s\n", c.Key, displayConfigVal(strOr(c.To, "")))
 			case "change":
-				fmt.Fprintf(&b, "  ~ %s: %s → %s\n", c.Key, strOr(c.From, ""), strOr(c.To, ""))
+				fmt.Fprintf(&b, "  ~ %s: %s → %s\n", c.Key, displayConfigVal(strOr(c.From, "")), displayConfigVal(strOr(c.To, "")))
 			}
 		}
 	}
@@ -230,6 +250,53 @@ func strOr(p *string, fallback string) string {
 	return *p
 }
 
+func displayConfigVal(v string) string {
+	if v == domain.SecretSentinel {
+		return "[secret]"
+	}
+	return v
+}
+
+// configDiffSensitivity: secret if either side is secret.
+func configDiffSensitivity(baseline, pending string) string {
+	if domain.IsSecret(baseline) || domain.IsSecret(pending) {
+		return domain.SensitivitySecret
+	}
+	if pending != "" {
+		return pending
+	}
+	if baseline != "" {
+		return baseline
+	}
+	return domain.SensitivityPlain
+}
+
+// redactFoldedPending replaces secret values with the sentinel for API responses.
+func redactFoldedPending(p FoldedPending) FoldedPending {
+	if len(p.Config) == 0 {
+		return p
+	}
+	out := FoldedPending{
+		Image:             p.Image,
+		Config:            make(map[string]*string, len(p.Config)),
+		ConfigSensitivity: p.ConfigSensitivity,
+		Scales:            p.Scales,
+	}
+	sens := p.ConfigSensitivity
+	if sens == nil {
+		sens = map[string]string{}
+	}
+	for k, v := range p.Config {
+		if v == nil {
+			out.Config[k] = nil
+			continue
+		}
+		red := domain.RedactConfigValue(*v, sens[k])
+		out.Config[k] = &red
+	}
+	return out
+}
+
 // PreviewPending returns structured preview of open changeset vs last deploy in env.
 func (s *ChangesetService) PreviewPending(ctx context.Context, projectName, envName string) (*PreviewResult, error) {
 	view, err := s.GetChangeset(ctx, projectName, envName)
@@ -248,13 +315,29 @@ func (s *ChangesetService) PreviewPending(ctx context.Context, projectName, envN
 	if err != nil {
 		return nil, err
 	}
+	// Merge live resolved sensitivity so sticky secrets redact even without staged sensitivity.
+	if project, svc, env, err := s.projectService.resolvePrimaryService(ctx, projectName, envName); err == nil {
+		if _, liveSens, err := s.store.ResolveConfigWithSensitivity(ctx, project.ID, svc.ID, env.ID); err == nil {
+			if folded.ConfigSensitivity == nil {
+				folded.ConfigSensitivity = map[string]string{}
+			}
+			for k := range folded.Config {
+				if folded.ConfigSensitivity[k] == "" {
+					if s, ok := liveSens[k]; ok {
+						folded.ConfigSensitivity[k] = s
+					}
+				}
+			}
+		}
+	}
 	diff := BuildDiff(folded, baseline)
+	redacted := redactFoldedPending(folded)
 	res := &PreviewResult{
 		Mode:            "pending",
 		Environment:     envLabel,
 		HasPending:      !folded.IsEmpty(),
 		MatchesBaseline: !folded.IsEmpty() && diff.IsEmpty(),
-		Pending:         &folded,
+		Pending:         &redacted,
 		Diff:            diff,
 		Summary:         FormatDiffSummary(folded, baseline),
 	}
@@ -288,13 +371,14 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 	// Treat "to" as folded pending against "from" baseline.
 	pending := foldedFromRelease(to)
 	diff := BuildDiff(pending, from)
+	redacted := redactFoldedPending(pending)
 	return &PreviewResult{
 		Mode:            "releases",
 		FromVersion:     &fromV,
 		ToVersion:       &toV,
 		HasPending:      true,
 		MatchesBaseline: diff.IsEmpty(),
-		Pending:         &pending,
+		Pending:         &redacted,
 		Diff:            diff,
 		Summary:         FormatDiffSummary(pending, from),
 	}, nil
@@ -302,8 +386,9 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 
 func foldedFromRelease(r *domain.Release) FoldedPending {
 	out := FoldedPending{
-		Config: make(map[string]*string),
-		Scales: make(map[string]int),
+		Config:            make(map[string]*string),
+		ConfigSensitivity: make(map[string]string),
+		Scales:            make(map[string]int),
 	}
 	if r == nil {
 		return out
@@ -312,6 +397,11 @@ func foldedFromRelease(r *domain.Release) FoldedPending {
 	for k, v := range r.ConfigResolved {
 		val := v
 		out.Config[k] = &val
+	}
+	if r.ConfigSensitivity != nil {
+		for k, s := range r.ConfigSensitivity {
+			out.ConfigSensitivity[k] = s
+		}
 	}
 	for name, snap := range r.ProcessSnapshot {
 		out.Scales[name] = snap.Quantity

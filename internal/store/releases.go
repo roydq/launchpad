@@ -50,6 +50,14 @@ func (s *Store) CreateRelease(ctx context.Context, tx *sql.Tx, release *domain.R
 	if err != nil {
 		return err
 	}
+	sens := release.ConfigSensitivity
+	if sens == nil {
+		sens = map[string]string{}
+	}
+	configSensitivity, err := json.Marshal(sens)
+	if err != nil {
+		return err
+	}
 	var createdByPrincipal, createdByToken any
 	if release.CreatedByPrincipalID != nil {
 		createdByPrincipal = release.CreatedByPrincipalID.String()
@@ -59,11 +67,11 @@ func (s *Store) CreateRelease(ctx context.Context, tx *sql.Tx, release *domain.R
 	}
 	exec := s.exec(tx)
 	_, err = exec.ExecContext(ctx, s.q(`
-		INSERT INTO releases (id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at, created_by_principal_id, created_by_token_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		INSERT INTO releases (id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at, created_by_principal_id, created_by_token_id, config_sensitivity)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		release.ID.String(), release.ServiceID.String(), release.Version, release.ArtifactRef,
 		string(configResolved), string(processSnapshot), string(release.Status), release.Description,
-		formatTime(s.driver, release.CreatedAt), createdByPrincipal, createdByToken,
+		formatTime(s.driver, release.CreatedAt), createdByPrincipal, createdByToken, string(configSensitivity),
 	)
 	return err
 }
@@ -166,7 +174,7 @@ func (s *Store) UpdateDeploymentStatus(ctx context.Context, tx *sql.Tx, id uuid.
 	return nil
 }
 
-const releaseSelectCols = `id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at, created_by_principal_id, created_by_token_id`
+const releaseSelectCols = `id, service_id, version, artifact_ref, config_resolved, process_snapshot, status, description, created_at, created_by_principal_id, created_by_token_id, config_sensitivity`
 
 func (s *Store) GetReleaseByID(ctx context.Context, id uuid.UUID) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
@@ -281,9 +289,9 @@ func scanDeployment(scanner interface{ Scan(...any) error }, driver Driver) (*do
 func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Release, error) {
 	var id, serviceID, artifactRef, configResolved, processSnapshot, status, description, createdAt string
 	var version int
-	var createdByPrincipal, createdByToken sql.NullString
+	var createdByPrincipal, createdByToken, configSensitivity sql.NullString
 	if err := scanner.Scan(&id, &serviceID, &version, &artifactRef, &configResolved, &processSnapshot,
-		&status, &description, &createdAt, &createdByPrincipal, &createdByToken); err != nil {
+		&status, &description, &createdAt, &createdByPrincipal, &createdByToken, &configSensitivity); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
 		}
@@ -293,16 +301,21 @@ func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domai
 	_ = json.Unmarshal([]byte(configResolved), &config)
 	var snapshot map[string]domain.ProcessSnapshot
 	_ = json.Unmarshal([]byte(processSnapshot), &snapshot)
+	var sens map[string]string
+	if configSensitivity.Valid && configSensitivity.String != "" {
+		_ = json.Unmarshal([]byte(configSensitivity.String), &sens)
+	}
 	rel := &domain.Release{
-		ID:              uuid.MustParse(id),
-		ServiceID:       uuid.MustParse(serviceID),
-		Version:         version,
-		ArtifactRef:     artifactRef,
-		ConfigResolved:  config,
-		ProcessSnapshot: snapshot,
-		Status:          domain.ReleaseStatus(status),
-		Description:     description,
-		CreatedAt:       parseTime(driver, createdAt),
+		ID:                uuid.MustParse(id),
+		ServiceID:         uuid.MustParse(serviceID),
+		Version:           version,
+		ArtifactRef:       artifactRef,
+		ConfigResolved:    config,
+		ConfigSensitivity: sens,
+		ProcessSnapshot:   snapshot,
+		Status:            domain.ReleaseStatus(status),
+		Description:       description,
+		CreatedAt:         parseTime(driver, createdAt),
 	}
 	if createdByPrincipal.Valid && createdByPrincipal.String != "" {
 		pid := uuid.MustParse(createdByPrincipal.String)

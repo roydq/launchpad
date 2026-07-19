@@ -160,7 +160,7 @@ func NewRoot(cfg Config) *cobra.Command {
 	configCmd := &cobra.Command{Use: "config", Short: "Manage service config (stages by default)"}
 	configGetCmd := &cobra.Command{
 		Use:   "get",
-		Short: "Show config vars (resolved by default)",
+		Short: "Show config vars (resolved by default; secrets as [secret])",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
@@ -177,7 +177,16 @@ func NewRoot(cfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			b, _ := json.MarshalIndent(vars, "", "  ")
+			// Present API sentinel *** as [secret] for humans.
+			display := make(map[string]string, len(vars))
+			for k, v := range vars {
+				if v == "***" {
+					display[k] = "[secret]"
+				} else {
+					display[k] = v
+				}
+			}
+			b, _ := json.MarshalIndent(display, "", "  ")
 			fmt.Println(string(b))
 			return nil
 		},
@@ -199,7 +208,18 @@ func NewRoot(cfg Config) *cobra.Command {
 			if shared, _ := cmd.Flags().GetBool("shared"); shared {
 				layer = "shared"
 			}
-			changes, err := parseKEYVALArgsLayer(args, layer)
+			asSecret, _ := cmd.Flags().GetBool("secret")
+			asPlain, _ := cmd.Flags().GetBool("plain")
+			if asSecret && asPlain {
+				return fmt.Errorf("use only one of --secret or --plain")
+			}
+			sensitivity := ""
+			if asSecret {
+				sensitivity = "secret"
+			} else if asPlain {
+				sensitivity = "plain"
+			}
+			changes, err := parseKEYVALArgsLayer(args, layer, sensitivity)
 			if err != nil {
 				return err
 			}
@@ -210,11 +230,16 @@ func NewRoot(cfg Config) *cobra.Command {
 			if layer == "shared" {
 				label = "shared config"
 			}
+			if asSecret {
+				label += " (secret)"
+			}
 			return stageAndMaybeNow(cmd.Context(), client, project, changes, now, message,
 				fmt.Sprintf("Staged %s %s", label, configKeysSummary(changes)), wait, timeout)
 		},
 	}
 	configSetCmd.Flags().Bool("shared", false, "stage into shared (project×env) layer")
+	configSetCmd.Flags().Bool("secret", false, "mark keys as secret (redacted on read)")
+	configSetCmd.Flags().Bool("plain", false, "mark keys as plain (explicit demote from secret)")
 	configSetCmd.Flags().Bool("now", false, "create a release immediately (requires clean staging)")
 	configSetCmd.Flags().StringP("message", "m", "", "release description (with --now)")
 	addWaitFlags(configSetCmd)
