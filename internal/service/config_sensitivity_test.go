@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,8 +10,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/auth"
 	"github.com/launchpad/launchpad/internal/domain"
+	"github.com/launchpad/launchpad/internal/secrets"
 	"github.com/launchpad/launchpad/internal/store"
 )
+
+func testSecretsBox(t *testing.T) *secrets.Box {
+	t.Helper()
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = byte(i + 3)
+	}
+	box, err := secrets.ParseKey(base64.StdEncoding.EncodeToString(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return box
+}
 
 func TestSecretConfigRedactedAndDeployable(t *testing.T) {
 	ctx := context.Background()
@@ -22,7 +37,7 @@ func TestSecretConfigRedactedAndDeployable(t *testing.T) {
 	if err := store.Migrate(ctx, db, driver); err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(db, driver)
+	st := store.New(db, driver).WithSecrets(testSecretsBox(t))
 
 	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	project := &domain.Project{WorkspaceID: workspaceID, Name: "sec-app"}

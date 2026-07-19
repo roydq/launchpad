@@ -1,6 +1,6 @@
 package domain
 
-// Config sensitivity (S1). Encryption at rest is S2.
+// Config sensitivity (S1 typing + S2 encryption at rest via internal/secrets).
 
 const (
 	SensitivityPlain  = "plain"
