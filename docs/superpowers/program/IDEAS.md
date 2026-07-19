@@ -37,6 +37,9 @@
 | 2026-07-18 | secrets-s1 | CLI `config get --typed` pretty printer for agents | P3 | A | After S1; default map + sentinel is enough for humans |
 | 2026-07-18 | secrets-s1 | Reject staging sensitivity without value on demote | P3 | D | Explicit plain demote already requires a value via KEY=VAL |
 | 2026-07-18 | secrets-s1 | Audit events for config set: key + sensitivity only | P2 | D | Not wired this PR; keys already not logging values |
+| 2026-07-18 | secrets-s2 | Dual-key rotation job + `key_id` beyond `v1:` prefix | P3 | D | Spec notes dual-key re-encrypt; single key is enough for now |
+| 2026-07-18 | secrets-s2 | Auto-reencrypt legacy plaintext secrets on list | P3 | D | Currently open-as-plaintext until next write seals |
+| 2026-07-18 | secrets-s2 | Dev convenience: generate+persist key under `.launchpad/` | P3 | A | Spec optional; env-only for S2 |
 
 ## Severity guide
 

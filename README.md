@@ -169,6 +169,9 @@ With mise activated in your shell (`mise activate`), `go` and `make build` work 
 ```bash
 make build
 make migrate-up
+# Optional: secret config at rest (required for `config set --secret`)
+export LAUNCHPAD_SECRETS_KEY="$(openssl rand -base64 32)"  # same value for api + worker
+
 LAUNCHPAD_BOOTSTRAP_TOKEN=dev-bootstrap-token make run-api   # terminal 1
 LAUNCHPAD_DATABASE_URL="file:launchpad.db" make run-worker   # terminal 2
 
@@ -208,6 +211,7 @@ Environment knobs: `LAUNCHPAD_E2E_IMAGE`, `LAUNCHPAD_E2E_NAMESPACE`, `LAUNCHPAD_
 | `LAUNCHPAD_TOKEN` | Bearer token |
 | `LAUNCHPAD_PROJECT` | Active project (overrides `~/.launchpad/config`) |
 | `LAUNCHPAD_ENV` | Active environment (overrides config file; default `dev`) |
+| `LAUNCHPAD_SECRETS_KEY` | Base64-encoded 32-byte AES key for secret config at rest (API **and** worker). Required to `config set --secret` / secret writes. Generate: `openssl rand -base64 32` |
 
 `launchpad use <project>` and `launchpad env use <name>` write sticky context to `~/.launchpad/config`. API calls send `X-Launchpad-Environment`.
 
