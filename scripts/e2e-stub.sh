@@ -33,17 +33,22 @@ mkdir -p "${WORKDIR}"
 echo "==> build"
 mise exec -- make build
 
+# Fixed AES-256 key (base64) for e2e secret config encryption (S2).
+SECRETS_KEY="${LAUNCHPAD_SECRETS_KEY:-8+0PgKCW0812sx/4CpEQ2Rv18dQCZTRK7IyZQDwLQEk=}"
+
 echo "==> start api (${API_ADDR})"
 LAUNCHPAD_DATABASE_URL="${DB_URL}" \
 LAUNCHPAD_AUTO_MIGRATE=true \
 LAUNCHPAD_BOOTSTRAP_TOKEN="${BOOTSTRAP}" \
 LAUNCHPAD_API_ADDR="${API_ADDR}" \
+LAUNCHPAD_SECRETS_KEY="${SECRETS_KEY}" \
   ./bin/launchpad-api >"${API_LOG}" 2>&1 &
 API_PID=$!
 
 echo "==> start worker (stub only)"
 LAUNCHPAD_DATABASE_URL="${DB_URL}" \
 LAUNCHPAD_ENABLE_KUBERNETES=false \
+LAUNCHPAD_SECRETS_KEY="${SECRETS_KEY}" \
   ./bin/launchpad-worker >"${WORKER_LOG}" 2>&1 &
 WORKER_PID=$!
 

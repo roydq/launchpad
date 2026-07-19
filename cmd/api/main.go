@@ -11,6 +11,7 @@ import (
 
 	"github.com/launchpad/launchpad/internal/api"
 	"github.com/launchpad/launchpad/internal/auth"
+	"github.com/launchpad/launchpad/internal/secrets"
 	"github.com/launchpad/launchpad/internal/service"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/internal/target"
@@ -38,6 +39,17 @@ func main() {
 	}
 
 	st := store.New(db, driver)
+	secretsBox, err := secrets.LoadFromEnv()
+	if err != nil {
+		logger.Error("secrets key", "error", err)
+		os.Exit(1)
+	}
+	if secretsBox != nil {
+		st.WithSecrets(secretsBox)
+		logger.Info("secrets encryption enabled")
+	} else {
+		logger.Warn("LAUNCHPAD_SECRETS_KEY unset; secret config writes will fail")
+	}
 	authSvc := auth.NewService(st, os.Getenv("LAUNCHPAD_BOOTSTRAP_TOKEN"))
 	projectSvc := service.NewProjectService(st)
 	configSvc := service.NewConfigService(st, projectSvc)

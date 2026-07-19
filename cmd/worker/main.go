@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/launchpad/launchpad/internal/jobs"
+	"github.com/launchpad/launchpad/internal/secrets"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/internal/target"
 	k8starget "github.com/launchpad/launchpad/internal/target/kubernetes"
@@ -28,6 +29,17 @@ func main() {
 	defer db.Close()
 
 	st := store.New(db, driver)
+	secretsBox, err := secrets.LoadFromEnv()
+	if err != nil {
+		logger.Error("secrets key", "error", err)
+		os.Exit(1)
+	}
+	if secretsBox != nil {
+		st.WithSecrets(secretsBox)
+		logger.Info("secrets encryption enabled")
+	} else {
+		logger.Warn("LAUNCHPAD_SECRETS_KEY unset; encrypted secret config will fail closed")
+	}
 	registry := target.NewRegistry()
 	registry.Register(stub.New())
 
