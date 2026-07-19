@@ -10,7 +10,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | secrets-s2 | Secrets S2: AES-GCM at rest | D | pr-open | Spec § S2: `LAUNCHPAD_SECRETS_KEY`; encrypt secret rows + release snapshot; worker decrypt. | `feat/secrets-s2` |
+| 1 | secrets-s2 | Secrets S2: AES-GCM at rest | D | pr-open | Spec § S2: `LAUNCHPAD_SECRETS_KEY`; encrypt secret rows + release snapshot; worker decrypt. | `feat/secrets-s2` · [#29](https://github.com/roydq/launchpad/pull/29) |
 | 2 | diff-env-env | Diff env↔env (release archaeology) | A | ready | DX backlog P2; redaction-aware after secrets S1 | — |
 | 3 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
 | 4 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
