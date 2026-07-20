@@ -61,10 +61,10 @@ func TestApplyAndWaitForReady(t *testing.T) {
 	release := domain.Release{Version: 3, ArtifactRef: "nginx:1.25"}
 	config := map[string]string{"PORT": "3000"}
 
-	if err := upsertSecret(ctx, client, buildSecret(project, svc, env, config)); err != nil {
+	if err := upsertSecret(ctx, client, buildSecret(project, svc, env, config, "")); err != nil {
 		t.Fatal(err)
 	}
-	dep, err := upsertDeployment(ctx, client, buildDeployment(project, svc, env, release, domain.Process{Name: "web", Quantity: 1, Expose: "http"}, config))
+	dep, err := upsertDeployment(ctx, client, buildDeployment(project, svc, env, release, domain.Process{Name: "web", Quantity: 1, Expose: "http"}, config, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,8 @@ func TestDeployAppliesManifests(t *testing.T) {
 		t.Fatal("expected timeout error for unready deployment")
 	}
 
-	secret, err := client.CoreV1().Secrets("launchpad-test").Get(ctx, secretName("my-api", "my-api"), metav1.GetOptions{})
+	hash := configContentHash(config)
+	secret, err := client.CoreV1().Secrets("launchpad-test").Get(ctx, configSecretName("my-api", "my-api", hash), metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +160,7 @@ func TestScaleUpdatesReplicas(t *testing.T) {
 	svc := testService(project)
 	env := testEnvironment()
 	release := domain.Release{Version: 1, ArtifactRef: "nginx:1.25"}
-	dep := buildDeployment(project, svc, env, release, domain.Process{Name: "web", Quantity: 1}, nil)
+	dep := buildDeployment(project, svc, env, release, domain.Process{Name: "web", Quantity: 1}, nil, "")
 	_, err := client.AppsV1().Deployments(dep.Namespace).Create(ctx, dep, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)

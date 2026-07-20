@@ -1,6 +1,9 @@
 package kubernetes
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,19 +15,47 @@ import (
 	"github.com/launchpad/launchpad/internal/target"
 )
 
-func buildSecret(project domain.Project, service domain.Service, env domain.Environment, config map[string]string) *corev1.Secret {
+const annotationConfigHash = "launchpad.dev/config-hash"
+
+// configContentHash returns first 12 hex chars of sha256 over canonical sorted key=value lines.
+func configContentHash(config map[string]string) string {
+	keys := make([]string, 0, len(config))
+	for k := range config {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	h := sha256.New()
+	for _, k := range keys {
+		_, _ = h.Write([]byte(k))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(config[k]))
+		_, _ = h.Write([]byte{0})
+	}
+	sum := hex.EncodeToString(h.Sum(nil))
+	if len(sum) > 12 {
+		return sum[:12]
+	}
+	return sum
+}
+
+func buildSecret(project domain.Project, service domain.Service, env domain.Environment, config map[string]string, hash string) *corev1.Secret {
 	data := make(map[string][]byte, len(config))
 	for k, v := range config {
 		data[k] = []byte(v)
 	}
+	if hash == "" {
+		hash = configContentHash(config)
+	}
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName(project.Name, service.Name),
+			Name:      configSecretName(project.Name, service.Name, hash),
 			Namespace: mustNamespace(env),
 			Labels:    resourceLabels(project.Name, service.Name, "config"),
 			Annotations: map[string]string{
-				annotationProjectName: project.Name,
-				annotationServiceName: service.Name,
+				annotationProjectName:    project.Name,
+				annotationServiceName:    service.Name,
+				annotationConfigHash:     hash,
+				annotationReleaseVersion: "", // filled by caller when known
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -32,13 +63,17 @@ func buildSecret(project domain.Project, service domain.Service, env domain.Envi
 	}
 }
 
-func buildDeployment(project domain.Project, service domain.Service, env domain.Environment, release domain.Release, process domain.Process, config map[string]string) *appsv1.Deployment {
+func buildDeployment(project domain.Project, service domain.Service, env domain.Environment, release domain.Release, process domain.Process, config map[string]string, configHash string) *appsv1.Deployment {
 	replicas := int32(process.Quantity)
 	if replicas < 1 {
 		replicas = 1
 	}
 	port := containerPort(config)
 	labels := resourceLabels(project.Name, service.Name, process.Name)
+	if configHash == "" {
+		configHash = configContentHash(config)
+	}
+	secName := configSecretName(project.Name, service.Name, configHash)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -49,6 +84,7 @@ func buildDeployment(project domain.Project, service domain.Service, env domain.
 				annotationProjectName:    project.Name,
 				annotationServiceName:    service.Name,
 				annotationReleaseVersion: strconv.Itoa(release.Version),
+				annotationConfigHash:     configHash,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -61,11 +97,12 @@ func buildDeployment(project domain.Project, service domain.Service, env domain.
 					Labels: labels,
 					Annotations: map[string]string{
 						annotationReleaseVersion: strconv.Itoa(release.Version),
+						annotationConfigHash:     configHash,
 					},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						containerFromProcess(process, release.ArtifactRef, port, project.Name, service.Name),
+						containerFromProcess(process, release.ArtifactRef, port, secName),
 					},
 				},
 			},
@@ -101,7 +138,7 @@ func buildService(project domain.Project, service domain.Service, env domain.Env
 	}
 }
 
-func containerFromProcess(process domain.Process, image string, port int32, projectName, serviceName string) corev1.Container {
+func containerFromProcess(process domain.Process, image string, port int32, configSecret string) corev1.Container {
 	c := corev1.Container{
 		Name:  process.Name,
 		Image: image,
@@ -112,7 +149,7 @@ func containerFromProcess(process domain.Process, image string, port int32, proj
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secretName(projectName, serviceName),
+						Name: configSecret,
 					},
 				},
 			},
