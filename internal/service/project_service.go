@@ -209,9 +209,18 @@ func (s *ProjectService) CloneEnvironment(ctx context.Context, projectName, from
 	svcWrites := map[string]store.ConfigWrite{}
 	sensPlain := domain.SensitivityPlain
 
+	sensSecret := domain.SensitivitySecret
+	empty := ""
+	// Placeholders for secrets: empty value + sensitivity secret when encryption is available.
+	// Without a secrets box, only report needs_value (cannot seal secret rows).
+	canPlaceholder := s.store.Secrets() != nil
+
 	for k, v := range sharedVals {
 		if domain.IsSecret(sharedSens[k]) {
 			needsSet[k] = struct{}{}
+			if canPlaceholder {
+				sharedWrites[k] = store.ConfigWrite{Value: &empty, Sensitivity: &sensSecret}
+			}
 			continue
 		}
 		val := v
@@ -221,6 +230,9 @@ func (s *ProjectService) CloneEnvironment(ctx context.Context, projectName, from
 	for k, v := range svcVals {
 		if domain.IsSecret(svcSens[k]) {
 			needsSet[k] = struct{}{}
+			if canPlaceholder {
+				svcWrites[k] = store.ConfigWrite{Value: &empty, Sensitivity: &sensSecret}
+			}
 			continue
 		}
 		val := v

@@ -76,15 +76,18 @@ func TestCloneEnvironmentPlainAndSecrets(t *testing.T) {
 		t.Fatalf("needs_value %+v", result.NeedsValue)
 	}
 
-	svcVals, _, err := st.ListConfigVarsWithSensitivityTx(ctx, nil, svc.ID, result.Environment.ID)
+	svcVals, svcSens, err := st.ListConfigVarsWithSensitivityTx(ctx, nil, svc.ID, result.Environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if svcVals["PORT"] != "8080" {
 		t.Fatalf("PORT %q", svcVals["PORT"])
 	}
-	if _, ok := svcVals["DATABASE_URL"]; ok {
-		t.Fatalf("secret should not be copied: %q", svcVals["DATABASE_URL"])
+	if svcVals["DATABASE_URL"] != "" {
+		t.Fatalf("secret placeholder must be empty, got %q", svcVals["DATABASE_URL"])
+	}
+	if !domain.IsSecret(svcSens["DATABASE_URL"]) {
+		t.Fatalf("expected secret sensitivity for placeholder, got %q", svcSens["DATABASE_URL"])
 	}
 
 	sharedVals, _, err := st.ListSharedConfigVarsWithSensitivityTx(ctx, nil, project.ID, result.Environment.ID)
