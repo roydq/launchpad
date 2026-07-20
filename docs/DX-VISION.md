@@ -165,7 +165,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Server-side pending/diff preview | **Shipped** — `GET …/preview` |
 | `launchpad run` / env pull | Later |
 | Ephemeral / PR environments | Later |
-| Env clone | **Ready** — S2 shipped; clone policy in secrets design (QUEUE `env-clone`) |
+| Env clone | **Shipping** — `env clone` / `POST …/clone` (plain copy; secrets needs_value) |
 
 ### P4 — Agent surface
 

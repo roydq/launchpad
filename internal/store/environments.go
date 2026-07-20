@@ -51,6 +51,11 @@ func (s *Store) CreateEnvironment(ctx context.Context, env *domain.Environment) 
 	})
 }
 
+// CreateEnvironmentTx inserts an environment within an existing transaction.
+func (s *Store) CreateEnvironmentTx(ctx context.Context, tx *sql.Tx, env *domain.Environment) error {
+	return s.createEnvironmentTx(ctx, tx, env)
+}
+
 func scanEnvironment(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Environment, error) {
 	var id, projectID, name, targetType, targetConfig string
 	var createdAt, updatedAt string

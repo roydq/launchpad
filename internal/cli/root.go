@@ -162,6 +162,43 @@ func NewRoot(cfg Config) *cobra.Command {
 	envCreate.Flags().String("target", "stub", "target type")
 	envCreate.Flags().String("namespace", "default", "target namespace")
 	envCmd.AddCommand(envCreate)
+
+	envClone := &cobra.Command{
+		Use:   "clone [from] [to]",
+		Short: "Clone an environment (plain config; secrets listed as needs_value)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			targetType, _ := cmd.Flags().GetString("target")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			ephemeral, _ := cmd.Flags().GetBool("ephemeral")
+			result, err := client.CloneEnvironment(cmd.Context(), project, args[0], args[1], targetType, namespace, ephemeral)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("created environment %s from %s (target=%s)\n", result.Environment.Name, result.From, result.Environment.TargetType)
+			if len(result.ClonedPlain) > 0 {
+				fmt.Printf("cloned plain: %s\n", strings.Join(result.ClonedPlain, ", "))
+			} else {
+				fmt.Println("cloned plain: (none)")
+			}
+			if len(result.NeedsValue) > 0 {
+				fmt.Printf("needs_value (secrets): %s\n", strings.Join(result.NeedsValue, ", "))
+				fmt.Printf("next: launchpad env use %s && launchpad config set --secret KEY=...\n", result.Environment.Name)
+			} else {
+				fmt.Printf("next: launchpad env use %s && launchpad deploy --image <ref>\n", result.Environment.Name)
+			}
+			return nil
+		},
+	}
+	envClone.Flags().String("target", "", "override target type (default: copy from source)")
+	envClone.Flags().String("namespace", "", "override namespace (default: copy from source)")
+	envClone.Flags().Bool("ephemeral", false, "mark destination as ephemeral")
+	envCmd.AddCommand(envClone)
+
 	envCmd.AddCommand(&cobra.Command{
 		Use:   "use [name]",
 		Short: "Set the active environment",
