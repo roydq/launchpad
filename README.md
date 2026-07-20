@@ -36,7 +36,8 @@ Walkthrough: [`examples/hello-stub/README.md`](examples/hello-stub/README.md).
 ```bash
 # Optional: show project@env in your shell prompt
 # eval "$(launchpad shell-init zsh)"   # or bash
-
+# Optional: shell completion
+# source <(launchpad completion bash)  # or zsh / fish
 # Recipe bootstrap (or: projects create + use + image)
 launchpad new list
 launchpad new my-api                  # hello-stub: create, use, stage hello:v1
