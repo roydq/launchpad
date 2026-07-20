@@ -294,6 +294,32 @@ func changesetViewResponse(view *service.ChangesetView) changesetDTO {
 	return dto
 }
 
+type unstageLastDTO struct {
+	Change         changesetChangeDTO `json:"change"`
+	RemainingCount int                `json:"remaining_count"`
+	Environment    string             `json:"environment,omitempty"`
+}
+
+func unstageLastResponse(result *service.UnstageLastResult) unstageLastDTO {
+	c := result.Change
+	dto := changesetChangeDTO{
+		ID:          c.ID.String(),
+		ServiceName: c.ServiceName,
+		Type:        string(c.Type),
+		Payload:     c.Payload,
+		CreatedAt:   c.CreatedAt,
+	}
+	if c.ServiceID != nil {
+		s := c.ServiceID.String()
+		dto.ServiceID = &s
+	}
+	return unstageLastDTO{
+		Change:         dto,
+		RemainingCount: result.RemainingCount,
+		Environment:    result.EnvironmentName,
+	}
+}
+
 func releaseJobResponse(result *service.CreateReleaseResult) releaseJobDTO {
 	var out releaseJobDTO
 	out.Deployment.ID = result.Deployment.ID.String()

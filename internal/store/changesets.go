@@ -73,13 +73,23 @@ func (s *Store) SetChangesetEnvironment(ctx context.Context, tx *sql.Tx, changes
 
 func (s *Store) AddChangesetChanges(ctx context.Context, tx *sql.Tx, changesetID uuid.UUID, changes []domain.ChangesetChange) error {
 	exec := s.exec(tx)
-	now := formatTime(s.driver, time.Now().UTC())
+	// Use RFC3339Nano so ORDER BY created_at is deterministic across drivers
+	// (SQLite formatTime is second-precision only). Keep stamps monotonic within
+	// and across batches for unstage-last.
+	base := time.Now().UTC()
+	if maxAt, err := s.maxChangesetChangeCreatedAt(ctx, tx, changesetID); err == nil && !maxAt.IsZero() && !maxAt.Before(base) {
+		base = maxAt.Add(time.Microsecond)
+	}
+	var lastStamp string
 	for i := range changes {
 		if changes[i].ID == uuid.Nil {
 			changes[i].ID = uuid.New()
 		}
 		changes[i].ChangesetID = changesetID
-		changes[i].CreatedAt = time.Now().UTC()
+		changes[i].CreatedAt = base.Add(time.Duration(i) * time.Microsecond)
+		// Always nano precision for change rows (lexicographic order works for RFC3339Nano).
+		stamp := changes[i].CreatedAt.UTC().Format(time.RFC3339Nano)
+		lastStamp = stamp
 		var serviceID any
 		if changes[i].ServiceID != nil {
 			serviceID = changes[i].ServiceID.String()
@@ -88,14 +98,33 @@ func (s *Store) AddChangesetChanges(ctx context.Context, tx *sql.Tx, changesetID
 			INSERT INTO changeset_changes (id, changeset_id, service_id, service_name, type, payload, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`),
 			changes[i].ID.String(), changesetID.String(), serviceID, changes[i].ServiceName,
-			string(changes[i].Type), string(changes[i].Payload), now,
+			string(changes[i].Type), string(changes[i].Payload), stamp,
 		)
 		if err != nil {
 			return err
 		}
 	}
-	_, err := exec.ExecContext(ctx, s.q(`UPDATE changesets SET updated_at = ? WHERE id = ?`), now, changesetID.String())
+	if lastStamp == "" {
+		lastStamp = formatTime(s.driver, base)
+	}
+	_, err := exec.ExecContext(ctx, s.q(`UPDATE changesets SET updated_at = ? WHERE id = ?`), lastStamp, changesetID.String())
 	return err
+}
+
+func (s *Store) maxChangesetChangeCreatedAt(ctx context.Context, tx *sql.Tx, changesetID uuid.UUID) (time.Time, error) {
+	row := s.exec(tx).QueryRowContext(ctx, s.q(`
+		SELECT created_at FROM changeset_changes
+		WHERE changeset_id = ?
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1`), changesetID.String())
+	var raw string
+	if err := row.Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return time.Time{}, nil
+		}
+		return time.Time{}, err
+	}
+	return parseTime(s.driver, raw), nil
 }
 
 func (s *Store) DiscardOpenChangeset(ctx context.Context, projectID uuid.UUID) error {
@@ -112,6 +141,33 @@ func (s *Store) DiscardOpenChangeset(ctx context.Context, projectID uuid.UUID) e
 		return launchpad.ErrNotFound
 	}
 	return nil
+}
+
+// DeleteLastChangesetChange removes the chronologically last change row for an open changeset.
+// Ordering: created_at DESC, id DESC. Returns the deleted change or ErrNotFound.
+func (s *Store) DeleteLastChangesetChange(ctx context.Context, tx *sql.Tx, changesetID uuid.UUID) (*domain.ChangesetChange, error) {
+	row := s.exec(tx).QueryRowContext(ctx, s.q(`
+		SELECT id, changeset_id, service_id, service_name, type, payload, created_at
+		FROM changeset_changes
+		WHERE changeset_id = ?
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1`), changesetID.String())
+	change, err := scanChangesetChange(row, s.driver)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, launchpad.ErrNotFound
+		}
+		return nil, err
+	}
+	exec := s.exec(tx)
+	if _, err := exec.ExecContext(ctx, s.q(`DELETE FROM changeset_changes WHERE id = ?`), change.ID.String()); err != nil {
+		return nil, err
+	}
+	now := formatTime(s.driver, time.Now().UTC())
+	if _, err := exec.ExecContext(ctx, s.q(`UPDATE changesets SET updated_at = ? WHERE id = ?`), now, changesetID.String()); err != nil {
+		return nil, err
+	}
+	return change, nil
 }
 
 func (s *Store) CommitChangeset(ctx context.Context, tx *sql.Tx, changesetID uuid.UUID) error {

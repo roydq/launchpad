@@ -79,6 +79,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | CLI prints recovery hints | **Shipped** |
 | Sensitive-env confirmations (`production` + `--yes`) | **Shipped** (CLI policy) |
 | Server-side pending/diff preview | **Shipped** |
+| Unstage last mutation | **Shipped** |
 | Recipes / `launchpad new` templates | Later |
 | MCP server | After core loop solid |
 
@@ -153,7 +154,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | `releases show N` | **Shipped** |
 | Diff release↔release | **Shipped** |
 | Diff env↔env | Later |
-| Unstage last mutation | Later |
+| Unstage last mutation | **Shipped** (`launchpad unstage`) |
 | Sensitive-env confirmations | **Shipped** (`--yes` on production) |
 
 ### P3 — Local parity and previews
@@ -226,7 +227,8 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **Secrets S2 (AES-GCM at rest)** | QUEUE `secrets-s2` — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2; S1 shipped PR #28 |
+| **Unstage last mutation** | QUEUE `unstage-last` — [spec](superpowers/specs/2026-07-19-unstage-last-design.md) |
+| Secrets S2 (AES-GCM at rest) | **Shipped** (#29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2 |
 | ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
 | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |

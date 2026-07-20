@@ -463,6 +463,29 @@ func (c *Client) DiscardChangeset(ctx context.Context, project string) error {
 	return err
 }
 
+// UnstageLastResult is the response from DELETE …/changeset/changes/last.
+type UnstageLastResult struct {
+	Change struct {
+		ID          string          `json:"id"`
+		ServiceName string          `json:"service_name"`
+		Type        string          `json:"type"`
+		Payload     json.RawMessage `json:"payload"`
+		CreatedAt   time.Time       `json:"created_at"`
+	} `json:"change"`
+	RemainingCount int    `json:"remaining_count"`
+	Environment    string `json:"environment,omitempty"`
+}
+
+// UnstageLastChange removes the most recently staged change from the open changeset.
+func (c *Client) UnstageLastChange(ctx context.Context, project string) (*UnstageLastResult, error) {
+	var out UnstageLastResult
+	_, err := c.do(ctx, http.MethodDelete, "/v1/projects/"+project+"/changeset/changes/last", nil, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) GetJob(ctx context.Context, id string) (*Job, error) {
 	var job Job
 	_, err := c.do(ctx, http.MethodGet, "/v1/jobs/"+id, nil, &job)

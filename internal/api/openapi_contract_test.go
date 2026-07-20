@@ -29,6 +29,7 @@ var expectedOpenAPIPaths = []string{
 	"/v1/projects/{project}/promote",
 	"/v1/projects/{project}/changeset",
 	"/v1/projects/{project}/changeset/changes",
+	"/v1/projects/{project}/changeset/changes/last",
 	"/v1/projects/{project}/changeset/push",
 	"/v1/projects/{project}/preview",
 }
@@ -97,6 +98,7 @@ func TestHandlersRoutesMentionedInOpenAPIList(t *testing.T) {
 		`"/projects/{project}/promote"`,
 		`"/projects/{project}/changeset"`,
 		`"/projects/{project}/changeset/changes"`,
+		`"/projects/{project}/changeset/changes/last"`,
 		`"/projects/{project}/changeset/push"`,
 		`"/projects/{project}/preview"`,
 		`"/healthz"`,

@@ -485,6 +485,32 @@ func NewRoot(cfg Config) *cobra.Command {
 	})
 
 	root.AddCommand(&cobra.Command{
+		Use:   "unstage",
+		Short: "Remove the most recently staged change (keep the rest of the batch)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			res, err := client.UnstageLastChange(cmd.Context(), project)
+			if err != nil {
+				if strings.Contains(err.Error(), "status 404") || strings.Contains(err.Error(), "not found") {
+					fmt.Println("nothing to unstage")
+					return nil
+				}
+				return err
+			}
+			desc := formatUnstagedChange(res)
+			if res.RemainingCount == 0 {
+				fmt.Printf("unstaged %s (staging empty)\n", desc)
+			} else {
+				fmt.Printf("unstaged %s (%d pending remaining)\n", desc, res.RemainingCount)
+			}
+			return nil
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
 		Use:   "ps",
 		Short: "List processes for the active project",
 		RunE: func(cmd *cobra.Command, args []string) error {
