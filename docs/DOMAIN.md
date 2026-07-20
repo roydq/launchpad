@@ -649,8 +649,10 @@ GET    /healthz
 | Command | Notes |
 |---------|-------|
 | `launchpad projects create` | Bootstraps project + `dev` + primary service + `web` |
-| `launchpad use <project>` | Persists project context to `~/.launchpad/config` |
-| `launchpad env list/create/use/current` | Environments; sticky env (default `dev`); dirty batch blocks switch |
+| `launchpad new [recipe] <name>` | CLI recipe bootstrap (create + context + optional stage) |
+| `launchpad use <project>` | Persists project context to `~/.launchpad/config` (+ project-local if present) |
+| `launchpad prompt` / `shell-init` | Shell prompt fragment `project@env` |
+| `launchpad env list/create/use/current/clone` | Environments; sticky env (default `dev`); dirty batch blocks switch; clone copies plain config only |
 | `launchpad config get/set/unset` | Live get; set/unset stage by default (`--now` for immediate) |
 | `launchpad scale` / `image` | Stage scale or image (`--now` for immediate) |
 | `launchpad diff` / `status` / `reset` / `unstage` | Review pending vs last deploy **in current env**; discard all staging, or unstage last mutation |
