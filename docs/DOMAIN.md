@@ -25,7 +25,7 @@ Launchpad aims to be the **mise of runtime application management**: zero ceremo
 | Design principles, entities, **Key Invariants** | **Yes** — product truth |
 | **MVP + 2a/2b** and shipped API/CLI tables | **Yes** — what runs on `main` |
 | Multi-service, bindings, full Target surface | **Planned** — do not half-implement (2a multi-env, 2b layered config, primary-service promote **shipped**) |
-| Runtime target depth (commands, health, immutable config objects, extensions) | **Planned end state** — design approved; implement per queue slices; do not half-build snapshot fields without deploy/target wiring |
+| Runtime target depth (commands, health, immutable config objects, extensions) | **Shipped** (ADM 2026-07-20) — process mutations, health probes, hashed Secrets, extensions |
 | Phased implementation table | Roadmap; see “Known invariant debt” until closed |
 
 ---
@@ -661,10 +661,10 @@ Design: same runtime-target-depth spec (slice 4).
 | `Deploy` | **Used** | Required (stub + kubernetes) |
 | `Logs` | **Shipped** | stub + kubernetes |
 | `Status` | Partial (`ps` / inspect) | stub + k8s helpers |
-| Portable health → readiness | **Planned** | K8s probes; stub no-op |
+| Portable health → readiness | **Shipped** | K8s probes; deploy_timeout in target_config |
 | Immutable config objects | **Planned** | K8s Secrets content-hash |
 | Target extensions + capabilities | **Planned** | schema + apply |
-| Process command mutations + Procfile | **Planned** | command already applied if set |
+| Process command mutations + Procfile | **Shipped** | process.set/unset/apply; shell form |
 | `Scale` / `Destroy` / target-side `Rollback` | Scale/destroy not exposed as worker jobs yet | May exist as helpers |
 
 Do not grow control-plane callers for Scale/Destroy until those features are in-scope. Optional interface split can follow then.
