@@ -391,10 +391,12 @@ func (c *Client) GetChangeset(ctx context.Context, project string) (*Changeset, 
 	return &result, nil
 }
 
-// Preview is the server-side pending or release-compare diff.
+// Preview is the server-side pending, release-compare, or env↔env diff.
 type Preview struct {
 	Mode            string `json:"mode"`
 	Environment     string `json:"environment,omitempty"`
+	FromEnvironment string `json:"from_environment,omitempty"`
+	ToEnvironment   string `json:"to_environment,omitempty"`
 	BaselineVersion *int   `json:"baseline_version,omitempty"`
 	FromVersion     *int   `json:"from_version,omitempty"`
 	ToVersion       *int   `json:"to_version,omitempty"`
@@ -435,6 +437,17 @@ func (c *Client) PreviewPending(ctx context.Context, project string) (*Preview, 
 // PreviewReleases compares two release versions.
 func (c *Client) PreviewReleases(ctx context.Context, project string, fromV, toV int) (*Preview, error) {
 	path := fmt.Sprintf("/v1/projects/%s/preview?from_release=%d&to_release=%d", project, fromV, toV)
+	var out Preview
+	_, err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return &out, err
+}
+
+// PreviewEnvironments compares last deployed releases in fromEnv vs toEnv.
+func (c *Client) PreviewEnvironments(ctx context.Context, project, fromEnv, toEnv string) (*Preview, error) {
+	q := url.Values{}
+	q.Set("from_env", fromEnv)
+	q.Set("to_env", toEnv)
+	path := "/v1/projects/" + project + "/preview?" + q.Encode()
 	var out Preview
 	_, err := c.do(ctx, http.MethodGet, path, nil, &out)
 	return &out, err

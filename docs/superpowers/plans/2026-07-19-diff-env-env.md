@@ -1,6 +1,6 @@
 # Diff env↔env Implementation Plan
 
-> **Status: In Progress** — branch `feat/diff-env-env`
+> **Status: Completed** — branch `feat/diff-env-env`
 
 > **For agentic workers:** Read `docs/FEATURE-DEVELOPMENT.md`. Use `/launchpad-domain` for entity changes, `/launchpad-dev` for verification. Commit after each task with the message specified below.
 
@@ -22,13 +22,13 @@
 - Modify: `internal/service/preview.go`
 - Modify: `internal/service/preview_test.go`
 
-- [ ] Add `BuildSnapshotDiff(from, to *domain.Release) EffectiveDiff` (full key/process union; redaction)
-- [ ] Add `FormatSnapshotDiffSummary(diff EffectiveDiff) string` (empty → `No differences\n`)
-- [ ] Add `PreviewEnvironments(ctx, project, fromEnv, toEnv)` on `ChangesetService`
-- [ ] Extend `PreviewResult` with `FromEnvironment` / `ToEnvironment` JSON fields
-- [ ] Tests: different releases, secrets, same env error, empty env
-- [ ] Verify: `mise exec -- go test ./internal/service/...`
-- [ ] Commit: `feat(service): env↔env snapshot preview diff`
+- [x] Add `BuildSnapshotDiff(from, to *domain.Release) EffectiveDiff` (full key/process union; redaction)
+- [x] Add `FormatSnapshotDiffSummary(diff EffectiveDiff) string` (empty → `No differences\n`)
+- [x] Add `PreviewEnvironments(ctx, project, fromEnv, toEnv)` on `ChangesetService`
+- [x] Extend `PreviewResult` with `FromEnvironment` / `ToEnvironment` JSON fields
+- [x] Tests: different releases, secrets, same env error, empty env
+- [x] Verify: `mise exec -- go test ./internal/service/...`
+- [x] Commit: `feat(service): env↔env snapshot preview diff`
 
 ## Task 2: API + OpenAPI + apiclient
 
@@ -37,11 +37,11 @@
 - Modify: `docs/openapi.yaml`
 - Modify: `pkg/apiclient/client.go`
 
-- [ ] Dispatch `from_env`/`to_env` in `preview` handler; mutual exclusion with release pair
-- [ ] OpenAPI query params + Preview schema fields
-- [ ] `Client.PreviewEnvironments(ctx, project, fromEnv, toEnv)`
-- [ ] Verify: `mise exec -- go test ./internal/api/... ./pkg/apiclient/...` and `make openapi-check`
-- [ ] Commit: `feat(api): preview from_env/to_env query params`
+- [x] Dispatch `from_env`/`to_env` in `preview` handler; mutual exclusion with release pair
+- [x] OpenAPI query params + Preview schema fields
+- [x] `Client.PreviewEnvironments(ctx, project, fromEnv, toEnv)`
+- [x] Verify: `mise exec -- go test ./internal/api/... ./pkg/apiclient/...` and `make openapi-check`
+- [x] Commit: `feat(api): preview from_env/to_env query params`
 
 ## Task 3: CLI + docs
 
@@ -51,12 +51,12 @@
 - Modify: `docs/DX-VISION.md`, `docs/superpowers/program/QUEUE.md`
 - Modify: plan status
 
-- [ ] Flags `--from-env` / `--to-env` on `diff`; mutual exclusion with release flags
-- [ ] Print `# env A (vN) → B (vM)` header + summary
-- [ ] Docs sync; mark queue implementing → pr-open on PR
-- [ ] Verify: `mise exec -- make test && make build && go vet ./...`
-- [ ] Commit: `feat(cli): diff --from-env/--to-env`
-- [ ] Commit: `docs: env↔env diff shipped notes`
+- [x] Flags `--from-env` / `--to-env` on `diff`; mutual exclusion with release flags
+- [x] Print `# env A (vN) → B (vM)` header + summary
+- [x] Docs sync; mark queue implementing → pr-open on PR
+- [x] Verify: `mise exec -- make test && make build && go vet ./...`
+- [x] Commit: `feat(cli): diff --from-env/--to-env`
+- [x] Commit: `docs: env↔env diff shipped notes`
 
 ---
 
