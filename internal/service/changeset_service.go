@@ -39,7 +39,8 @@ type StageChangeInput struct {
 	Command  *string              `json:"command,omitempty"`
 	Expose   *string              `json:"expose,omitempty"`
 	Procfile string               `json:"procfile,omitempty"`
-	Health   *domain.ProcessHealth `json:"health,omitempty"`
+	Health           *domain.ProcessHealth      `json:"health,omitempty"`
+	TargetExtensions map[string]json.RawMessage `json:"target_extensions,omitempty"`
 }
 
 type StageChangesInput struct {
@@ -338,6 +339,7 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 		}
 		payload, err := json.Marshal(domain.ProcessSetPayload{
 			Name: name, Command: input.Command, Quantity: input.Quantity, Expose: input.Expose, Health: input.Health,
+			TargetExtensions: input.TargetExtensions,
 		})
 		if err != nil {
 			return domain.ChangesetChange{}, err
@@ -500,6 +502,7 @@ func upsertProcessSet(ctx context.Context, st *store.Store, tx *sql.Tx, serviceI
 			p.Quantity = list[i].Quantity
 			p.Expose = list[i].Expose
 			p.Health = list[i].Health
+			p.TargetExtensions = list[i].TargetExtensions
 			found = true
 			break
 		}
@@ -532,6 +535,9 @@ func upsertProcessSet(ctx context.Context, st *store.Store, tx *sql.Tx, serviceI
 			}
 			p.Health = &h
 		}
+	}
+	if set.TargetExtensions != nil {
+		p.TargetExtensions = set.TargetExtensions
 	}
 	return st.UpsertProcessTx(ctx, tx, p)
 }

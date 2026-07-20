@@ -569,6 +569,12 @@ func (c *Client) ListAudit(ctx context.Context, limit int) ([]AuditEvent, error)
 	return events, err
 }
 
+func (c *Client) TargetCapabilities(ctx context.Context, typeName string) (map[string]any, error) {
+	var out map[string]any
+	_, err := c.do(ctx, http.MethodGet, "/v1/targets/"+typeName+"/capabilities", nil, &out)
+	return out, err
+}
+
 func (c *Client) Healthz(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/healthz", nil)
 	if err != nil {

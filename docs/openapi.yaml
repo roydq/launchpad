@@ -173,6 +173,18 @@ paths:
       responses:
         "200":
           description: Resolved config after patch (secrets as "***")
+  /v1/targets/{type}/capabilities:
+    get:
+      tags: [runtime]
+      summary: Target capabilities and extension field list
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Capabilities
   /v1/projects/{project}/processes:
     get:
       tags: [projects]
