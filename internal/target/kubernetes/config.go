@@ -67,7 +67,13 @@ func deploymentName(projectName, serviceName, process string) string {
 }
 
 func secretName(projectName, serviceName string) string {
+	// Legacy stable name (Destroy still cleans it).
 	return resourcePrefix(projectName, serviceName) + "-config"
+}
+
+// configSecretName returns a content-addressed immutable config Secret name.
+func configSecretName(projectName, serviceName, configHash string) string {
+	return resourcePrefix(projectName, serviceName) + "-cfg-" + configHash
 }
 
 func serviceName(projectName, serviceName, process string) string {

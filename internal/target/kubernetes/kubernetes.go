@@ -58,7 +58,12 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 		return nil, err
 	}
 
-	if err := upsertSecret(ctx, client, buildSecret(req.Project, req.Service, req.Environment, req.Config)); err != nil {
+	configHash := configContentHash(req.Config)
+	sec := buildSecret(req.Project, req.Service, req.Environment, req.Config, configHash)
+	if sec.Annotations != nil {
+		sec.Annotations[annotationReleaseVersion] = fmt.Sprintf("%d", req.Release.Version)
+	}
+	if err := createSecretImmutable(ctx, client, sec); err != nil {
 		return nil, fmt.Errorf("apply secret: %w", err)
 	}
 
@@ -71,7 +76,7 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 			// Defined but not deployed (e.g. Procfile release phase).
 			continue
 		}
-		dep, err := upsertDeployment(ctx, client, buildDeployment(req.Project, req.Service, req.Environment, req.Release, process, req.Config))
+		dep, err := upsertDeployment(ctx, client, buildDeployment(req.Project, req.Service, req.Environment, req.Release, process, req.Config, configHash))
 		if err != nil {
 			return nil, fmt.Errorf("apply deployment %s: %w", process.Name, err)
 		}

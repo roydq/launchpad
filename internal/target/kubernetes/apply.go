@@ -11,18 +11,19 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func upsertSecret(ctx context.Context, client kubernetes.Interface, secret *corev1.Secret) error {
-	existing, err := client.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
+// createSecretImmutable creates a config Secret if missing; never mutates existing (content-hash names).
+func createSecretImmutable(ctx context.Context, client kubernetes.Interface, secret *corev1.Secret) error {
+	_, err := client.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		_, err = client.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
 		return err
 	}
-	if err != nil {
-		return err
-	}
-	secret.ResourceVersion = existing.ResourceVersion
-	_, err = client.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	return err
+}
+
+// upsertSecret is retained for tests of non-immutable objects; config uses createSecretImmutable.
+func upsertSecret(ctx context.Context, client kubernetes.Interface, secret *corev1.Secret) error {
+	return createSecretImmutable(ctx, client, secret)
 }
 
 func upsertDeployment(ctx context.Context, client kubernetes.Interface, dep *appsv1.Deployment) (*appsv1.Deployment, error) {
@@ -78,8 +79,19 @@ func deleteServiceResources(ctx context.Context, client kubernetes.Interface, na
 		}
 	}
 
-	secret := secretName(projectName, serviceName)
-	if err := client.CoreV1().Secrets(namespace).Delete(ctx, secret, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+	// Delete all Launchpad-managed config Secrets for this service (stable + hashed).
+	secList, err := client.CoreV1().Secrets(namespace).List(ctx, listOpts)
+	if err != nil {
+		return err
+	}
+	for _, sec := range secList.Items {
+		if err := client.CoreV1().Secrets(namespace).Delete(ctx, sec.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	// Also remove legacy stable name if unlabeled.
+	legacy := secretName(projectName, serviceName)
+	if err := client.CoreV1().Secrets(namespace).Delete(ctx, legacy, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
