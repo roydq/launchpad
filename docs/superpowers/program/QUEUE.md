@@ -10,7 +10,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | diff-env-env | Diff env↔env (release archaeology) | A | pr-open | Spec: `docs/superpowers/specs/2026-07-19-diff-env-env-design.md` | `feat/diff-env-env` |
+| 1 | diff-env-env | Diff env↔env (release archaeology) | A | pr-open | Spec: `docs/superpowers/specs/2026-07-19-diff-env-env-design.md` | `feat/diff-env-env` · [#30](https://github.com/roydq/launchpad/pull/30) |
 | 3 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
 | 4 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
 | 5 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
