@@ -778,6 +778,39 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
+	promptCmd := &cobra.Command{
+		Use:   "prompt",
+		Short: "Print project@env for shell prompts (no network)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, _ := cmd.Flags().GetString("format")
+			out := FormatPrompt(cfg, format)
+			if out != "" {
+				fmt.Println(out)
+			}
+			return nil
+		},
+	}
+	promptCmd.Flags().String("format", "short", "output format: short (project@env) or long")
+	root.AddCommand(promptCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "shell-init [bash|zsh]",
+		Short: "Print shell snippet to show (lp:project@env) in PS1",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			shell := "bash"
+			if len(args) == 1 {
+				shell = args[0]
+			}
+			script, err := ShellInitScript(shell)
+			if err != nil {
+				return err
+			}
+			fmt.Print(script)
+			return nil
+		},
+	})
+
 	return root
 }
 

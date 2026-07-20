@@ -144,7 +144,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Project-local config | **Shipped** |
 | `launchpad doctor` | **Shipped** |
 | `launchpad inspect` | **Shipped** |
-| Shell prompt awareness | Later |
+| Shell prompt awareness | **Shipping** — `launchpad prompt` / `shell-init` |
 
 ### P2 — Trust and archaeology
 
