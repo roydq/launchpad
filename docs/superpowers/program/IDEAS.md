@@ -53,6 +53,11 @@
 | 2026-07-19 | adm-scout | Fish shell-init | P3 | C | bash/zsh only for now |
 | 2026-07-19 | adm-scout | Recipe `web-k8s` with namespace defaults | P3 | A | After k8s dogfood |
 | 2026-07-19 | adm-scout | Concurrent lease stress on Postgres CI job | P3 | B | Optional extend test-postgres |
+| 2026-07-20 | human-design | Process commands, Procfile, deploy health, immutable config Secrets, target extensions | P1 | A/runtime | **Promoted** to QUEUE (`process-commands`, `deploy-health`, `release-config-materialization`, `target-extensions`); end-state design approved |
+| 2026-07-20 | human-design | Optional `command_argv` exec form (no shell) | P3 | A | Shell form is end-state v1; add if users need no `/bin/sh` |
+| 2026-07-20 | human-design | Liveness probes separate from readiness | P3 | A/runtime | Readiness-only until dogfood demands restarts |
+| 2026-07-20 | human-design | ConfigMap (plain) + Secret (sensitive) cluster split | P3 | B/runtime | Single immutable Secret is end-state v1 |
+| 2026-07-20 | human-design | Control-plane HTTP health poll after target ready | P3 | B | Rejected as primary; keep target readiness |
 
 ## Severity guide
 

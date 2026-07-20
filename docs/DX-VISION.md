@@ -82,6 +82,9 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Diff env↔env | **Shipped** |
 | Unstage last mutation | **Shipped** |
 | Recipes / `launchpad new` templates | **Shipped** (ADM #32) |
+| Process commands + Procfile | **Designed** — QUEUE `process-commands` ([runtime-target-depth](superpowers/specs/2026-07-20-runtime-target-depth-design.md)) |
+| Portable health / deploy readiness | **Designed** — QUEUE `deploy-health` |
+| Target extensions (resources, annotations, …) | **Designed** — QUEUE `target-extensions` |
 | MCP server | After core loop solid |
 
 ### Track B — Confidence (engineering)
@@ -96,6 +99,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Postgres matrix in CI | **Shipped** — `test-postgres` + pgx driver fix (ADM #34) |
 | Target conformance suite (stub/k8s/…) | **Shipped** — stub conformance (ADM #35) |
 | Worker lease/supersede stress tests | **Shipped** — concurrent lease + reclaim (ADM #36) |
+| Release-immutable config materialization (K8s) | **Designed** — QUEUE `release-config-materialization` |
 
 ### Track C — Surfaces (CLI → TUI → web → docs)
 
@@ -230,7 +234,8 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 | Work | Spec / queue |
 |------|----------------|
 | **ADM integration → main** | `adm/queue-2026-07-19` — PRs #32–#38 (recipes, prompt, postgres-ci, conformance, stress, env-clone, env-use fix) |
-| Next ready QUEUE | e2e-env-clone, e2e-recipes-new, clone-secret-placeholder, status-unstage-hint, audit-config-keys, completions-man |
+| **Runtime target depth (designed)** | [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) — QUEUE: `process-commands` → `deploy-health` → `release-config-materialization` → `target-extensions` |
+| Next ready QUEUE (polish) | e2e-env-clone, e2e-recipes-new, clone-secret-placeholder, status-unstage-hint, audit-config-keys, completions-man |
 | Deferred | oidc-design, mcp-server, multi-service, bindings, launchpad-yaml |
 | ADM process | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
