@@ -503,6 +503,7 @@ func (s *ReleaseService) buildProcessSnapshotTx(ctx context.Context, tx *sql.Tx,
 			Command:  p.Command,
 			Quantity: p.Quantity,
 			Expose:   p.Expose,
+			Health:   p.Health,
 		}
 	}
 	return snapshot, nil

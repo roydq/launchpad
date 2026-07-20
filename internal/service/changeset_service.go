@@ -35,10 +35,11 @@ type StageChangeInput struct {
 	// Sensitivity is optional "plain" | "secret" for config changes.
 	Sensitivity *string `json:"sensitivity,omitempty"`
 	// Process definition fields (process.set / process.unset / process.apply).
-	Name     string  `json:"name,omitempty"`
-	Command  *string `json:"command,omitempty"`
-	Expose   *string `json:"expose,omitempty"`
-	Procfile string  `json:"procfile,omitempty"`
+	Name     string               `json:"name,omitempty"`
+	Command  *string              `json:"command,omitempty"`
+	Expose   *string              `json:"expose,omitempty"`
+	Procfile string               `json:"procfile,omitempty"`
+	Health   *domain.ProcessHealth `json:"health,omitempty"`
 }
 
 type StageChangesInput struct {
@@ -336,7 +337,7 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 			return domain.ChangesetChange{}, fmt.Errorf("%w: process.set requires name", launchpad.ErrBadRequest)
 		}
 		payload, err := json.Marshal(domain.ProcessSetPayload{
-			Name: name, Command: input.Command, Quantity: input.Quantity, Expose: input.Expose,
+			Name: name, Command: input.Command, Quantity: input.Quantity, Expose: input.Expose, Health: input.Health,
 		})
 		if err != nil {
 			return domain.ChangesetChange{}, err
@@ -498,6 +499,7 @@ func upsertProcessSet(ctx context.Context, st *store.Store, tx *sql.Tx, serviceI
 			p.Command = list[i].Command
 			p.Quantity = list[i].Quantity
 			p.Expose = list[i].Expose
+			p.Health = list[i].Health
 			found = true
 			break
 		}
@@ -518,6 +520,18 @@ func upsertProcessSet(ctx context.Context, st *store.Store, tx *sql.Tx, serviceI
 	}
 	if set.Expose != nil {
 		p.Expose = *set.Expose
+	}
+	if set.Health != nil {
+		// Explicit type none clears probe.
+		if set.Health.Type == "none" || set.Health.Type == "" {
+			p.Health = nil
+		} else {
+			h := *set.Health
+			if h.Type == "http" && h.Path == "" {
+				h.Path = "/healthz"
+			}
+			p.Health = &h
+		}
 	}
 	return st.UpsertProcessTx(ctx, tx, p)
 }

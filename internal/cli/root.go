@@ -404,6 +404,17 @@ func NewRoot(cfg Config) *cobra.Command {
 				e, _ := cmd.Flags().GetString("expose")
 				ch["expose"] = e
 			}
+			if cmd.Flags().Changed("health") {
+				ht, _ := cmd.Flags().GetString("health")
+				health := map[string]any{"type": ht}
+				if path, _ := cmd.Flags().GetString("health-path"); path != "" {
+					health["path"] = path
+				}
+				if port, _ := cmd.Flags().GetInt("health-port"); port > 0 {
+					health["port"] = port
+				}
+				ch["health"] = health
+			}
 			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{ch}, false, "",
 				fmt.Sprintf("Staged process set %s", args[0]), false, 0)
 		},
@@ -411,6 +422,9 @@ func NewRoot(cfg Config) *cobra.Command {
 	processSetCmd.Flags().String("command", "", "process command (shell form)")
 	processSetCmd.Flags().Int("quantity", 1, "replica quantity")
 	processSetCmd.Flags().String("expose", "", "http|tcp|none")
+	processSetCmd.Flags().String("health", "", "readiness type: http|tcp|exec|none")
+	processSetCmd.Flags().String("health-path", "", "HTTP path (default /healthz for type=http)")
+	processSetCmd.Flags().Int("health-port", 0, "probe port (0 = container PORT)")
 	processCmd.AddCommand(processSetCmd)
 	processCmd.AddCommand(&cobra.Command{
 		Use:   "unset [name]",
