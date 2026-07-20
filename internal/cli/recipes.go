@@ -136,14 +136,14 @@ func ApplyRecipe(ctx context.Context, client *apiclient.Client, recipe Recipe, p
 	}
 	fmt.Printf("created project %s (recipe %s, target %s)\n", project.Name, recipe.ID, target)
 
-	// Always set global context (same as `launchpad use`).
-	local := localConfig{Project: project.Name, Environment: "dev"}
-	if err := saveLocalConfig(local); err != nil {
+	// Global + project-local context. Prefer project-only local so `env use`
+	// is not permanently shadowed by a hardcoded local environment=dev.
+	if err := saveActiveContext(project.Name, "dev"); err != nil {
 		return fmt.Errorf("save context: %w", err)
 	}
-	// Optional project-local config for the working directory.
 	if opts.Dir != "" {
-		if err := saveProjectLocalConfig(opts.Dir, local); err != nil {
+		// Write project-local with project name only (env inherits default/global).
+		if err := saveProjectLocalConfig(opts.Dir, localConfig{Project: project.Name}); err != nil {
 			return fmt.Errorf("save project-local context: %w", err)
 		}
 	}
