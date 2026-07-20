@@ -225,6 +225,8 @@ MVP control plane only invokes **Deploy**. Other `Target` methods may exist for 
 
 K8s resources: `launchpad-{project}-{service}-{process}` in the environment namespace.
 
+**Runtime depth (designed, not all shipped):** process command mutations + Procfile; portable health → readiness probes; immutable content-hashed config Secrets; namespaced `target_extensions` + capabilities. See `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md` and DOMAIN “Target Interface”.
+
 ---
 
 ## Authentication

@@ -2,10 +2,11 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Active (revision 3) |
-| **Date** | 2026-07-13 |
+| **Status** | Active (revision 4) |
+| **Date** | 2026-07-20 |
 | **Related** | `docs/DESIGN.md` — control plane architecture and operational design |
 | **Related** | `docs/superpowers/specs/2026-07-11-multi-env-design.md` — multi-env phase 2a |
+| **Related** | `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md` — process commands, health, config materialization, target extensions |
 
 ---
 
@@ -24,6 +25,7 @@ Launchpad aims to be the **mise of runtime application management**: zero ceremo
 | Design principles, entities, **Key Invariants** | **Yes** — product truth |
 | **MVP + 2a/2b** and shipped API/CLI tables | **Yes** — what runs on `main` |
 | Multi-service, bindings, full Target surface | **Planned** — do not half-implement (2a multi-env, 2b layered config, primary-service promote **shipped**) |
+| Runtime target depth (commands, health, immutable config objects, extensions) | **Planned end state** — design approved; implement per queue slices; do not half-build snapshot fields without deploy/target wiring |
 | Phased implementation table | Roadmap; see “Known invariant debt” until closed |
 
 ---
@@ -214,7 +216,7 @@ A named slice of runtime reality within a project.
 |-------|-------------|
 | `name` | e.g. `dev`, `staging`, `production`, `pr-142`. Unique per project. |
 | `target_type` | Pluggable backend: `kubernetes`, `stub`, future `nomad`, `ecs`. |
-| `target_config` | Backend-specific config (namespace, cluster, region). |
+| `target_config` | Backend-specific **where** and env defaults (namespace, cluster, region, deploy timeout, default service account, …). Not per-process desired state. |
 | `ephemeral` | `true` for review/PR environments; subject to auto-cleanup. |
 
 Each environment has its own target binding, shared config layer, and deployment state per service.
@@ -241,18 +243,33 @@ The **smallest independently versioned deployable unit**. Has its own artifact a
 
 ### Process
 
-A runtime role within a service. All processes in a service share the service's release artifact.
+A runtime role within a service. All processes in a service share the service's release artifact (one image, many roles).
 
 | Field | Description |
 |-------|-------------|
 | `name` | e.g. `web`, `worker`, `release`. Unique per service. |
-| `command` | Overrides image CMD (Fly-style). Empty = image entrypoint. |
-| `quantity` | Desired replica count. |
+| `command` | Overrides image entrypoint/CMD. **Empty** = image default. Non-empty is a **string** (Procfile-style); targets run it in **shell form** (e.g. K8s: `/bin/sh -c <command>`). |
+| `quantity` | Desired replica count. Processes with `quantity=0` are defined but not deployed (e.g. imported `release` one-shot until release-phase jobs exist). |
 | `expose` | `http`, `tcp`, or `none`. Controls ingress/service generation. |
+| `health` | Optional portable readiness check (see below). Omitted/`none` = no probe; target uses backend defaults only. |
+| `target_extensions` | Optional namespaced map of backend-specific settings (see [Target extensions](#target-extensions-and-capabilities)). Frozen on the release with the process snapshot. |
 
-Default on project creation: one process named `web` with `quantity=1`, `expose=http`.
+**Portable health** (end state; snapshotted on the release):
 
-Targets map processes to infrastructure (e.g. K8s: one Deployment per process). The domain does not prescribe target mapping.
+| Field | Description |
+|-------|-------------|
+| `type` | `http` \| `tcp` \| `exec` \| `none` |
+| `path` | HTTP path (default `/healthz` when `type=http`) |
+| `port` | Optional; null → primary container port (`PORT` or target default) |
+| timings | `initial_delay_seconds`, `period_seconds`, `timeout_seconds`, `failure_threshold`, `success_threshold` |
+
+Health maps to **readiness** (deploy success / serving), not liveness, unless a later revision adds an explicit liveness object.
+
+Default on project creation: one process named `web` with `quantity=1`, `expose=http`, empty command, no health.
+
+**Mutations** stage on the open changeset (like config/scale), then materialize into `process_snapshot` on push. **Procfile** is import-only DX (`process apply --procfile`); it is not read at deploy time.
+
+Targets map processes to infrastructure (e.g. K8s: one Deployment per process with `quantity > 0`). The domain does not prescribe resource names beyond the target’s conventions.
 
 ### Release
 
@@ -270,12 +287,25 @@ Immutable snapshot of desired state for a **service**. Versioned monotonically p
 
 ```json
 {
-  "web": { "command": "", "quantity": 2, "expose": "http" },
+  "web": {
+    "command": "",
+    "quantity": 2,
+    "expose": "http",
+    "health": { "type": "http", "path": "/healthz" },
+    "target_extensions": {
+      "kubernetes": {
+        "resources": {
+          "requests": { "cpu": "100m", "memory": "128Mi" },
+          "limits": { "memory": "512Mi" }
+        }
+      }
+    }
+  },
   "worker": { "command": "run-worker", "quantity": 1, "expose": "none" }
 }
 ```
 
-Empty `command` means image entrypoint/CMD. Snapshot must be sufficient to build target process specs **without** reading the live `processes` table.
+Empty `command` means image entrypoint/CMD. Snapshot must be sufficient to build target process specs **without** reading the live `processes` table — including `health` and `target_extensions` when set.
 
 **Invariants:**
 
@@ -316,6 +346,7 @@ Each change targets a specific service:
 |------|---------|---------|
 | `config` | `{ key, value?, sensitivity? }` | `PORT=3000`; `value: null` deletes; `sensitivity: secret\|plain` |
 | `scale` | `{ process, quantity }` | `web=3` |
+| `process.set` / `process.unset` / `process.apply` | Process definition fields (command, quantity, expose, health, extensions) or Procfile body | **Planned** — runtime depth |
 | `image` | `{ artifact_ref }` | `api:v2.1.0` |
 | `binding` | `{ key, ref }` | `DATABASE_URL → services.postgres.config.DATABASE_URL` |
 
@@ -376,7 +407,7 @@ Each config entry in **shared** and **service** layers has a sensitivity:
 2. Promote to secret: `sensitivity: secret` or CLI `--secret`.
 3. Demote to plain: requires explicit `sensitivity: plain` / CLI `--plain` (and a new value).
 4. Each release stores `config_sensitivity` (map of key → type) alongside `config_resolved` for accurate archaeology when live types change later. Secret values in `config_resolved` are sealed at rest and opened in-process for the worker.
-5. Workers still apply full plaintext from the release snapshot; targets are unchanged (`DeployRequest.Config` is always plaintext in memory).
+5. Workers still apply full plaintext from the release snapshot; targets receive plaintext in memory (`DeployRequest.Config`). How targets **materialize** config in the data plane is target-specific; the end-state rule is **release-immutable objects** (see [Config materialization](#config-materialization-at-the-target)).
 6. Winning layer sensitivity applies (service override of shared is total).
 7. **Key required for secret writes:** `LAUNCHPAD_SECRETS_KEY` (base64-encoded 32-byte AES key) must be set on **API and worker**. Missing key → refuse new secret writes; ciphertext fails closed on read/deploy. Pre-S2 plaintext secret rows remain readable until rewritten.
 
@@ -572,20 +603,73 @@ type DeployRequest struct {
 }
 ```
 
-Workers **must not** populate `Processes` / `Config` from live `processes` or `config_vars` tables.
+Workers **must not** populate `Processes` / `Config` from live `processes` or `config_vars` tables. Expanded `Process` values include command, quantity, expose, health, and target_extensions from the snapshot.
+
+### Deploy success and timeouts
+
+| Rule | End state |
+|------|-----------|
+| Success | Target reports all deployed processes **ready** per backend semantics |
+| Kubernetes | Deployment Available + ReadyReplicas; with portable health, readiness probes make “ready” mean app-healthy |
+| Timeout | Deploy fails; deployment/job → `failed` |
+| Default timeout | 15 minutes |
+| Override | `target_config.deploy_timeout` (duration); operator env on the target binary remains an escape hatch |
+
+The control plane does not re-probe HTTP URLs after the target returns; readiness is the target’s job.
+
+### Config materialization at the target
+
+Resolved config is applied as **immutable, release-pinned data-plane objects** (not a single mutable shared Secret rewritten in place).
+
+| Rule | End state |
+|------|-----------|
+| Identity | Content-addressed preferred (`…-cfg-{hash}` of canonical `config_resolved`), or per release version |
+| Lifetime | Create-if-absent; never mutate after create |
+| Pinning | Workload references that object (e.g. K8s `envFrom.secretRef` name on the pod template) |
+| Reuse | Identical config maps may share one object across releases |
+| GC | Unreferenced objects for the service are eligible for deletion; Destroy removes managed config for the service |
+| Control plane | Unchanged: sensitivity/encryption at rest; worker always passes plaintext map |
+
+Design: `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md` (slice 1).
+
+### Target extensions and capabilities
+
+Three layers keep the domain portable while allowing backend power:
+
+| Layer | Owns | Examples |
+|-------|------|----------|
+| **Portable process / release** | What every target must understand | artifact, command, quantity, expose, health, config_resolved |
+| **Environment `target_config`** | Where + env-wide defaults | namespace, cluster, deploy_timeout, default service account |
+| **`target_extensions`** (per process, snapshotted) | Backend-only knobs | K8s resources, annotations, nodeSelector, service type |
+
+**Rules:**
+
+1. Extensions are namespaced by target type (`kubernetes`, `stub`, …). Only the environment’s active `target_type` is applied.
+2. Extensions are frozen on the release with `process_snapshot`.
+3. Stage/push validates against the target’s schema; **unknown keys for the active type are rejected** (422).
+4. Precedence: process extension field > env `target_config.defaults` > target binary defaults.
+5. Targets **expose capabilities** (and optional JSON Schema) so CLI/agents discover supported health kinds and extension fields (`GET /v1/targets/{type}/capabilities` or env-scoped equivalent).
+
+Do **not** promote every backend field into first-class Process columns. Do **not** make raw manifests the primary UX.
+
+Design: same runtime-target-depth spec (slice 4).
 
 ### MVP surface vs planned capabilities
 
-| Capability | MVP control plane | Target implementations today |
-|------------|-------------------|------------------------------|
-| `Deploy` | **Used** | Required |
-| `Logs` | **Shipped** (API/CLI read path) | stub + kubernetes |
-| `Status` | Partial (`ps` / inspect via control plane) | stub helpers |
-| `Scale` / `Destroy` / target-side `Rollback` | **Not exposed** as worker jobs | May exist as stubs or helpers for later phases |
+| Capability | Control plane | Target implementations |
+|------------|---------------|------------------------|
+| `Deploy` | **Used** | Required (stub + kubernetes) |
+| `Logs` | **Shipped** | stub + kubernetes |
+| `Status` | Partial (`ps` / inspect) | stub + k8s helpers |
+| Portable health → readiness | **Planned** | K8s probes; stub no-op |
+| Immutable config objects | **Planned** | K8s Secrets content-hash |
+| Target extensions + capabilities | **Planned** | schema + apply |
+| Process command mutations + Procfile | **Planned** | command already applied if set |
+| `Scale` / `Destroy` / target-side `Rollback` | Scale/destroy not exposed as worker jobs yet | May exist as helpers |
 
 Do not grow control-plane callers for Scale/Destroy until those features are in-scope. Optional interface split can follow then.
 
-Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` within the environment's namespace.
+Resource naming convention (K8s): `launchpad-{project}-{service}-{process}` within the environment's namespace; config objects `launchpad-{project}-{service}-cfg-{hash}` (end state).
 
 ---
 
@@ -612,6 +696,8 @@ GET    /v1/projects/{project}/environments
 POST   /v1/projects/{project}/environments
 GET    /v1/projects/{project}/environments/{name}
 GET    /v1/projects/{project}/processes
+# Planned (runtime depth): PUT/DELETE …/processes/{name}, POST …/processes/apply
+# Planned: GET /v1/targets/{type}/capabilities
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
 POST   /v1/projects/{project}/rollback
@@ -671,6 +757,15 @@ GET    /healthz
 | `launchpad diff --from-env A --to-env B` | Env↔env: last deployed release snapshots |
 | `launchpad rollback N` | New release from prior version; config re-resolved |
 | `launchpad config … --layer shared\|service` | Layered config (2b); workspace layer deferred |
+
+### Planned (runtime depth)
+
+| Command | Notes |
+|---------|-------|
+| `launchpad process set/unset` | Stage process definition (command, quantity, expose, health, target extensions) |
+| `launchpad process apply --procfile` | Import Procfile into staged process set |
+| `launchpad processes` | Alias/list (today: `ps`) |
+| `launchpad target capabilities` | Discover health + extension schema for ambient env’s target |
 | `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |
 
 ### Planned (deltas from shipped)
@@ -722,8 +817,9 @@ On `POST /v1/projects`:
 | **4** | Planned | Bindings and ref resolution | Service linking |
 | **5** | **Shipped** (primary-service promote) | Promotion API + CLI | staging → production flow |
 | **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
+| **Runtime depth** | **Designed** (impl queued) | Process commands + Procfile; portable health; immutable config materialization; target extensions | Multi-process images, real deploy success, multi-backend power without domain pollution — [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
-Each phase updates API, store, worker, CLI, and target interface together.
+Each phase updates API, store, worker, CLI, and target interface together. Runtime depth slices may ship independently per ADM queue order.
 
 ---
 
@@ -732,10 +828,11 @@ Each phase updates API, store, worker, CLI, and target interface together.
 1. **Env clone.** **Shipped** — plain copy; secret keys as `needs_value` only (no secret material).
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
-4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.
-5. **`launchpad.yaml` authority.** Import sets desired state; runtime mutations via API/CLI. File is not continuously reconciled (not GitOps). Defer to phase 6.
-6. **Release status under multi-env.** Refine when phase 2 lands; MVP ties release status to the single deploy created with the release.
+4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? **Defer to target extensions** (runtime-target-depth slice 4).
+5. **`launchpad.yaml` authority.** Import sets desired state; runtime mutations via API/CLI. File is not continuously reconciled (not GitOps). Defer to phase 6. Process commands / health / extensions should round-trip through the manifest when phase 6 lands.
+6. **Release status under multi-env.** Refine when multi-env status model needs it; deployments remain env-specific outcomes.
 7. **Rollback config policy.** Default above is re-resolve config + copy process topology/artifact; revisit if users need bit-identical config rollback.
+8. **Process command / health / config materialization / target extensions.** **End state approved** — see runtime-target-depth design; implementation tracked in `docs/superpowers/program/QUEUE.md`.
 
 ---
 
