@@ -95,7 +95,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) |
 | Postgres matrix in CI | **Shipping** — `test-postgres` job + env-gated store tests |
 | Target conformance suite (stub/k8s/…) | **Shipping** — `internal/target/conformance` + stub |
-| Worker lease/supersede stress tests | Later |
+| Worker lease/supersede stress tests | **Shipping** — concurrent lease + reclaim tests |
 
 ### Track C — Surfaces (CLI → TUI → web → docs)
 
