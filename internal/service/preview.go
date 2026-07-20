@@ -59,8 +59,10 @@ func (d EffectiveDiff) IsEmpty() bool {
 
 // PreviewResult is the API shape for server-side diff preview.
 type PreviewResult struct {
-	Mode             string         `json:"mode"` // pending | releases
+	Mode             string         `json:"mode"` // pending | releases | environments
 	Environment      string         `json:"environment,omitempty"`
+	FromEnvironment  string         `json:"from_environment,omitempty"`
+	ToEnvironment    string         `json:"to_environment,omitempty"`
 	BaselineVersion  *int           `json:"baseline_version,omitempty"`
 	FromVersion      *int           `json:"from_version,omitempty"`
 	ToVersion        *int           `json:"to_version,omitempty"`
@@ -199,6 +201,104 @@ func BuildDiff(pending FoldedPending, baseline *domain.Release) EffectiveDiff {
 	return diff
 }
 
+// BuildSnapshotDiff compares two full release snapshots (union of config keys and processes).
+// Nil releases are treated as empty snapshots. Secret values are redacted.
+func BuildSnapshotDiff(from, to *domain.Release) EffectiveDiff {
+	fromImage, fromConfig, fromSens, fromScales := releaseSnapshotParts(from)
+	toImage, toConfig, toSens, toScales := releaseSnapshotParts(to)
+
+	var diff EffectiveDiff
+	if fromImage != toImage {
+		diff.Image = &ImageDiff{From: fromImage, To: toImage}
+	}
+
+	keySet := map[string]struct{}{}
+	for k := range fromConfig {
+		keySet[k] = struct{}{}
+	}
+	for k := range toConfig {
+		keySet[k] = struct{}{}
+	}
+	var keys []string
+	for k := range keySet {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		old, hadFrom := fromConfig[key]
+		newVal, hadTo := toConfig[key]
+		sens := configDiffSensitivity(fromSens[key], toSens[key])
+		switch {
+		case hadFrom && !hadTo:
+			from := domain.RedactConfigValue(old, sens)
+			diff.Config = append(diff.Config, ConfigDiffOp{Op: "remove", Key: key, From: &from, Sensitivity: sens})
+		case !hadFrom && hadTo:
+			to := domain.RedactConfigValue(newVal, sens)
+			diff.Config = append(diff.Config, ConfigDiffOp{Op: "add", Key: key, To: &to, Sensitivity: sens})
+		case hadFrom && hadTo && old != newVal:
+			from := domain.RedactConfigValue(old, sens)
+			to := domain.RedactConfigValue(newVal, sens)
+			diff.Config = append(diff.Config, ConfigDiffOp{Op: "change", Key: key, From: &from, To: &to, Sensitivity: sens})
+		}
+	}
+
+	procSet := map[string]struct{}{}
+	for p := range fromScales {
+		procSet[p] = struct{}{}
+	}
+	for p := range toScales {
+		procSet[p] = struct{}{}
+	}
+	var procs []string
+	for p := range procSet {
+		procs = append(procs, p)
+	}
+	sort.Strings(procs)
+	for _, proc := range procs {
+		old, hadFrom := fromScales[proc]
+		qty, hadTo := toScales[proc]
+		switch {
+		case hadFrom && !hadTo:
+			o := old
+			diff.Scale = append(diff.Scale, ScaleDiffOp{Process: proc, From: &o, To: 0})
+		case !hadFrom && hadTo:
+			diff.Scale = append(diff.Scale, ScaleDiffOp{Process: proc, To: qty})
+		case hadFrom && hadTo && old != qty:
+			o := old
+			diff.Scale = append(diff.Scale, ScaleDiffOp{Process: proc, From: &o, To: qty})
+		}
+	}
+	return diff
+}
+
+func releaseSnapshotParts(r *domain.Release) (image string, config map[string]string, sens map[string]string, scales map[string]int) {
+	config = map[string]string{}
+	sens = map[string]string{}
+	scales = map[string]int{}
+	if r == nil {
+		return "", config, sens, scales
+	}
+	image = r.ArtifactRef
+	if r.ConfigResolved != nil {
+		config = r.ConfigResolved
+	}
+	if r.ConfigSensitivity != nil {
+		sens = r.ConfigSensitivity
+	}
+	for name, snap := range r.ProcessSnapshot {
+		scales[name] = snap.Quantity
+	}
+	return image, config, sens, scales
+}
+
+// FormatSnapshotDiffSummary formats a full snapshot EffectiveDiff (env↔env / full release compare).
+func FormatSnapshotDiffSummary(diff EffectiveDiff) string {
+	if diff.IsEmpty() {
+		return "No differences\n"
+	}
+	return formatEffectiveDiff(diff)
+}
+
 // FormatDiffSummary is human-readable text matching legacy CLI diff style.
 func FormatDiffSummary(pending FoldedPending, baseline *domain.Release) string {
 	if pending.IsEmpty() {
@@ -208,6 +308,10 @@ func FormatDiffSummary(pending FoldedPending, baseline *domain.Release) string {
 	if diff.IsEmpty() {
 		return "Staged changes match last release (no effective delta)\n"
 	}
+	return formatEffectiveDiff(diff)
+}
+
+func formatEffectiveDiff(diff EffectiveDiff) string {
 	var b strings.Builder
 	if diff.Image != nil {
 		b.WriteString("## Image\n")
@@ -215,7 +319,11 @@ func FormatDiffSummary(pending FoldedPending, baseline *domain.Release) string {
 		if old == "" {
 			old = "(none)"
 		}
-		fmt.Fprintf(&b, "  %s → %s\n", old, diff.Image.To)
+		to := diff.Image.To
+		if to == "" {
+			to = "(none)"
+		}
+		fmt.Fprintf(&b, "  %s → %s\n", old, to)
 	}
 	if len(diff.Config) > 0 {
 		b.WriteString("## Config\n")
@@ -382,6 +490,52 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 		Diff:            diff,
 		Summary:         FormatDiffSummary(pending, from),
 	}, nil
+}
+
+// PreviewEnvironments compares the latest deployed release in fromEnv vs toEnv.
+func (s *ChangesetService) PreviewEnvironments(ctx context.Context, projectName, fromEnv, toEnv string) (*PreviewResult, error) {
+	fromEnv = strings.TrimSpace(fromEnv)
+	toEnv = strings.TrimSpace(toEnv)
+	if fromEnv == "" || toEnv == "" {
+		return nil, fmt.Errorf("%w: from_env and to_env are required", launchpad.ErrBadRequest)
+	}
+	if fromEnv == toEnv {
+		return nil, fmt.Errorf("%w: from_env and to_env must differ", launchpad.ErrBadRequest)
+	}
+	// Ensure both environments exist (404 if not).
+	if _, err := s.projectService.GetEnvironment(ctx, projectName, fromEnv); err != nil {
+		return nil, err
+	}
+	if _, err := s.projectService.GetEnvironment(ctx, projectName, toEnv); err != nil {
+		return nil, err
+	}
+	fromRel, err := s.releaseService.GetLatestReleaseForEnvironment(ctx, projectName, fromEnv)
+	if err != nil {
+		return nil, err
+	}
+	toRel, err := s.releaseService.GetLatestReleaseForEnvironment(ctx, projectName, toEnv)
+	if err != nil {
+		return nil, err
+	}
+	diff := BuildSnapshotDiff(fromRel, toRel)
+	res := &PreviewResult{
+		Mode:            "environments",
+		FromEnvironment: fromEnv,
+		ToEnvironment:   toEnv,
+		HasPending:      false,
+		MatchesBaseline: diff.IsEmpty(),
+		Diff:            diff,
+		Summary:         FormatSnapshotDiffSummary(diff),
+	}
+	if fromRel != nil {
+		v := fromRel.Version
+		res.FromVersion = &v
+	}
+	if toRel != nil {
+		v := toRel.Version
+		res.ToVersion = &v
+	}
+	return res, nil
 }
 
 func foldedFromRelease(r *domain.Release) FoldedPending {
