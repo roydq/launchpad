@@ -81,7 +81,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Server-side pending/diff preview | **Shipped** |
 | Diff env↔env | **Shipped** |
 | Unstage last mutation | **Shipped** |
-| Recipes / `launchpad new` templates | Later |
+| Recipes / `launchpad new` templates | **Shipping** (`feat/recipes-templates` → ADM integration) |
 | MCP server | After core loop solid |
 
 ### Track B — Confidence (engineering)
@@ -175,7 +175,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | CLI surfaces hints | **Shipped** |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
-| Recipes / templates | Later |
+| Recipes / templates | **Shipping** — `launchpad new` / `new list` |
 
 ### Explicit non-goals (for now)
 
@@ -230,7 +230,7 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 | Work | Spec / queue |
 |------|----------------|
 | **ADM integration branch** | `adm/queue-2026-07-19` — remaining ready queue items merge here; final PR → main |
-| Recipes / `launchpad new` | QUEUE `recipes-templates` (designing) |
+| Recipes / `launchpad new` | QUEUE `recipes-templates` — [spec](superpowers/specs/2026-07-19-recipes-templates-design.md) |
 | Shell prompt awareness | QUEUE `shell-prompt` |
 | Postgres CI / target conformance / worker stress | QUEUE Track B |
 | Env clone | QUEUE `env-clone` — **ready** (S2 shipped) |

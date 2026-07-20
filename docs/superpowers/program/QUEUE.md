@@ -10,7 +10,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | recipes-templates | Recipes / `launchpad new` templates | A | designing | Track A; keep day-one path short | base: `adm/queue-2026-07-19` |
+| 1 | recipes-templates | Recipes / `launchpad new` templates | A | implementing | Spec: `docs/superpowers/specs/2026-07-19-recipes-templates-design.md` | `feat/recipes-templates` · base `adm/queue-2026-07-19` |
 | 2 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
 | 3 | postgres-ci | Postgres matrix in CI | B | ready | Track B confidence | — |
 | 4 | target-conformance | Target conformance suite (stub/k8s/…) | B | ready | Track B later | — |
