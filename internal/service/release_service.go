@@ -500,10 +500,11 @@ func (s *ReleaseService) buildProcessSnapshotTx(ctx context.Context, tx *sql.Tx,
 	snapshot := make(map[string]domain.ProcessSnapshot, len(processes))
 	for _, p := range processes {
 		snapshot[p.Name] = domain.ProcessSnapshot{
-			Command:  p.Command,
-			Quantity: p.Quantity,
-			Expose:   p.Expose,
-			Health:   p.Health,
+			Command:          p.Command,
+			Quantity:         p.Quantity,
+			Expose:           p.Expose,
+			Health:           p.Health,
+			TargetExtensions: p.TargetExtensions,
 		}
 	}
 	return snapshot, nil

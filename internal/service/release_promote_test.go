@@ -148,7 +148,7 @@ func TestPromoteReResolvesTargetConfig(t *testing.T) {
 	}
 	for name, snap := range src.Release.ProcessSnapshot {
 		got, ok := promoted.Release.ProcessSnapshot[name]
-		if !ok || got != snap {
+		if !ok || got.Command != snap.Command || got.Quantity != snap.Quantity || got.Expose != snap.Expose {
 			t.Fatalf("snapshot %s: got %+v want %+v", name, got, snap)
 		}
 	}

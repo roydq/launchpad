@@ -929,6 +929,27 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
+	targetCmd := &cobra.Command{Use: "target", Short: "Target backend info"}
+	targetCmd.AddCommand(&cobra.Command{
+		Use:   "capabilities [type]",
+		Short: "Show target capabilities",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			typ := "stub"
+			if len(args) == 1 {
+				typ = args[0]
+			}
+			out, err := client.TargetCapabilities(cmd.Context(), typ)
+			if err != nil {
+				return err
+			}
+			b, _ := json.MarshalIndent(out, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		},
+	})
+	root.AddCommand(targetCmd)
+
 	return root
 }
 

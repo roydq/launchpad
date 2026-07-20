@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"encoding/json"
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
@@ -8,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -102,7 +104,7 @@ func buildDeployment(project domain.Project, service domain.Service, env domain.
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						containerFromProcess(process, release.ArtifactRef, port, secName),
+						applyKubernetesExtensions(containerFromProcess(process, release.ArtifactRef, port, secName), process),
 					},
 				},
 			},
@@ -261,4 +263,50 @@ func processStateFromDeployment(dep *appsv1.Deployment) target.ProcessState {
 		Desired: int(desired),
 		Ready:   int(dep.Status.ReadyReplicas),
 	}
+}
+// kubernetesProcessExt is the subset of target_extensions.kubernetes we honor.
+type kubernetesProcessExt struct {
+	Resources *struct {
+		Requests map[string]string `json:"requests"`
+		Limits   map[string]string `json:"limits"`
+	} `json:"resources"`
+}
+
+func applyKubernetesExtensions(c corev1.Container, process domain.Process) corev1.Container {
+	if process.TargetExtensions == nil {
+		return c
+	}
+	raw, ok := process.TargetExtensions["kubernetes"]
+	if !ok || len(raw) == 0 {
+		return c
+	}
+	var ext kubernetesProcessExt
+	if err := json.Unmarshal(raw, &ext); err != nil {
+		return c
+	}
+	if ext.Resources == nil {
+		return c
+	}
+	reqs := corev1.ResourceList{}
+	lims := corev1.ResourceList{}
+	if ext.Resources.Requests != nil {
+		for k, v := range ext.Resources.Requests {
+			qty, err := resource.ParseQuantity(v)
+			if err == nil {
+				reqs[corev1.ResourceName(k)] = qty
+			}
+		}
+	}
+	if ext.Resources.Limits != nil {
+		for k, v := range ext.Resources.Limits {
+			qty, err := resource.ParseQuantity(v)
+			if err == nil {
+				lims[corev1.ResourceName(k)] = qty
+			}
+		}
+	}
+	if len(reqs) > 0 || len(lims) > 0 {
+		c.Resources = corev1.ResourceRequirements{Requests: reqs, Limits: lims}
+	}
+	return c
 }
