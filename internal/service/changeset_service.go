@@ -34,6 +34,11 @@ type StageChangeInput struct {
 	Layer string `json:"layer,omitempty"`
 	// Sensitivity is optional "plain" | "secret" for config changes.
 	Sensitivity *string `json:"sensitivity,omitempty"`
+	// Process definition fields (process.set / process.unset / process.apply).
+	Name     string  `json:"name,omitempty"`
+	Command  *string `json:"command,omitempty"`
+	Expose   *string `json:"expose,omitempty"`
+	Procfile string  `json:"procfile,omitempty"`
 }
 
 type StageChangesInput struct {
@@ -201,7 +206,7 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 	}
 	env := reqEnv
 
-	sharedWrites, configWrites, scales, artifactRef, err := materializeChanges(cs.Changes)
+	sharedWrites, configWrites, scales, artifactRef, processOps, err := materializeChanges(cs.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +227,9 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 			if err := s.store.MergeConfigWritesTx(ctx, tx, "service", svc.ID, env.ID, uuid.Nil, configWrites); err != nil {
 				return err
 			}
+		}
+		if err := applyProcessOps(ctx, s.store, tx, svc.ID, processOps); err != nil {
+			return err
 		}
 		for process, qty := range scales {
 			if err := s.store.UpdateProcessQuantity(ctx, tx, svc.ID, process, qty); err != nil {
@@ -319,12 +327,59 @@ func toChangesetChange(input StageChangeInput) (domain.ChangesetChange, error) {
 			return domain.ChangesetChange{}, err
 		}
 		return domain.ChangesetChange{Type: domain.ChangeTypeImage, Payload: payload}, nil
+	case domain.ChangeTypeProcessSet:
+		name := input.Name
+		if name == "" {
+			name = input.Process
+		}
+		if name == "" {
+			return domain.ChangesetChange{}, fmt.Errorf("%w: process.set requires name", launchpad.ErrBadRequest)
+		}
+		payload, err := json.Marshal(domain.ProcessSetPayload{
+			Name: name, Command: input.Command, Quantity: input.Quantity, Expose: input.Expose,
+		})
+		if err != nil {
+			return domain.ChangesetChange{}, err
+		}
+		return domain.ChangesetChange{Type: domain.ChangeTypeProcessSet, Payload: payload}, nil
+	case domain.ChangeTypeProcessUnset:
+		name := input.Name
+		if name == "" {
+			name = input.Process
+		}
+		if name == "" {
+			return domain.ChangesetChange{}, fmt.Errorf("%w: process.unset requires name", launchpad.ErrBadRequest)
+		}
+		payload, err := json.Marshal(domain.ProcessUnsetPayload{Name: name})
+		if err != nil {
+			return domain.ChangesetChange{}, err
+		}
+		return domain.ChangesetChange{Type: domain.ChangeTypeProcessUnset, Payload: payload}, nil
+	case domain.ChangeTypeProcessApply:
+		if input.Procfile == "" {
+			return domain.ChangesetChange{}, fmt.Errorf("%w: process.apply requires procfile", launchpad.ErrBadRequest)
+		}
+		if _, err := domain.ParseProcfile(input.Procfile); err != nil {
+			return domain.ChangesetChange{}, fmt.Errorf("%w: %v", launchpad.ErrBadRequest, err)
+		}
+		payload, err := json.Marshal(domain.ProcessApplyPayload{Procfile: input.Procfile})
+		if err != nil {
+			return domain.ChangesetChange{}, err
+		}
+		return domain.ChangesetChange{Type: domain.ChangeTypeProcessApply, Payload: payload}, nil
 	default:
 		return domain.ChangesetChange{}, fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, input.Type)
 	}
 }
 
-func materializeChanges(changes []domain.ChangesetChange) (shared, config map[string]store.ConfigWrite, scales map[string]int, artifactRef string, err error) {
+// processOps are applied in order on push (before scale quantity overrides).
+type processOps struct {
+	sets   []domain.ProcessSetPayload
+	unsets []string
+	apply  *domain.ProcessApplyPayload
+}
+
+func materializeChanges(changes []domain.ChangesetChange) (shared, config map[string]store.ConfigWrite, scales map[string]int, artifactRef string, ops processOps, err error) {
 	shared = make(map[string]store.ConfigWrite)
 	config = make(map[string]store.ConfigWrite)
 	scales = make(map[string]int)
@@ -334,30 +389,135 @@ func materializeChanges(changes []domain.ChangesetChange) (shared, config map[st
 		case domain.ChangeTypeConfig:
 			var p domain.ConfigChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, nil, "", err
+				return nil, nil, nil, "", ops, err
 			}
 			config[p.Key] = store.ConfigWrite{Value: p.Value, Sensitivity: p.Sensitivity}
 		case domain.ChangeTypeSharedConfig:
 			var p domain.ConfigChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, nil, "", err
+				return nil, nil, nil, "", ops, err
 			}
 			shared[p.Key] = store.ConfigWrite{Value: p.Value, Sensitivity: p.Sensitivity}
 		case domain.ChangeTypeScale:
 			var p domain.ScaleChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, nil, "", err
+				return nil, nil, nil, "", ops, err
 			}
 			scales[p.Process] = p.Quantity
 		case domain.ChangeTypeImage:
 			var p domain.ImageChangePayload
 			if err := json.Unmarshal(c.Payload, &p); err != nil {
-				return nil, nil, nil, "", err
+				return nil, nil, nil, "", ops, err
 			}
 			artifactRef = p.ArtifactRef
+		case domain.ChangeTypeProcessSet:
+			var p domain.ProcessSetPayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return nil, nil, nil, "", ops, err
+			}
+			ops.sets = append(ops.sets, p)
+		case domain.ChangeTypeProcessUnset:
+			var p domain.ProcessUnsetPayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return nil, nil, nil, "", ops, err
+			}
+			ops.unsets = append(ops.unsets, p.Name)
+		case domain.ChangeTypeProcessApply:
+			var p domain.ProcessApplyPayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return nil, nil, nil, "", ops, err
+			}
+			ops.apply = &p
 		default:
-			return nil, nil, nil, "", fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, c.Type)
+			return nil, nil, nil, "", ops, fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, c.Type)
 		}
 	}
-	return shared, config, scales, artifactRef, nil
+	return shared, config, scales, artifactRef, ops, nil
+}
+
+func applyProcessOps(ctx context.Context, st *store.Store, tx *sql.Tx, serviceID uuid.UUID, ops processOps) error {
+	if ops.apply != nil {
+		if ops.apply.Procfile != "" {
+			entries, err := domain.ParseProcfile(ops.apply.Procfile)
+			if err != nil {
+				return fmt.Errorf("%w: %v", launchpad.ErrBadRequest, err)
+			}
+			// Replace: delete existing then upsert from procfile.
+			existing, err := st.ListProcessesTx(ctx, tx, serviceID)
+			if err != nil {
+				return err
+			}
+			for _, p := range existing {
+				if err := st.DeleteProcessTx(ctx, tx, serviceID, p.Name); err != nil {
+					return err
+				}
+			}
+			for _, e := range entries {
+				cmd := e.Command
+				if err := st.UpsertProcessTx(ctx, tx, &domain.Process{
+					ServiceID: serviceID,
+					Name:      e.Name,
+					Command:   cmd,
+					Quantity:  e.Quantity,
+					Expose:    e.Expose,
+				}); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	for _, set := range ops.sets {
+		if err := upsertProcessSet(ctx, st, tx, serviceID, set); err != nil {
+			return err
+		}
+	}
+	for _, name := range ops.unsets {
+		existing, err := st.ListProcessesTx(ctx, tx, serviceID)
+		if err != nil {
+			return err
+		}
+		if len(existing) <= 1 {
+			return fmt.Errorf("%w: cannot remove the last process", launchpad.ErrBadRequest)
+		}
+		if err := st.DeleteProcessTx(ctx, tx, serviceID, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func upsertProcessSet(ctx context.Context, st *store.Store, tx *sql.Tx, serviceID uuid.UUID, set domain.ProcessSetPayload) error {
+	list, err := st.ListProcessesTx(ctx, tx, serviceID)
+	if err != nil {
+		return err
+	}
+	p := &domain.Process{ServiceID: serviceID, Name: set.Name}
+	found := false
+	for i := range list {
+		if list[i].Name == set.Name {
+			p.Command = list[i].Command
+			p.Quantity = list[i].Quantity
+			p.Expose = list[i].Expose
+			found = true
+			break
+		}
+	}
+	if !found {
+		p.Quantity = 1
+		if set.Name == "web" {
+			p.Expose = "http"
+		} else {
+			p.Expose = "none"
+		}
+	}
+	if set.Command != nil {
+		p.Command = *set.Command
+	}
+	if set.Quantity != nil {
+		p.Quantity = *set.Quantity
+	}
+	if set.Expose != nil {
+		p.Expose = *set.Expose
+	}
+	return st.UpsertProcessTx(ctx, tx, p)
 }

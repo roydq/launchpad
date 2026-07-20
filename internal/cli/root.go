@@ -381,6 +381,77 @@ func NewRoot(cfg Config) *cobra.Command {
 	addWaitFlags(scaleCmd)
 	root.AddCommand(scaleCmd)
 
+	processCmd := &cobra.Command{Use: "process", Short: "Manage process definitions (stages by default)"}
+	processSetCmd := &cobra.Command{
+		Use:   "set [name]",
+		Short: "Stage process definition (command, quantity, expose)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			ch := map[string]any{"type": "process.set", "name": args[0]}
+			if cmd.Flags().Changed("command") {
+				c, _ := cmd.Flags().GetString("command")
+				ch["command"] = c
+			}
+			if cmd.Flags().Changed("quantity") {
+				q, _ := cmd.Flags().GetInt("quantity")
+				ch["quantity"] = q
+			}
+			if cmd.Flags().Changed("expose") {
+				e, _ := cmd.Flags().GetString("expose")
+				ch["expose"] = e
+			}
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{ch}, false, "",
+				fmt.Sprintf("Staged process set %s", args[0]), false, 0)
+		},
+	}
+	processSetCmd.Flags().String("command", "", "process command (shell form)")
+	processSetCmd.Flags().Int("quantity", 1, "replica quantity")
+	processSetCmd.Flags().String("expose", "", "http|tcp|none")
+	processCmd.AddCommand(processSetCmd)
+	processCmd.AddCommand(&cobra.Command{
+		Use:   "unset [name]",
+		Short: "Stage removal of a process definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{
+				{"type": "process.unset", "name": args[0]},
+			}, false, "", fmt.Sprintf("Staged process unset %s", args[0]), false, 0)
+		},
+	})
+	processApplyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Stage process set from a Procfile",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			path, _ := cmd.Flags().GetString("procfile")
+			if path == "" {
+				return fmt.Errorf("--procfile is required")
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{
+				{"type": "process.apply", "procfile": string(data)},
+			}, false, "", fmt.Sprintf("Staged process apply from %s", path), false, 0)
+		},
+	}
+	processApplyCmd.Flags().String("procfile", "", "path to Procfile")
+	_ = processApplyCmd.MarkFlagRequired("procfile")
+	processCmd.AddCommand(processApplyCmd)
+	root.AddCommand(processCmd)
+
 	imageCmd := &cobra.Command{
 		Use:   "image [ref]",
 		Short: "Stage a container image change",
