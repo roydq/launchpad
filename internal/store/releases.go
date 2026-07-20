@@ -42,17 +42,22 @@ func (s *Store) CreateRelease(ctx context.Context, tx *sql.Tx, release *domain.R
 	if release.Status == "" {
 		release.Status = domain.ReleaseStatusPending
 	}
-	configResolved, err := json.Marshal(release.ConfigResolved)
+	sens := release.ConfigSensitivity
+	if sens == nil {
+		sens = map[string]string{}
+	}
+	// Seal secret values for durable storage; in-memory release.ConfigResolved stays plaintext.
+	sealedConfig, err := s.sealConfigMaps(release.ConfigResolved, sens)
+	if err != nil {
+		return err
+	}
+	configResolved, err := json.Marshal(sealedConfig)
 	if err != nil {
 		return err
 	}
 	processSnapshot, err := json.Marshal(release.ProcessSnapshot)
 	if err != nil {
 		return err
-	}
-	sens := release.ConfigSensitivity
-	if sens == nil {
-		sens = map[string]string{}
 	}
 	configSensitivity, err := json.Marshal(sens)
 	if err != nil {
@@ -180,14 +185,14 @@ func (s *Store) GetReleaseByID(ctx context.Context, id uuid.UUID) (*domain.Relea
 	row := s.db.QueryRowContext(ctx, s.q(`
 		SELECT `+releaseSelectCols+`
 		FROM releases WHERE id = ?`), id.String())
-	return scanRelease(row, s.driver)
+	return s.scanRelease(row)
 }
 
 func (s *Store) GetReleaseByVersion(ctx context.Context, serviceID uuid.UUID, version int) (*domain.Release, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
 		SELECT `+releaseSelectCols+`
 		FROM releases WHERE service_id = ? AND version = ?`), serviceID.String(), version)
-	return scanRelease(row, s.driver)
+	return s.scanRelease(row)
 }
 
 func (s *Store) GetLatestSucceededRelease(ctx context.Context, serviceID uuid.UUID) (*domain.Release, error) {
@@ -195,7 +200,7 @@ func (s *Store) GetLatestSucceededRelease(ctx context.Context, serviceID uuid.UU
 		SELECT `+releaseSelectCols+`
 		FROM releases WHERE service_id = ? AND status = 'succeeded'
 		ORDER BY version DESC LIMIT 1`), serviceID.String())
-	return scanRelease(row, s.driver)
+	return s.scanRelease(row)
 }
 
 func (s *Store) ListReleases(ctx context.Context, serviceID uuid.UUID) ([]domain.Release, error) {
@@ -209,7 +214,7 @@ func (s *Store) ListReleases(ctx context.Context, serviceID uuid.UUID) ([]domain
 
 	var releases []domain.Release
 	for rows.Next() {
-		r, err := scanRelease(rows, s.driver)
+		r, err := s.scanRelease(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +291,7 @@ func scanDeployment(scanner interface{ Scan(...any) error }, driver Driver) (*do
 	return d, nil
 }
 
-func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Release, error) {
+func (s *Store) scanRelease(scanner interface{ Scan(...any) error }) (*domain.Release, error) {
 	var id, serviceID, artifactRef, configResolved, processSnapshot, status, description, createdAt string
 	var version int
 	var createdByPrincipal, createdByToken, configSensitivity sql.NullString
@@ -305,17 +310,21 @@ func scanRelease(scanner interface{ Scan(...any) error }, driver Driver) (*domai
 	if configSensitivity.Valid && configSensitivity.String != "" {
 		_ = json.Unmarshal([]byte(configSensitivity.String), &sens)
 	}
+	opened, err := s.openConfigMaps(config, sens)
+	if err != nil {
+		return nil, err
+	}
 	rel := &domain.Release{
 		ID:                uuid.MustParse(id),
 		ServiceID:         uuid.MustParse(serviceID),
 		Version:           version,
 		ArtifactRef:       artifactRef,
-		ConfigResolved:    config,
+		ConfigResolved:    opened,
 		ConfigSensitivity: sens,
 		ProcessSnapshot:   snapshot,
 		Status:            domain.ReleaseStatus(status),
 		Description:       description,
-		CreatedAt:         parseTime(driver, createdAt),
+		CreatedAt:         parseTime(s.driver, createdAt),
 	}
 	if createdByPrincipal.Valid && createdByPrincipal.String != "" {
 		pid := uuid.MustParse(createdByPrincipal.String)

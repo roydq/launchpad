@@ -113,7 +113,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Workspace-scoped tokens | **Shipped** |
 | Principals + membership + audit (phase 1) | **Shipped** (service accounts on tokens; release `created_by`; `GET /v1/audit`) |
 | OIDC (Azure AD / Google / generic) | After phase 1 principals |
-| Secrets-typed config | **S1 implementing** — typing+redaction (`feat/secrets-s1`); then `secrets-s2` encryption. [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) |
+| Secrets-typed config | **S1 shipped**; **S2 implementing** — AES-GCM at rest (`feat/secrets-s2`). [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) |
 | Idempotency keys | Later |
 | Deployment events / SSE | Later |
 | HA workers / packaging | Later |
@@ -191,7 +191,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 2. ~~Prod-readiness dogfood~~ (**Shipped** — e2e promote, CLI hints, production `--yes`)
 3. ~~Server-side pending/diff preview~~ (**Shipped**)
 4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
-5. Secrets S1 typing+redaction — **implementing** (`feat/secrets-s1`); then S2 encryption — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
+5. Secrets S1 typing+redaction — **shipped** (PR #28); S2 encryption — **implementing** (`feat/secrets-s2`) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
 6. Surfaces (docs site → TUI → dashboard) only with stable API
 7. OIDC (after principals phase 1 dogfood)
 8. **Multi-service** only after dogfood of core loop
@@ -226,7 +226,7 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **Secrets S1 (typing + redaction)** | QUEUE `secrets-s1` — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) (human-accepted); then `secrets-s2` |
+| **Secrets S2 (AES-GCM at rest)** | QUEUE `secrets-s2` — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2; S1 shipped PR #28 |
 | ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
 | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |

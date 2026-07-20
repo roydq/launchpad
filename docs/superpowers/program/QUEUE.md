@@ -10,21 +10,20 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | secrets-s1 | Secrets S1: typing + redaction + CLI `--secret` | D | pr-open | Spec: `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`. Sensitivity column, sticky rules, redact config/release/preview DTOs, release sensitivity snapshot. **No encryption yet.** | `feat/secrets-s1` · [#28](https://github.com/roydq/launchpad/pull/28) |
-| 2 | secrets-s2 | Secrets S2: AES-GCM at rest | D | ready | After S1 ships. `LAUNCHPAD_SECRETS_KEY`; encrypt secret rows; worker decrypt. Same spec § S2. | — |
-| 3 | diff-env-env | Diff env↔env (release archaeology) | A | ready | DX backlog P2; may need redaction awareness if secrets S1 shipped first | — |
-| 4 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
-| 5 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
-| 6 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
-| 7 | postgres-ci | Postgres matrix in CI | B | ready | Track B confidence | — |
-| 8 | target-conformance | Target conformance suite (stub/k8s/…) | B | ready | Track B later | — |
-| 9 | worker-stress | Worker lease/supersede stress tests | B | ready | Track B later | — |
-| 10 | oidc-design | OIDC (Azure AD / Google / generic) design | D | deferred | After principals phase 1 dogfood; design before code | — |
-| 11 | mcp-server | Launchpad MCP server | A/C | deferred | After core DX loop solid | — |
-| 12 | multi-service | Multi-service + ReleaseSet | domain-3 | deferred | Do not half-build; full spec required | — |
-| 13 | bindings | Config bindings `${{ refs }}` | domain-4 | deferred | Do not half-build; full spec required | — |
-| 14 | launchpad-yaml | `launchpad.yaml` project manifest | domain-6 | deferred | Domain roadmap phase 6 | — |
-| 15 | env-clone | Environment clone | D | blocked | Blocked until secrets S1 (min) or S2 (preferred) ships; clone policy in secrets design | — |
+| 1 | secrets-s2 | Secrets S2: AES-GCM at rest | D | pr-open | Spec § S2: `LAUNCHPAD_SECRETS_KEY`; encrypt secret rows + release snapshot; worker decrypt. | `feat/secrets-s2` · [#29](https://github.com/roydq/launchpad/pull/29) |
+| 2 | diff-env-env | Diff env↔env (release archaeology) | A | ready | DX backlog P2; redaction-aware after secrets S1 | — |
+| 3 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
+| 4 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
+| 5 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
+| 6 | postgres-ci | Postgres matrix in CI | B | ready | Track B confidence | — |
+| 7 | target-conformance | Target conformance suite (stub/k8s/…) | B | ready | Track B later | — |
+| 8 | worker-stress | Worker lease/supersede stress tests | B | ready | Track B later | — |
+| 9 | oidc-design | OIDC (Azure AD / Google / generic) design | D | deferred | After principals phase 1 dogfood; design before code | — |
+| 10 | mcp-server | Launchpad MCP server | A/C | deferred | After core DX loop solid | — |
+| 11 | multi-service | Multi-service + ReleaseSet | domain-3 | deferred | Do not half-build; full spec required | — |
+| 12 | bindings | Config bindings `${{ refs }}` | domain-4 | deferred | Do not half-build; full spec required | — |
+| 13 | launchpad-yaml | `launchpad.yaml` project manifest | domain-6 | deferred | Domain roadmap phase 6 | — |
+| 14 | env-clone | Environment clone | D | blocked | Blocked until secrets S2 preferred (S1 min already shipped); clone policy in secrets design | — |
 
 ## Recently shipped (reference)
 
@@ -32,6 +31,7 @@ Keep short; full history lives in DX-VISION and merged specs.
 
 | ID | Item | Spec |
 |----|------|------|
+| secrets-s1 | Secrets S1: typing + redaction + CLI `--secret` | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #28 |
 | secrets-design | Secrets-typed config (**design only**) | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #26 · human-accepted model |
 | server-diff-preview | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` |
 | examples-60s | examples/ + 60s path CI | PR #24 |

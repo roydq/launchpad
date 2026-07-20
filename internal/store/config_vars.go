@@ -37,7 +37,7 @@ func (s *Store) ListConfigVarsWithSensitivityTx(ctx context.Context, tx *sql.Tx,
 		return nil, nil, err
 	}
 	defer rows.Close()
-	return scanConfigRows(rows)
+	return s.scanConfigRows(rows)
 }
 
 func (s *Store) MergeConfigVarsTx(ctx context.Context, tx *sql.Tx, serviceID, environmentID uuid.UUID, updates map[string]*string) error {
@@ -73,7 +73,7 @@ func (s *Store) ListSharedConfigVarsWithSensitivityTx(ctx context.Context, tx *s
 		return nil, nil, err
 	}
 	defer rows.Close()
-	return scanConfigRows(rows)
+	return s.scanConfigRows(rows)
 }
 
 func (s *Store) MergeSharedConfigVarsTx(ctx context.Context, tx *sql.Tx, projectID, environmentID uuid.UUID, updates map[string]*string) error {
@@ -132,13 +132,17 @@ func (s *Store) MergeConfigWritesTx(ctx context.Context, tx *sql.Tx, layer strin
 			}
 		}
 		sens := domain.EffectiveSensitivity(existingSens[key], w.Sensitivity)
+		stored, err := s.sealValue(*w.Value, sens)
+		if err != nil {
+			return err
+		}
 		if layer == "shared" {
 			_, err = exec.ExecContext(ctx, s.q(`
 				INSERT INTO shared_config_vars (project_id, environment_id, key, value, sensitivity, created_at, updated_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(project_id, environment_id, key) DO UPDATE SET
 					value = excluded.value, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`),
-				projectID.String(), environmentID.String(), key, *w.Value, sens, now, now,
+				projectID.String(), environmentID.String(), key, stored, sens, now, now,
 			)
 		} else {
 			_, err = exec.ExecContext(ctx, s.q(`
@@ -146,7 +150,7 @@ func (s *Store) MergeConfigWritesTx(ctx context.Context, tx *sql.Tx, layer strin
 				VALUES (?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(service_id, environment_id, key) DO UPDATE SET
 					value = excluded.value, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`),
-				serviceID.String(), environmentID.String(), key, *w.Value, sens, now, now,
+				serviceID.String(), environmentID.String(), key, stored, sens, now, now,
 			)
 		}
 		if err != nil {
@@ -190,7 +194,7 @@ func (s *Store) ResolveConfigWithSensitivity(ctx context.Context, projectID, ser
 	return s.ResolveConfigWithSensitivityTx(ctx, nil, projectID, serviceID, environmentID)
 }
 
-func scanConfigRows(rows *sql.Rows) (map[string]string, map[string]string, error) {
+func (s *Store) scanConfigRows(rows *sql.Rows) (map[string]string, map[string]string, error) {
 	vals := make(map[string]string)
 	sens := make(map[string]string)
 	for rows.Next() {
@@ -198,10 +202,14 @@ func scanConfigRows(rows *sql.Rows) (map[string]string, map[string]string, error
 		if err := rows.Scan(&key, &value, &sensitivity); err != nil {
 			return nil, nil, err
 		}
-		vals[key] = value
 		if sensitivity == "" {
 			sensitivity = domain.SensitivityPlain
 		}
+		opened, err := s.openValue(value, sensitivity)
+		if err != nil {
+			return nil, nil, fmt.Errorf("config key %q: %w", key, err)
+		}
+		vals[key] = opened
 		sens[key] = sensitivity
 	}
 	return vals, sens, rows.Err()

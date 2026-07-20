@@ -361,27 +361,28 @@ workspace → shared(environment) → service → platform refs
 
 Resolution produces the `config_resolved` map stored on the release. Targets receive only resolved values, never raw binding expressions.
 
-### Config sensitivity (S1)
+### Config sensitivity (S1 typing + S2 encryption)
 
 Each config entry in **shared** and **service** layers has a sensitivity:
 
-| Sensitivity | Default | Control-plane reads | Storage (S1) | Deploy |
-|-------------|---------|---------------------|--------------|--------|
-| `plain` | yes | value returned | plaintext | full value |
-| `secret` | no | value redacted as `***` | plaintext until S2 encryption | full value in process |
+| Sensitivity | Default | Control-plane reads | Storage | Deploy |
+|-------------|---------|---------------------|---------|--------|
+| `plain` | yes | value returned | UTF-8 plaintext | full value |
+| `secret` | no | value redacted as `***` | AES-256-GCM ciphertext (`v1:` prefix) | full value in process after decrypt |
 
 **Rules:**
 
 1. Sticky type on key: once `secret`, later sets without an explicit demote stay `secret`.
 2. Promote to secret: `sensitivity: secret` or CLI `--secret`.
 3. Demote to plain: requires explicit `sensitivity: plain` / CLI `--plain` (and a new value).
-4. Each release stores `config_sensitivity` (map of key → type) alongside `config_resolved` for accurate archaeology when live types change later.
-5. Workers still apply full plaintext from the release snapshot; targets are unchanged.
+4. Each release stores `config_sensitivity` (map of key → type) alongside `config_resolved` for accurate archaeology when live types change later. Secret values in `config_resolved` are sealed at rest and opened in-process for the worker.
+5. Workers still apply full plaintext from the release snapshot; targets are unchanged (`DeployRequest.Config` is always plaintext in memory).
 6. Winning layer sensitivity applies (service override of shared is total).
+7. **Key required for secret writes:** `LAUNCHPAD_SECRETS_KEY` (base64-encoded 32-byte AES key) must be set on **API and worker**. Missing key → refuse new secret writes; ciphertext fails closed on read/deploy. Pre-S2 plaintext secret rows remain readable until rewritten.
 
 CLI: `launchpad config set --secret KEY=VAL`, `config get` shows `[secret]`. API: `GET …/config` redacts; `?view=typed` returns `{value, sensitivity, set}` (secret values null).
 
-Encryption at rest is **S2** (`LAUNCHPAD_SECRETS_KEY`). Env clone remains blocked until S1 (min) or S2 (preferred).
+Env clone remains blocked until S2 preferred (or S1 min); clone policy copies plain values and secret **keys** without values.
 
 ### Bindings (service linking)
 
@@ -725,7 +726,7 @@ Each phase updates API, store, worker, CLI, and target interface together.
 
 ## Open Questions
 
-1. **Secrets encryption (S2).** S1 typing+redaction is shipping; AES-GCM at rest and `LAUNCHPAD_SECRETS_KEY` remain QUEUE `secrets-s2`. Spec: [`docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md`](superpowers/specs/2026-07-18-secrets-typed-config-design.md).
+1. **Env clone.** Unblocked after secrets S2 preferred (or S1 min). Clone policy: plain copy; secret keys without values.
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.
