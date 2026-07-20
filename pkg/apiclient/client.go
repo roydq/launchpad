@@ -338,6 +338,35 @@ func (c *Client) CreateEnvironment(ctx context.Context, project, name, targetTyp
 	return &env, nil
 }
 
+// CloneEnvironmentResult is the report from cloning an environment.
+type CloneEnvironmentResult struct {
+	Environment Environment `json:"environment"`
+	From        string      `json:"from"`
+	ClonedPlain []string    `json:"cloned_plain"`
+	NeedsValue  []string    `json:"needs_value"`
+	SharedKeys  int         `json:"shared_keys"`
+	ServiceKeys int         `json:"service_keys"`
+}
+
+func (c *Client) CloneEnvironment(ctx context.Context, project, from, name, targetType, namespace string, ephemeral bool) (*CloneEnvironmentResult, error) {
+	body := map[string]any{
+		"name":      name,
+		"ephemeral": ephemeral,
+	}
+	if targetType != "" || namespace != "" {
+		body["target"] = map[string]any{
+			"type":      targetType,
+			"namespace": namespace,
+		}
+	}
+	var result CloneEnvironmentResult
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/environments/"+from+"/clone", body, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (c *Client) Deploy(ctx context.Context, project, image, description string) (*DeployResult, error) {
 	var result DeployResult
 	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/releases", map[string]any{

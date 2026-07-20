@@ -382,7 +382,7 @@ Each config entry in **shared** and **service** layers has a sensitivity:
 
 CLI: `launchpad config set --secret KEY=VAL`, `config get` shows `[secret]`. API: `GET …/config` redacts; `?view=typed` returns `{value, sensitivity, set}` (secret values null).
 
-Env clone remains blocked until S2 preferred (or S1 min); clone policy copies plain values and secret **keys** without values.
+Env clone is available: plain values are copied; secret **keys** are reported as `needs_value` without copying material (`POST …/environments/{from}/clone`, CLI `env clone`).
 
 ### Bindings (service linking)
 
@@ -727,7 +727,7 @@ Each phase updates API, store, worker, CLI, and target interface together.
 
 ## Open Questions
 
-1. **Env clone.** Unblocked after secrets S2 preferred (or S1 min). Clone policy: plain copy; secret keys without values.
+1. **Env clone.** **Shipped** — plain copy; secret keys as `needs_value` only (no secret material).
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.

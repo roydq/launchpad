@@ -48,8 +48,9 @@ launchpad config get              # resolved: LOG_LEVEL + PORT
 launchpad diff
 launchpad deploy -m "initial"
 
-# Second environment
-launchpad env create staging --target stub
+# Second environment (clone plain config from dev; secrets listed as needs_value)
+launchpad env clone dev staging
+# or: launchpad env create staging --target stub
 launchpad env use staging
 launchpad config set LOG_LEVEL=info
 launchpad deploy --image my-api:v1 -m "staging"

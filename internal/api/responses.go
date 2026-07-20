@@ -236,6 +236,34 @@ func environmentResponse(env *domain.Environment) environmentDTO {
 	}
 }
 
+type cloneEnvironmentDTO struct {
+	Environment environmentDTO `json:"environment"`
+	From        string         `json:"from"`
+	ClonedPlain []string       `json:"cloned_plain"`
+	NeedsValue  []string       `json:"needs_value"`
+	SharedKeys  int            `json:"shared_keys"`
+	ServiceKeys int            `json:"service_keys"`
+}
+
+func cloneEnvironmentResponse(r *service.CloneEnvironmentResult) cloneEnvironmentDTO {
+	plain := r.ClonedPlain
+	if plain == nil {
+		plain = []string{}
+	}
+	needs := r.NeedsValue
+	if needs == nil {
+		needs = []string{}
+	}
+	return cloneEnvironmentDTO{
+		Environment: environmentResponse(r.Environment),
+		From:        r.From,
+		ClonedPlain: plain,
+		NeedsValue:  needs,
+		SharedKeys:  r.SharedKeys,
+		ServiceKeys: r.ServiceKeys,
+	}
+}
+
 func jobResponse(j *domain.Job) jobDTO {
 	return jobDTO{
 		ID:           j.ID.String(),
