@@ -77,3 +77,8 @@ When scouting or running persona dogfood, append a row (do not rewrite history).
 ```
 
 If severity is **P0** and the user pre-authorized “queue P0s from persona,” add a `ready` fix row to `QUEUE.md` and mention it in the PR.
+| 2026-07-20 | adm-runtime | Extension validation reject unknown keys at stage | P2 | A | Slice 4 shipped soft-apply; strict validate later |
+| 2026-07-20 | adm-runtime | Config Secret GC of unreferenced hashes | P3 | B | Destroy cleans all; janitor optional |
+| 2026-07-20 | adm-runtime | process set --target-ext CLI sugar | P3 | A | API map works via stage; CLI sugar later |
+| 2026-07-20 | adm-runtime | Man page generation (go generate) | P3 | C | Completions shipped; man optional |
+| 2026-07-20 | adm-runtime | Kind e2e for probes/resources/immutable secrets | P2 | B | Stub CI green; kind optional |
