@@ -67,6 +67,10 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 	processState := make(map[string]target.ProcessState)
 
 	for _, process := range processes {
+		if process.Quantity <= 0 {
+			// Defined but not deployed (e.g. Procfile release phase).
+			continue
+		}
 		dep, err := upsertDeployment(ctx, client, buildDeployment(req.Project, req.Service, req.Environment, req.Release, process, req.Config))
 		if err != nil {
 			return nil, fmt.Errorf("apply deployment %s: %w", process.Name, err)
@@ -80,7 +84,8 @@ func (t *Target) Deploy(ctx context.Context, req target.DeployRequest) (*target.
 		}
 	}
 
-	deployments, err := waitForDeployments(ctx, client, cfg.Namespace, depNames, t.opts.DeployTimeout, t.opts.PollInterval)
+	timeout := cfg.deployTimeoutOr(t.opts.DeployTimeout)
+	deployments, err := waitForDeployments(ctx, client, cfg.Namespace, depNames, timeout, t.opts.PollInterval)
 	if err != nil {
 		return nil, err
 	}

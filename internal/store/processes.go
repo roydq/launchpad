@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -26,11 +27,15 @@ func (s *Store) createProcessTx(ctx context.Context, tx *sql.Tx, process *domain
 	if process.Expose == "" {
 		process.Expose = "none"
 	}
-	_, err := s.exec(tx).ExecContext(ctx, s.q(`
-		INSERT INTO processes (id, service_id, name, command, quantity, expose, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+	healthJSON, err := marshalProcessHealth(process.Health)
+	if err != nil {
+		return err
+	}
+	_, err = s.exec(tx).ExecContext(ctx, s.q(`
+		INSERT INTO processes (id, service_id, name, command, quantity, expose, health, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		process.ID.String(), process.ServiceID.String(), process.Name, process.Command,
-		process.Quantity, process.Expose,
+		process.Quantity, process.Expose, healthJSON,
 		formatTime(s.driver, process.CreatedAt), formatTime(s.driver, process.UpdatedAt),
 	)
 	return err
@@ -42,7 +47,7 @@ func (s *Store) ListProcesses(ctx context.Context, serviceID uuid.UUID) ([]domai
 
 func (s *Store) ListProcessesTx(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID) ([]domain.Process, error) {
 	rows, err := s.exec(tx).QueryContext(ctx, s.q(`
-		SELECT id, service_id, name, command, quantity, expose, created_at, updated_at
+		SELECT id, service_id, name, command, quantity, expose, COALESCE(health, ''), created_at, updated_at
 		FROM processes WHERE service_id = ? ORDER BY name`), serviceID.String())
 	if err != nil {
 		return nil, err
@@ -62,7 +67,7 @@ func (s *Store) ListProcessesTx(ctx context.Context, tx *sql.Tx, serviceID uuid.
 
 func (s *Store) GetProcess(ctx context.Context, serviceID uuid.UUID, name string) (*domain.Process, error) {
 	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, service_id, name, command, quantity, expose, created_at, updated_at
+		SELECT id, service_id, name, command, quantity, expose, COALESCE(health, ''), created_at, updated_at
 		FROM processes WHERE service_id = ? AND name = ?`), serviceID.String(), name)
 	return scanProcess(row, s.driver)
 }
@@ -105,21 +110,29 @@ func (s *Store) UpsertProcessTx(ctx context.Context, tx *sql.Tx, process *domain
 		}
 		process.CreatedAt = time.Now().UTC()
 		process.UpdatedAt = process.CreatedAt
-		_, err := s.exec(tx).ExecContext(ctx, s.q(`
-			INSERT INTO processes (id, service_id, name, command, quantity, expose, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+		healthJSON, err := marshalProcessHealth(process.Health)
+		if err != nil {
+			return err
+		}
+		_, err = s.exec(tx).ExecContext(ctx, s.q(`
+			INSERT INTO processes (id, service_id, name, command, quantity, expose, health, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 			process.ID.String(), process.ServiceID.String(), process.Name, process.Command,
-			process.Quantity, process.Expose, now, now,
+			process.Quantity, process.Expose, healthJSON, now, now,
 		)
 		return err
 	}
 	process.ID = existing.ID
 	process.CreatedAt = existing.CreatedAt
 	process.UpdatedAt = time.Now().UTC()
+	healthJSON, err := marshalProcessHealth(process.Health)
+	if err != nil {
+		return err
+	}
 	_, err = s.exec(tx).ExecContext(ctx, s.q(`
-		UPDATE processes SET command = ?, quantity = ?, expose = ?, updated_at = ?
+		UPDATE processes SET command = ?, quantity = ?, expose = ?, health = ?, updated_at = ?
 		WHERE service_id = ? AND name = ?`),
-		process.Command, process.Quantity, process.Expose, now,
+		process.Command, process.Quantity, process.Expose, healthJSON, now,
 		process.ServiceID.String(), process.Name,
 	)
 	return err
@@ -146,18 +159,22 @@ func (s *Store) DeleteProcessTx(ctx context.Context, tx *sql.Tx, serviceID uuid.
 
 func (s *Store) getProcessTx(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID, name string) (*domain.Process, error) {
 	row := s.exec(tx).QueryRowContext(ctx, s.q(`
-		SELECT id, service_id, name, command, quantity, expose, created_at, updated_at
+		SELECT id, service_id, name, command, quantity, expose, COALESCE(health, ''), created_at, updated_at
 		FROM processes WHERE service_id = ? AND name = ?`), serviceID.String(), name)
 	return scanProcess(row, s.driver)
 }
 
 func scanProcess(scanner interface{ Scan(...any) error }, driver Driver) (*domain.Process, error) {
-	var id, serviceID, name, command, expose, createdAt, updatedAt string
+	var id, serviceID, name, command, expose, healthJSON, createdAt, updatedAt string
 	var quantity int
-	if err := scanner.Scan(&id, &serviceID, &name, &command, &quantity, &expose, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&id, &serviceID, &name, &command, &quantity, &expose, &healthJSON, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, launchpad.ErrNotFound
 		}
+		return nil, err
+	}
+	health, err := unmarshalProcessHealth(healthJSON)
+	if err != nil {
 		return nil, err
 	}
 	return &domain.Process{
@@ -167,7 +184,30 @@ func scanProcess(scanner interface{ Scan(...any) error }, driver Driver) (*domai
 		Command:   command,
 		Quantity:  quantity,
 		Expose:    expose,
+		Health:    health,
 		CreatedAt: parseTime(driver, createdAt),
 		UpdatedAt: parseTime(driver, updatedAt),
 	}, nil
+}
+
+func marshalProcessHealth(h *domain.ProcessHealth) (string, error) {
+	if h == nil {
+		return "", nil
+	}
+	b, err := json.Marshal(h)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func unmarshalProcessHealth(s string) (*domain.ProcessHealth, error) {
+	if s == "" {
+		return nil, nil
+	}
+	var h domain.ProcessHealth
+	if err := json.Unmarshal([]byte(s), &h); err != nil {
+		return nil, err
+	}
+	return &h, nil
 }

@@ -66,10 +66,11 @@ type ImageChangePayload struct {
 
 // ProcessSetPayload upserts a process definition (partial update via pointers).
 type ProcessSetPayload struct {
-	Name     string  `json:"name"`
-	Command  *string `json:"command,omitempty"`
-	Quantity *int    `json:"quantity,omitempty"`
-	Expose   *string `json:"expose,omitempty"`
+	Name     string         `json:"name"`
+	Command  *string        `json:"command,omitempty"`
+	Quantity *int           `json:"quantity,omitempty"`
+	Expose   *string        `json:"expose,omitempty"`
+	Health   *ProcessHealth `json:"health,omitempty"`
 }
 
 // ProcessUnsetPayload removes a process definition.

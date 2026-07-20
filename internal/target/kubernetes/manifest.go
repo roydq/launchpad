@@ -122,7 +122,82 @@ func containerFromProcess(process domain.Process, image string, port int32, proj
 	if process.Command != "" {
 		c.Command = []string{"/bin/sh", "-c", process.Command}
 	}
+	if probe := readinessProbe(process, port); probe != nil {
+		c.ReadinessProbe = probe
+	}
 	return c
+}
+
+func readinessProbe(process domain.Process, defaultPort int32) *corev1.Probe {
+	h := process.Health
+	if h == nil || h.Type == "" || h.Type == "none" {
+		return nil
+	}
+	period := int32(h.PeriodSeconds)
+	if period <= 0 {
+		period = 10
+	}
+	timeout := int32(h.TimeoutSeconds)
+	if timeout <= 0 {
+		timeout = 2
+	}
+	initial := int32(h.InitialDelaySeconds)
+	if initial < 0 {
+		initial = 0
+	}
+	if initial == 0 && h.InitialDelaySeconds == 0 {
+		initial = 5
+	}
+	failure := int32(h.FailureThreshold)
+	if failure <= 0 {
+		failure = 3
+	}
+	success := int32(h.SuccessThreshold)
+	if success <= 0 {
+		success = 1
+	}
+	probe := &corev1.Probe{
+		InitialDelaySeconds: initial,
+		PeriodSeconds:       period,
+		TimeoutSeconds:      timeout,
+		FailureThreshold:    failure,
+		SuccessThreshold:    success,
+	}
+	port := defaultPort
+	if h.Port != nil && *h.Port > 0 {
+		port = int32(*h.Port)
+	}
+	switch h.Type {
+	case "http":
+		path := h.Path
+		if path == "" {
+			path = "/healthz"
+		}
+		probe.ProbeHandler = corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: path,
+				Port: intstr.FromInt32(port),
+			},
+		}
+	case "tcp":
+		probe.ProbeHandler = corev1.ProbeHandler{
+			TCPSocket: &corev1.TCPSocketAction{
+				Port: intstr.FromInt32(port),
+			},
+		}
+	case "exec":
+		// Exec uses command string as shell form when present.
+		cmd := process.Command
+		if cmd == "" {
+			return nil
+		}
+		probe.ProbeHandler = corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", cmd}},
+		}
+	default:
+		return nil
+	}
+	return probe
 }
 
 func mustNamespace(env domain.Environment) string {
