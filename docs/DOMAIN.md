@@ -665,7 +665,8 @@ GET    /healthz
 | `launchpad logs [process]` | Target-backed process logs |
 | `launchpad inspect` | Project@env snapshot |
 | `launchpad releases show N` | Full release snapshot |
-| `launchpad diff --from N --to M` | Release↔release archaeology |
+| `launchpad diff --from-release N --to-release M` | Release↔release archaeology |
+| `launchpad diff --from-env A --to-env B` | Env↔env: last deployed release snapshots |
 | `launchpad rollback N` | New release from prior version; config re-resolved |
 | `launchpad config … --layer shared\|service` | Layered config (2b); workspace layer deferred |
 | `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |

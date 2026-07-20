@@ -396,7 +396,7 @@ paths:
   /v1/projects/{project}/preview:
     get:
       tags: [changeset]
-      summary: Pending vs baseline or release↔release structured preview
+      summary: Pending vs baseline, release↔release, or env↔env structured preview
       parameters:
         - $ref: "#/components/parameters/ProjectName"
         - $ref: "#/components/parameters/Environment"
@@ -406,6 +406,14 @@ paths:
         - name: to_release
           in: query
           schema: { type: integer }
+        - name: from_env
+          in: query
+          schema: { type: string }
+          description: Baseline environment name (requires to_env; exclusive with release pair)
+        - name: to_env
+          in: query
+          schema: { type: string }
+          description: Target environment name (requires from_env; exclusive with release pair)
       responses:
         "200":
           description: Preview
@@ -555,8 +563,13 @@ components:
     Preview:
       type: object
       properties:
-        mode: { type: string, enum: [pending, releases] }
+        mode: { type: string, enum: [pending, releases, environments] }
         environment: { type: string }
+        from_environment: { type: string }
+        to_environment: { type: string }
+        from_version: { type: integer }
+        to_version: { type: integer }
+        baseline_version: { type: integer }
         has_pending: { type: boolean }
         matches_baseline: { type: boolean }
         summary: { type: string }

@@ -325,7 +325,28 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 	env := environmentFromRequest(r)
 	fromStr := r.URL.Query().Get("from_release")
 	toStr := r.URL.Query().Get("to_release")
-	if fromStr != "" || toStr != "" {
+	fromEnv := r.URL.Query().Get("from_env")
+	toEnv := r.URL.Query().Get("to_env")
+	hasRelease := fromStr != "" || toStr != ""
+	hasEnv := fromEnv != "" || toEnv != ""
+	if hasRelease && hasEnv {
+		problem.BadRequest(w, "cannot combine from_release/to_release with from_env/to_env")
+		return
+	}
+	if hasEnv {
+		if fromEnv == "" || toEnv == "" {
+			problem.BadRequest(w, "from_env and to_env are both required")
+			return
+		}
+		result, err := s.changesets.PreviewEnvironments(r.Context(), project, fromEnv, toEnv)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	if hasRelease {
 		fromV, err1 := strconv.Atoi(fromStr)
 		toV, err2 := strconv.Atoi(toStr)
 		if err1 != nil || err2 != nil {
