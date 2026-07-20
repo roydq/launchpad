@@ -10,11 +10,11 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | postgres-ci | Postgres matrix in CI | B | implementing | Spec: `docs/superpowers/specs/2026-07-19-postgres-ci-design.md` | `feat/postgres-ci` |
-| 2 | shell-prompt | Shell prompt awareness (project@env) | A | shipped | Spec: `docs/superpowers/specs/2026-07-19-shell-prompt-design.md` | PR #33 → `adm/queue-2026-07-19` |
-| 3 | recipes-templates | Recipes / `launchpad new` templates | A | shipped | Spec: `docs/superpowers/specs/2026-07-19-recipes-templates-design.md` | PR #32 → `adm/queue-2026-07-19` |
-| 4 | target-conformance | Target conformance suite (stub/k8s/…) | B | ready | Track B later | — |
-| 5 | worker-stress | Worker lease/supersede stress tests | B | ready | Track B later | — |
+| 1 | target-conformance | Target conformance suite (stub/k8s/…) | B | implementing | Spec: `docs/superpowers/specs/2026-07-19-target-conformance-design.md` | `feat/target-conformance` |
+| 2 | worker-stress | Worker lease/supersede stress tests | B | ready | Track B later | — |
+| 3 | postgres-ci | Postgres matrix in CI | B | shipped | Spec: `docs/superpowers/specs/2026-07-19-postgres-ci-design.md` | PR #34 · fixed pgx driver |
+| 4 | shell-prompt | Shell prompt awareness (project@env) | A | shipped | Spec: `docs/superpowers/specs/2026-07-19-shell-prompt-design.md` | PR #33 → `adm/queue-2026-07-19` |
+| 5 | recipes-templates | Recipes / `launchpad new` templates | A | shipped | Spec: `docs/superpowers/specs/2026-07-19-recipes-templates-design.md` | PR #32 → `adm/queue-2026-07-19` |
 | 6 | env-clone | Environment clone | D | ready | **Unblocked** (S2 shipped); clone policy in secrets design | — |
 | 7 | oidc-design | OIDC (Azure AD / Google / generic) design | D | deferred | After principals phase 1 dogfood; design before code | — |
 | 8 | mcp-server | Launchpad MCP server | A/C | deferred | After core DX loop solid | — |
