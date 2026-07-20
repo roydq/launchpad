@@ -12,6 +12,85 @@ import (
 	"github.com/launchpad/launchpad/internal/store"
 )
 
+func TestUnstageLastChange(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "unstage-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	projectSvc := NewProjectService(st)
+	releaseSvc := NewReleaseService(st, projectSvc)
+	csSvc := NewChangesetService(st, projectSvc, releaseSvc)
+
+	// Empty → not found
+	if _, err := csSvc.UnstageLastChange(ctx, "unstage-app"); err == nil {
+		t.Fatal("expected error when nothing staged")
+	}
+
+	v1, v2, v3 := "1", "2", "3"
+	// Separate stage calls so created_at ordering is deterministic.
+	for _, ch := range []StageChangeInput{
+		{Type: "config", Key: "A", Value: &v1},
+		{Type: "config", Key: "B", Value: &v2},
+		{Type: "config", Key: "C", Value: &v3},
+	} {
+		if _, err := csSvc.StageChanges(ctx, "unstage-app", DefaultEnvironment, StageChangesInput{
+			Changes: []StageChangeInput{ch},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res, err := csSvc.UnstageLastChange(ctx, "unstage-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RemainingCount != 2 {
+		t.Fatalf("remaining %d", res.RemainingCount)
+	}
+	var payload domain.ConfigChangePayload
+	if err := json.Unmarshal(res.Change.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Key != "C" {
+		t.Fatalf("expected last staged key C, got %q", payload.Key)
+	}
+
+	open, err := csSvc.GetChangeset(ctx, "unstage-app", DefaultEnvironment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(open.Changes) != 2 {
+		t.Fatalf("open has %d changes", len(open.Changes))
+	}
+
+	// Unstage down to empty
+	if _, err := csSvc.UnstageLastChange(ctx, "unstage-app"); err != nil {
+		t.Fatal(err)
+	}
+	last, err := csSvc.UnstageLastChange(ctx, "unstage-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last.RemainingCount != 0 {
+		t.Fatalf("remaining %d", last.RemainingCount)
+	}
+	if _, err := csSvc.UnstageLastChange(ctx, "unstage-app"); err == nil {
+		t.Fatal("expected not found when empty")
+	}
+}
+
 func TestMaterializeChanges(t *testing.T) {
 	configPayload, _ := json.Marshal(domain.ConfigChangePayload{Key: "PORT", Value: strPtr("3000")})
 	scalePayload, _ := json.Marshal(domain.ScaleChangePayload{Process: "web", Quantity: 3})

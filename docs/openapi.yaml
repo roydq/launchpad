@@ -353,6 +353,25 @@ paths:
           description: Updated changeset
         "409":
           $ref: "#/components/responses/Problem"
+  /v1/projects/{project}/changeset/changes/last:
+    delete:
+      tags: [changeset]
+      summary: Unstage the most recently staged change
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+      responses:
+        "200":
+          description: Deleted change and remaining count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  change: { type: object }
+                  remaining_count: { type: integer }
+                  environment: { type: string }
+        "404":
+          $ref: "#/components/responses/Problem"
   /v1/projects/{project}/changeset/push:
     post:
       tags: [changeset]

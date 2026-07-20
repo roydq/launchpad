@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +10,41 @@ import (
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
 )
+
+func formatUnstagedChange(res *apiclient.UnstageLastResult) string {
+	if res == nil {
+		return "change"
+	}
+	switch res.Change.Type {
+	case "config", "shared_config":
+		var p struct {
+			Key   string  `json:"key"`
+			Value *string `json:"value"`
+		}
+		if err := json.Unmarshal(res.Change.Payload, &p); err == nil && p.Key != "" {
+			if p.Value == nil {
+				return fmt.Sprintf("config unset %s", p.Key)
+			}
+			return fmt.Sprintf("config %s=%s", p.Key, *p.Value)
+		}
+	case "image":
+		var p struct {
+			ArtifactRef string `json:"artifact_ref"`
+		}
+		if err := json.Unmarshal(res.Change.Payload, &p); err == nil && p.ArtifactRef != "" {
+			return fmt.Sprintf("image %s", p.ArtifactRef)
+		}
+	case "scale":
+		var p struct {
+			Process  string `json:"process"`
+			Quantity int    `json:"quantity"`
+		}
+		if err := json.Unmarshal(res.Change.Payload, &p); err == nil && p.Process != "" {
+			return fmt.Sprintf("scale %s=%d", p.Process, p.Quantity)
+		}
+	}
+	return res.Change.Type
+}
 
 func parseKEYVALArgs(args []string) ([]map[string]any, error) {
 	return parseKEYVALArgsLayer(args, "service", "")

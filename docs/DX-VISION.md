@@ -80,6 +80,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Sensitive-env confirmations (`production` + `--yes`) | **Shipped** (CLI policy) |
 | Server-side pending/diff preview | **Shipped** |
 | Diff env↔env | **Shipped** |
+| Unstage last mutation | **Shipped** |
 | Recipes / `launchpad new` templates | Later |
 | MCP server | After core loop solid |
 
@@ -154,7 +155,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | `releases show N` | **Shipped** |
 | Diff release↔release | **Shipped** |
 | Diff env↔env | **Shipped** (`--from-env` / `--to-env`) |
-| Unstage last mutation | Later |
+| Unstage last mutation | **Shipped** (`launchpad unstage`) |
 | Sensitive-env confirmations | **Shipped** (`--yes` on production) |
 
 ### P3 — Local parity and previews
@@ -227,7 +228,8 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **Diff env↔env** | QUEUE `diff-env-env` — [spec](superpowers/specs/2026-07-19-diff-env-env-design.md) |
+| **Unstage last mutation** | QUEUE `unstage-last` — [spec](superpowers/specs/2026-07-19-unstage-last-design.md) · [#31](https://github.com/roydq/launchpad/pull/31) |
+| Diff env↔env | **Shipped** (#30) — [spec](superpowers/specs/2026-07-19-diff-env-env-design.md) |
 | Secrets S2 (AES-GCM at rest) | **Shipped** (#29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2 |
 | ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |

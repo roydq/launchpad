@@ -10,19 +10,18 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | diff-env-env | Diff env↔env (release archaeology) | A | pr-open | Spec: `docs/superpowers/specs/2026-07-19-diff-env-env-design.md` | `feat/diff-env-env` · [#30](https://github.com/roydq/launchpad/pull/30) |
-| 3 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
-| 4 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
-| 5 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
-| 6 | postgres-ci | Postgres matrix in CI | B | ready | Track B confidence | — |
-| 7 | target-conformance | Target conformance suite (stub/k8s/…) | B | ready | Track B later | — |
-| 8 | worker-stress | Worker lease/supersede stress tests | B | ready | Track B later | — |
-| 9 | oidc-design | OIDC (Azure AD / Google / generic) design | D | deferred | After principals phase 1 dogfood; design before code | — |
-| 10 | mcp-server | Launchpad MCP server | A/C | deferred | After core DX loop solid | — |
-| 11 | multi-service | Multi-service + ReleaseSet | domain-3 | deferred | Do not half-build; full spec required | — |
-| 12 | bindings | Config bindings `${{ refs }}` | domain-4 | deferred | Do not half-build; full spec required | — |
-| 13 | launchpad-yaml | `launchpad.yaml` project manifest | domain-6 | deferred | Domain roadmap phase 6 | — |
-| 14 | env-clone | Environment clone | D | blocked | Blocked until secrets S2 preferred (S1 min already shipped); clone policy in secrets design | — |
+| 1 | unstage-last | Unstage last mutation | A | pr-open | Spec: `docs/superpowers/specs/2026-07-19-unstage-last-design.md` | `feat/unstage-last` · [#31](https://github.com/roydq/launchpad/pull/31) |
+| 2 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
+| 3 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
+| 4 | postgres-ci | Postgres matrix in CI | B | ready | Track B confidence | — |
+| 5 | target-conformance | Target conformance suite (stub/k8s/…) | B | ready | Track B later | — |
+| 6 | worker-stress | Worker lease/supersede stress tests | B | ready | Track B later | — |
+| 7 | oidc-design | OIDC (Azure AD / Google / generic) design | D | deferred | After principals phase 1 dogfood; design before code | — |
+| 8 | mcp-server | Launchpad MCP server | A/C | deferred | After core DX loop solid | — |
+| 9 | multi-service | Multi-service + ReleaseSet | domain-3 | deferred | Do not half-build; full spec required | — |
+| 10 | bindings | Config bindings `${{ refs }}` | domain-4 | deferred | Do not half-build; full spec required | — |
+| 11 | launchpad-yaml | `launchpad.yaml` project manifest | domain-6 | deferred | Domain roadmap phase 6 | — |
+| 12 | env-clone | Environment clone | D | blocked | Blocked until secrets S2 preferred (S1 min already shipped); clone policy in secrets design | — |
 
 ## Recently shipped (reference)
 
@@ -30,6 +29,7 @@ Keep short; full history lives in DX-VISION and merged specs.
 
 | ID | Item | Spec |
 |----|------|------|
+| diff-env-env | Diff env↔env (release archaeology) | `docs/superpowers/specs/2026-07-19-diff-env-env-design.md` · PR #30 |
 | secrets-s2 | Secrets S2: AES-GCM at rest | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #29 |
 | secrets-s1 | Secrets S1: typing + redaction + CLI `--secret` | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #28 |
 | secrets-design | Secrets-typed config (**design only**) | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #26 · human-accepted model |

@@ -653,7 +653,7 @@ GET    /healthz
 | `launchpad env list/create/use/current` | Environments; sticky env (default `dev`); dirty batch blocks switch |
 | `launchpad config get/set/unset` | Live get; set/unset stage by default (`--now` for immediate) |
 | `launchpad scale` / `image` | Stage scale or image (`--now` for immediate) |
-| `launchpad diff` / `status` / `reset` | Review pending vs last deploy **in current env**; discard staging |
+| `launchpad diff` / `status` / `reset` / `unstage` | Review pending vs last deploy **in current env**; discard all staging, or unstage last mutation |
 | `launchpad deploy` | Submit staged batch; optional one-shot mutations (`--image`, `KEY=VAL`, `--scale`) |
 | `launchpad ps` | Process definitions |
 | `launchpad releases` | Release history with per-env deployment annotations |

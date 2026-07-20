@@ -134,6 +134,47 @@ func (s *ChangesetService) DiscardChangeset(ctx context.Context, projectName str
 	return s.store.DiscardOpenChangeset(ctx, project.ID)
 }
 
+// UnstageLastResult is the deleted change plus remaining open-changeset size.
+type UnstageLastResult struct {
+	Change          domain.ChangesetChange `json:"change"`
+	RemainingCount  int                    `json:"remaining_count"`
+	EnvironmentName string                 `json:"environment,omitempty"`
+}
+
+// UnstageLastChange removes the most recently staged change from the open changeset.
+func (s *ChangesetService) UnstageLastChange(ctx context.Context, projectName string) (*UnstageLastResult, error) {
+	project, err := s.projectService.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	open, err := s.store.GetOpenChangeset(ctx, project.ID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: no open changeset", launchpad.ErrNotFound)
+	}
+	if len(open.Changes) == 0 {
+		return nil, fmt.Errorf("%w: no staged changes to unstage", launchpad.ErrNotFound)
+	}
+	var deleted *domain.ChangesetChange
+	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
+		var err error
+		deleted, err = s.store.DeleteLastChangesetChange(ctx, tx, open.ID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := &UnstageLastResult{
+		Change:         *deleted,
+		RemainingCount: len(open.Changes) - 1,
+	}
+	if open.EnvironmentID != nil {
+		if env, err := s.store.GetEnvironmentByID(ctx, *open.EnvironmentID); err == nil && env != nil {
+			result.EnvironmentName = env.Name
+		}
+	}
+	return result, nil
+}
+
 func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envName string, input PushChangesetInput) (*CreateReleaseResult, error) {
 	project, svc, reqEnv, err := s.projectService.resolvePrimaryService(ctx, projectName, envName)
 	if err != nil {

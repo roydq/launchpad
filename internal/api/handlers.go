@@ -82,6 +82,7 @@ func (s *Server) Routes() chi.Router {
 
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/changeset", s.getChangeset)
 		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/changeset/changes", s.stageChanges)
+		r.With(auth.RequireScope("project:write")).Delete("/projects/{project}/changeset/changes/last", s.unstageLastChange)
 		r.With(auth.RequireScope("project:write")).Delete("/projects/{project}/changeset", s.discardChangeset)
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/changeset/push", s.pushChangeset)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/preview", s.preview)
@@ -388,6 +389,15 @@ func (s *Server) discardChangeset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) unstageLastChange(w http.ResponseWriter, r *http.Request) {
+	result, err := s.changesets.UnstageLastChange(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, unstageLastResponse(result))
 }
 
 func (s *Server) pushChangeset(w http.ResponseWriter, r *http.Request) {
