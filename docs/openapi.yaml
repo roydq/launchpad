@@ -231,6 +231,38 @@ paths:
       responses:
         "200":
           description: Environment
+  /v1/projects/{project}/environments/{name}/clone:
+    post:
+      tags: [environments]
+      summary: Clone environment (plain config copy; secrets as needs_value only)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: Source environment name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, description: Destination environment name }
+                target:
+                  type: object
+                  properties:
+                    type: { type: string }
+                    namespace: { type: string }
+                    cluster: { type: string }
+                ephemeral: { type: boolean }
+      responses:
+        "201":
+          description: Cloned environment + report
+        "409":
+          description: Destination already exists
   /v1/projects/{project}/releases:
     get:
       tags: [releases]

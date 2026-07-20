@@ -74,6 +74,7 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/environments", s.listEnvironments)
 		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/environments", s.createEnvironment)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/environments/{name}", s.getEnvironment)
+		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/environments/{name}/clone", s.cloneEnvironment)
 
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/releases", s.createRelease)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/releases", s.listReleases)
@@ -202,6 +203,20 @@ func (s *Server) getEnvironment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, environmentResponse(env))
+}
+
+func (s *Server) cloneEnvironment(w http.ResponseWriter, r *http.Request) {
+	var input service.CloneEnvironmentInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	result, err := s.projects.CloneEnvironment(r.Context(), chi.URLParam(r, "project"), chi.URLParam(r, "name"), input)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, cloneEnvironmentResponse(result))
 }
 
 func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request) {

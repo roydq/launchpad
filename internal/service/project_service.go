@@ -2,11 +2,15 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/auth"
 	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/internal/store"
@@ -139,6 +143,155 @@ func (s *ProjectService) CreateEnvironment(ctx context.Context, projectName stri
 		return nil, err
 	}
 	return env, nil
+}
+
+// CloneEnvironmentResult reports what was copied vs secret keys that need values.
+type CloneEnvironmentResult struct {
+	Environment *domain.Environment `json:"environment"`
+	From        string              `json:"from"`
+	ClonedPlain []string            `json:"cloned_plain"`
+	NeedsValue  []string            `json:"needs_value"`
+	SharedKeys  int                 `json:"shared_keys"`
+	ServiceKeys int                 `json:"service_keys"`
+}
+
+// CloneEnvironmentInput creates a new environment by cloning config layers from a source env.
+// Secret values are never copied; their keys appear in NeedsValue.
+type CloneEnvironmentInput struct {
+	Name      string      `json:"name"`
+	Target    TargetInput `json:"target"`
+	Ephemeral bool        `json:"ephemeral"`
+}
+
+// CloneEnvironment creates env B from A per secrets clone policy.
+func (s *ProjectService) CloneEnvironment(ctx context.Context, projectName, fromName string, input CloneEnvironmentInput) (*CloneEnvironmentResult, error) {
+	project, err := s.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	fromName = normalizeEnvName(fromName)
+	toName := strings.TrimSpace(input.Name)
+	if !envNamePattern.MatchString(toName) {
+		return nil, fmt.Errorf("%w: invalid environment name", launchpad.ErrBadRequest)
+	}
+	if toName == fromName {
+		return nil, fmt.Errorf("%w: clone source and destination must differ", launchpad.ErrBadRequest)
+	}
+	from, err := s.store.GetEnvironmentByProjectAndName(ctx, project.ID, fromName)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.store.GetEnvironmentByProjectAndName(ctx, project.ID, toName); err == nil {
+		return nil, fmt.Errorf("%w: environment %q already exists", launchpad.ErrConflict, toName)
+	} else if err != nil && !errors.Is(err, launchpad.ErrNotFound) {
+		return nil, err
+	}
+
+	svc, err := s.store.GetServiceByProjectAndName(ctx, project.ID, project.PrimaryService)
+	if err != nil {
+		return nil, err
+	}
+
+	targetType, targetConfig := cloneTarget(from, input.Target)
+
+	sharedVals, sharedSens, err := s.store.ListSharedConfigVarsWithSensitivityTx(ctx, nil, project.ID, from.ID)
+	if err != nil {
+		return nil, err
+	}
+	svcVals, svcSens, err := s.store.ListConfigVarsWithSensitivityTx(ctx, nil, svc.ID, from.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	plainSet := map[string]struct{}{}
+	needsSet := map[string]struct{}{}
+	sharedWrites := map[string]store.ConfigWrite{}
+	svcWrites := map[string]store.ConfigWrite{}
+	sensPlain := domain.SensitivityPlain
+
+	for k, v := range sharedVals {
+		if domain.IsSecret(sharedSens[k]) {
+			needsSet[k] = struct{}{}
+			continue
+		}
+		val := v
+		sharedWrites[k] = store.ConfigWrite{Value: &val, Sensitivity: &sensPlain}
+		plainSet[k] = struct{}{}
+	}
+	for k, v := range svcVals {
+		if domain.IsSecret(svcSens[k]) {
+			needsSet[k] = struct{}{}
+			continue
+		}
+		val := v
+		svcWrites[k] = store.ConfigWrite{Value: &val, Sensitivity: &sensPlain}
+		plainSet[k] = struct{}{}
+	}
+
+	to := &domain.Environment{
+		ProjectID:    project.ID,
+		Name:         toName,
+		TargetType:   targetType,
+		TargetConfig: targetConfig,
+		Ephemeral:    input.Ephemeral,
+	}
+
+	err = s.store.Transact(ctx, func(tx *sql.Tx) error {
+		if err := s.store.CreateEnvironmentTx(ctx, tx, to); err != nil {
+			return err
+		}
+		if err := s.store.MergeConfigWritesTx(ctx, tx, "shared", uuid.Nil, to.ID, project.ID, sharedWrites); err != nil {
+			return err
+		}
+		return s.store.MergeConfigWritesTx(ctx, tx, "service", svc.ID, to.ID, uuid.Nil, svcWrites)
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, fmt.Errorf("%w: environment %q already exists", launchpad.ErrConflict, toName)
+		}
+		return nil, err
+	}
+
+	plain := setKeys(plainSet)
+	needs := setKeys(needsSet)
+	return &CloneEnvironmentResult{
+		Environment: to,
+		From:        fromName,
+		ClonedPlain: plain,
+		NeedsValue:  needs,
+		SharedKeys:  len(sharedWrites),
+		ServiceKeys: len(svcWrites),
+	}, nil
+}
+
+func cloneTarget(from *domain.Environment, override TargetInput) (string, json.RawMessage) {
+	if strings.TrimSpace(override.Type) == "" && strings.TrimSpace(override.Namespace) == "" && strings.TrimSpace(override.Cluster) == "" {
+		return from.TargetType, from.TargetConfig
+	}
+	var fromTC map[string]string
+	_ = json.Unmarshal(from.TargetConfig, &fromTC)
+	if fromTC == nil {
+		fromTC = map[string]string{}
+	}
+	ns := fromTC["namespace"]
+	cluster := fromTC["cluster"]
+	if override.Namespace != "" {
+		ns = override.Namespace
+	}
+	if override.Cluster != "" {
+		cluster = override.Cluster
+	}
+	tc, _ := json.Marshal(map[string]string{"namespace": ns, "cluster": cluster})
+	return defaultString(override.Type, from.TargetType), tc
+}
+
+func setKeys(m map[string]struct{}) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // resolvePrimaryService resolves project, primary service, and named environment.

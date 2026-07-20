@@ -81,7 +81,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Server-side pending/diff preview | **Shipped** |
 | Diff env↔env | **Shipped** |
 | Unstage last mutation | **Shipped** |
-| Recipes / `launchpad new` templates | Later |
+| Recipes / `launchpad new` templates | **Shipped** (ADM #32) |
 | MCP server | After core loop solid |
 
 ### Track B — Confidence (engineering)
@@ -93,9 +93,9 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | e2e multi-env + promote + config re-resolution | **Shipped** (`TestPromoteReResolvesTargetConfig`) |
 | Failure-path e2e (409, pin mismatch) | **Shipped** |
 | OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) |
-| Postgres matrix in CI | Later |
-| Target conformance suite (stub/k8s/…) | Later |
-| Worker lease/supersede stress tests | Later |
+| Postgres matrix in CI | **Shipped** — `test-postgres` + pgx driver fix (ADM #34) |
+| Target conformance suite (stub/k8s/…) | **Shipped** — stub conformance (ADM #35) |
+| Worker lease/supersede stress tests | **Shipped** — concurrent lease + reclaim (ADM #36) |
 
 ### Track C — Surfaces (CLI → TUI → web → docs)
 
@@ -144,7 +144,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Project-local config | **Shipped** |
 | `launchpad doctor` | **Shipped** |
 | `launchpad inspect` | **Shipped** |
-| Shell prompt awareness | Later |
+| Shell prompt awareness | **Shipped** — `launchpad prompt` / `shell-init` (ADM #33) |
 
 ### P2 — Trust and archaeology
 
@@ -165,7 +165,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Server-side pending/diff preview | **Shipped** — `GET …/preview` |
 | `launchpad run` / env pull | Later |
 | Ephemeral / PR environments | Later |
-| Env clone | **Blocked** until secrets S1 (min) / S2 (preferred) ships |
+| Env clone | **Shipped** — `env clone` / `POST …/clone` (ADM #37) |
 
 ### P4 — Agent surface
 
@@ -175,7 +175,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | CLI surfaces hints | **Shipped** |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
-| Recipes / templates | Later |
+| Recipes / templates | **Shipped** — `launchpad new` / `new list` |
 
 ### Explicit non-goals (for now)
 
@@ -193,10 +193,11 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 2. ~~Prod-readiness dogfood~~ (**Shipped** — e2e promote, CLI hints, production `--yes`)
 3. ~~Server-side pending/diff preview~~ (**Shipped**)
 4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
-5. Secrets S1 typing+redaction — **shipped** (PR #28); S2 encryption — **implementing** (`feat/secrets-s2`) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
-6. Surfaces (docs site → TUI → dashboard) only with stable API
-7. OIDC (after principals phase 1 dogfood)
-8. **Multi-service** only after dogfood of core loop
+5. Secrets S1+S2 — **shipped** (PRs #28, #29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
+6. ADM remaining ready queue (base `adm/queue-2026-07-19`): recipes → shell-prompt → Track B → env-clone
+7. Surfaces (docs site → TUI → dashboard) only with stable API
+8. OIDC (after principals phase 1 dogfood)
+9. **Multi-service** only after dogfood of core loop
 
 ### Autonomous feature program
 
@@ -228,15 +229,10 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **Unstage last mutation** | QUEUE `unstage-last` — [spec](superpowers/specs/2026-07-19-unstage-last-design.md) · [#31](https://github.com/roydq/launchpad/pull/31) |
-| Diff env↔env | **Shipped** (#30) — [spec](superpowers/specs/2026-07-19-diff-env-env-design.md) |
-| Secrets S2 (AES-GCM at rest) | **Shipped** (#29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2 |
-| ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
-| Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
-| Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |
-| Failure-path e2e | **Shipped** (#22) |
-| OpenAPI contract | **Shipped** (#23) |
-| Examples/60s path | **Shipped** (#24) |
+| **ADM integration → main** | `adm/queue-2026-07-19` — PRs #32–#38 (recipes, prompt, postgres-ci, conformance, stress, env-clone, env-use fix) |
+| Next ready QUEUE | e2e-env-clone, e2e-recipes-new, clone-secret-placeholder, status-unstage-hint, audit-config-keys, completions-man |
+| Deferred | oidc-design, mcp-server, multi-service, bindings, launchpad-yaml |
+| ADM process | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
 | Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
 

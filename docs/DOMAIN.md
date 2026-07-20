@@ -382,7 +382,7 @@ Each config entry in **shared** and **service** layers has a sensitivity:
 
 CLI: `launchpad config set --secret KEY=VAL`, `config get` shows `[secret]`. API: `GET …/config` redacts; `?view=typed` returns `{value, sensitivity, set}` (secret values null).
 
-Env clone remains blocked until S2 preferred (or S1 min); clone policy copies plain values and secret **keys** without values.
+Env clone is available: plain values are copied; secret **keys** are reported as `needs_value` without copying material (`POST …/environments/{from}/clone`, CLI `env clone`).
 
 ### Bindings (service linking)
 
@@ -649,8 +649,10 @@ GET    /healthz
 | Command | Notes |
 |---------|-------|
 | `launchpad projects create` | Bootstraps project + `dev` + primary service + `web` |
-| `launchpad use <project>` | Persists project context to `~/.launchpad/config` |
-| `launchpad env list/create/use/current` | Environments; sticky env (default `dev`); dirty batch blocks switch |
+| `launchpad new [recipe] <name>` | CLI recipe bootstrap (create + context + optional stage) |
+| `launchpad use <project>` | Persists project context to `~/.launchpad/config` (+ project-local if present) |
+| `launchpad prompt` / `shell-init` | Shell prompt fragment `project@env` |
+| `launchpad env list/create/use/current/clone` | Environments; sticky env (default `dev`); dirty batch blocks switch; clone copies plain config only |
 | `launchpad config get/set/unset` | Live get; set/unset stage by default (`--now` for immediate) |
 | `launchpad scale` / `image` | Stage scale or image (`--now` for immediate) |
 | `launchpad diff` / `status` / `reset` / `unstage` | Review pending vs last deploy **in current env**; discard all staging, or unstage last mutation |
@@ -727,7 +729,7 @@ Each phase updates API, store, worker, CLI, and target interface together.
 
 ## Open Questions
 
-1. **Env clone.** Unblocked after secrets S2 preferred (or S1 min). Clone policy: plain copy; secret keys without values.
+1. **Env clone.** **Shipped** — plain copy; secret keys as `needs_value` only (no secret material).
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? Defer to target-specific extensions.

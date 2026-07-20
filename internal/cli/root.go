@@ -55,17 +55,62 @@ func NewRoot(cfg Config) *cobra.Command {
 	projectsCmd.AddCommand(createCmd)
 	root.AddCommand(projectsCmd)
 
+	newCmd := &cobra.Command{
+		Use:   "new [recipe|list] [project]",
+		Short: "Create a project from a recipe template",
+		Long: `Bootstrap a project from a built-in recipe (CLI-local templates).
+
+  launchpad new list
+  launchpad new hello-stub my-api
+  launchpad new my-api              # default recipe: hello-stub
+  launchpad new web-stub my-web     # stages PORT=8080 + image`,
+		Args: cobra.MaximumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			parsed, err := ParseNewArgs(args)
+			if err != nil {
+				return err
+			}
+			if parsed.List {
+				printRecipeList()
+				return nil
+			}
+			recipe, ok := LookupRecipe(parsed.Recipe)
+			if !ok {
+				return fmt.Errorf("unknown recipe %q; run \"launchpad new list\"", parsed.Recipe)
+			}
+			targetType, _ := cmd.Flags().GetString("target")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			noStage, _ := cmd.Flags().GetBool("no-stage")
+			dir, _ := cmd.Flags().GetString("dir")
+			// Ensure staging uses the project's default env (dev).
+			prevEnv := client.Environment
+			client.Environment = "dev"
+			defer func() { client.Environment = prevEnv }()
+			return ApplyRecipe(cmd.Context(), client, recipe, parsed.Project, ApplyRecipeOptions{
+				TargetType: targetType,
+				Namespace:  namespace,
+				NoStage:    noStage,
+				Dir:        dir,
+			})
+		},
+	}
+	// Empty default means "use recipe defaults" for target/namespace.
+	newCmd.Flags().String("target", "", "override recipe target type (default: recipe target)")
+	newCmd.Flags().String("namespace", "", "override recipe namespace (default: recipe namespace)")
+	newCmd.Flags().Bool("no-stage", false, "create project only; do not stage image/config")
+	newCmd.Flags().String("dir", ".", "write project-local .launchpad/config here (empty to skip)")
+	root.AddCommand(newCmd)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "use [project]",
 		Short: "Set the active project in ~/.launchpad/config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			local, _ := loadLocalConfig()
-			local.Project = args[0]
-			if err := saveLocalConfig(local); err != nil {
+			env := effectiveEnv(cfg)
+			if err := saveActiveContext(args[0], env); err != nil {
 				return err
 			}
-			fmt.Printf("using project %s (environment %s)\n", args[0], effectiveEnv(cfg))
+			fmt.Printf("using project %s (environment %s)\n", args[0], env)
 			return nil
 		},
 	})
@@ -116,6 +161,43 @@ func NewRoot(cfg Config) *cobra.Command {
 	envCreate.Flags().String("target", "stub", "target type")
 	envCreate.Flags().String("namespace", "default", "target namespace")
 	envCmd.AddCommand(envCreate)
+
+	envClone := &cobra.Command{
+		Use:   "clone [from] [to]",
+		Short: "Clone an environment (plain config; secrets listed as needs_value)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			targetType, _ := cmd.Flags().GetString("target")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			ephemeral, _ := cmd.Flags().GetBool("ephemeral")
+			result, err := client.CloneEnvironment(cmd.Context(), project, args[0], args[1], targetType, namespace, ephemeral)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("created environment %s from %s (target=%s)\n", result.Environment.Name, result.From, result.Environment.TargetType)
+			if len(result.ClonedPlain) > 0 {
+				fmt.Printf("cloned plain: %s\n", strings.Join(result.ClonedPlain, ", "))
+			} else {
+				fmt.Println("cloned plain: (none)")
+			}
+			if len(result.NeedsValue) > 0 {
+				fmt.Printf("needs_value (secrets): %s\n", strings.Join(result.NeedsValue, ", "))
+				fmt.Printf("next: launchpad env use %s && launchpad config set --secret KEY=...\n", result.Environment.Name)
+			} else {
+				fmt.Printf("next: launchpad env use %s && launchpad deploy --image <ref>\n", result.Environment.Name)
+			}
+			return nil
+		},
+	}
+	envClone.Flags().String("target", "", "override target type (default: copy from source)")
+	envClone.Flags().String("namespace", "", "override namespace (default: copy from source)")
+	envClone.Flags().Bool("ephemeral", false, "mark destination as ephemeral")
+	envCmd.AddCommand(envClone)
+
 	envCmd.AddCommand(&cobra.Command{
 		Use:   "use [name]",
 		Short: "Set the active environment",
@@ -137,10 +219,7 @@ func NewRoot(cfg Config) *cobra.Command {
 				return fmt.Errorf("cannot switch environment: %d pending change(s) for %s; run \"launchpad deploy\", \"launchpad diff\", or \"launchpad reset\"",
 					pendingCount(cs), cs.Environment)
 			}
-			local, _ := loadLocalConfig()
-			local.Project = project
-			local.Environment = name
-			if err := saveLocalConfig(local); err != nil {
+			if err := saveActiveContext(project, name); err != nil {
 				return err
 			}
 			fmt.Printf("using environment %s\n", name)
@@ -732,6 +811,39 @@ func NewRoot(cfg Config) *cobra.Command {
 		},
 	})
 
+	promptCmd := &cobra.Command{
+		Use:   "prompt",
+		Short: "Print project@env for shell prompts (no network)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, _ := cmd.Flags().GetString("format")
+			out := FormatPrompt(cfg, format)
+			if out != "" {
+				fmt.Println(out)
+			}
+			return nil
+		},
+	}
+	promptCmd.Flags().String("format", "short", "output format: short (project@env) or long")
+	root.AddCommand(promptCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "shell-init [bash|zsh]",
+		Short: "Print shell snippet to show (lp:project@env) in PS1",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			shell := "bash"
+			if len(args) == 1 {
+				shell = args[0]
+			}
+			script, err := ShellInitScript(shell)
+			if err != nil {
+				return err
+			}
+			fmt.Print(script)
+			return nil
+		},
+	})
+
 	return root
 }
 
@@ -803,6 +915,37 @@ func saveLocalConfig(cfg localConfig) error {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+// saveActiveContext writes project/env to global config and, when present,
+// updates any walk-up project-local .launchpad/config so env use is not
+// shadowed by a stale local environment field (e.g. after launchpad new).
+func saveActiveContext(project, environment string) error {
+	local, _ := loadLocalConfig()
+	local.Project = project
+	if environment != "" {
+		local.Environment = environment
+	}
+	if err := saveLocalConfig(local); err != nil {
+		return err
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	pl, path, err := findProjectLocalConfig(cwd)
+	if err != nil || path == "" {
+		return nil
+	}
+	pl.Project = project
+	if environment != "" {
+		pl.Environment = environment
+	}
+	data, err := json.MarshalIndent(pl, "", "  ")
 	if err != nil {
 		return err
 	}
