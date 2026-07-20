@@ -23,3 +23,29 @@ jobs:
         run: mise exec -- make e2e-stub
       - name: Example 60s path (stub)
         run: mise exec -- make example-60s
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: launchpad
+          POSTGRES_PASSWORD: launchpad
+          POSTGRES_DB: launchpad
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U launchpad -d launchpad"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: true
+      - name: Postgres store integration
+        env:
+          LAUNCHPAD_TEST_DATABASE_URL: postgres://launchpad:launchpad@localhost:5432/launchpad?sslmode=disable
+        run: mise exec -- make test-postgres

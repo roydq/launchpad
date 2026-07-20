@@ -23,7 +23,14 @@ func Open(ctx context.Context, databaseURL string) (*sql.DB, Driver, error) {
 		return nil, "", err
 	}
 
-	db, err := sql.Open(string(driver), dsn)
+	// database/sql driver name (pgx stdlib registers as "pgx", modernc as "sqlite").
+	// Store.Driver remains "postgres"/"sqlite" for rebind/migrate dialect selection.
+	sqlDriver := string(driver)
+	if driver == DriverPostgres {
+		sqlDriver = "pgx"
+	}
+
+	db, err := sql.Open(sqlDriver, dsn)
 	if err != nil {
 		return nil, "", err
 	}

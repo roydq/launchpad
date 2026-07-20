@@ -93,7 +93,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | e2e multi-env + promote + config re-resolution | **Shipped** (`TestPromoteReResolvesTargetConfig`) |
 | Failure-path e2e (409, pin mismatch) | **Shipped** |
 | OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) |
-| Postgres matrix in CI | Later |
+| Postgres matrix in CI | **Shipping** — `test-postgres` job + env-gated store tests |
 | Target conformance suite (stub/k8s/…) | Later |
 | Worker lease/supersede stress tests | Later |
 
