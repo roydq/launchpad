@@ -106,12 +106,11 @@ func NewRoot(cfg Config) *cobra.Command {
 		Short: "Set the active project in ~/.launchpad/config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			local, _ := loadLocalConfig()
-			local.Project = args[0]
-			if err := saveLocalConfig(local); err != nil {
+			env := effectiveEnv(cfg)
+			if err := saveActiveContext(args[0], env); err != nil {
 				return err
 			}
-			fmt.Printf("using project %s (environment %s)\n", args[0], effectiveEnv(cfg))
+			fmt.Printf("using project %s (environment %s)\n", args[0], env)
 			return nil
 		},
 	})
@@ -220,10 +219,7 @@ func NewRoot(cfg Config) *cobra.Command {
 				return fmt.Errorf("cannot switch environment: %d pending change(s) for %s; run \"launchpad deploy\", \"launchpad diff\", or \"launchpad reset\"",
 					pendingCount(cs), cs.Environment)
 			}
-			local, _ := loadLocalConfig()
-			local.Project = project
-			local.Environment = name
-			if err := saveLocalConfig(local); err != nil {
+			if err := saveActiveContext(project, name); err != nil {
 				return err
 			}
 			fmt.Printf("using environment %s\n", name)
@@ -919,6 +915,37 @@ func saveLocalConfig(cfg localConfig) error {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+// saveActiveContext writes project/env to global config and, when present,
+// updates any walk-up project-local .launchpad/config so env use is not
+// shadowed by a stale local environment field (e.g. after launchpad new).
+func saveActiveContext(project, environment string) error {
+	local, _ := loadLocalConfig()
+	local.Project = project
+	if environment != "" {
+		local.Environment = environment
+	}
+	if err := saveLocalConfig(local); err != nil {
+		return err
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	pl, path, err := findProjectLocalConfig(cwd)
+	if err != nil || path == "" {
+		return nil
+	}
+	pl.Project = project
+	if environment != "" {
+		pl.Environment = environment
+	}
+	data, err := json.MarshalIndent(pl, "", "  ")
 	if err != nil {
 		return err
 	}
