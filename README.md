@@ -34,12 +34,14 @@ Walkthrough: [`examples/hello-stub/README.md`](examples/hello-stub/README.md).
 ## Solo-engineer workflow
 
 ```bash
-launchpad projects create my-api
-launchpad use my-api                  # environment defaults to dev
+# Recipe bootstrap (or: projects create + use + image)
+launchpad new list
+launchpad new my-api                  # hello-stub: create, use, stage hello:v1
+# launchpad new web-stub my-web       # also stages PORT=8080
+
 launchpad config set --shared LOG_LEVEL=info
 launchpad config set PORT=3000
 launchpad config get              # resolved: LOG_LEVEL + PORT
-launchpad image my-api:v1
 launchpad diff
 launchpad deploy -m "initial"
 

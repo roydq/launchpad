@@ -55,6 +55,52 @@ func NewRoot(cfg Config) *cobra.Command {
 	projectsCmd.AddCommand(createCmd)
 	root.AddCommand(projectsCmd)
 
+	newCmd := &cobra.Command{
+		Use:   "new [recipe|list] [project]",
+		Short: "Create a project from a recipe template",
+		Long: `Bootstrap a project from a built-in recipe (CLI-local templates).
+
+  launchpad new list
+  launchpad new hello-stub my-api
+  launchpad new my-api              # default recipe: hello-stub
+  launchpad new web-stub my-web     # stages PORT=8080 + image`,
+		Args: cobra.MaximumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			parsed, err := ParseNewArgs(args)
+			if err != nil {
+				return err
+			}
+			if parsed.List {
+				printRecipeList()
+				return nil
+			}
+			recipe, ok := LookupRecipe(parsed.Recipe)
+			if !ok {
+				return fmt.Errorf("unknown recipe %q; run \"launchpad new list\"", parsed.Recipe)
+			}
+			targetType, _ := cmd.Flags().GetString("target")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			noStage, _ := cmd.Flags().GetBool("no-stage")
+			dir, _ := cmd.Flags().GetString("dir")
+			// Ensure staging uses the project's default env (dev).
+			prevEnv := client.Environment
+			client.Environment = "dev"
+			defer func() { client.Environment = prevEnv }()
+			return ApplyRecipe(cmd.Context(), client, recipe, parsed.Project, ApplyRecipeOptions{
+				TargetType: targetType,
+				Namespace:  namespace,
+				NoStage:    noStage,
+				Dir:        dir,
+			})
+		},
+	}
+	// Empty default means "use recipe defaults" for target/namespace.
+	newCmd.Flags().String("target", "", "override recipe target type (default: recipe target)")
+	newCmd.Flags().String("namespace", "", "override recipe namespace (default: recipe namespace)")
+	newCmd.Flags().Bool("no-stage", false, "create project only; do not stage image/config")
+	newCmd.Flags().String("dir", ".", "write project-local .launchpad/config here (empty to skip)")
+	root.AddCommand(newCmd)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "use [project]",
 		Short: "Set the active project in ~/.launchpad/config",
