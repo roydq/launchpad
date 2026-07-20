@@ -28,6 +28,10 @@
 | 2026-07-18 | non-goal | Continuous GitOps reconciliation | — | — | Explicit non-goal |
 | 2026-07-18 | non-goal | Helm as primary UX | — | — | Explicit non-goal |
 | 2026-07-18 | adm-design | Persona finds unclear recovery on pin mismatch | P2 | B | Validate on next persona run; add e2e if real |
+| 2026-07-19 | adm-diff-env | Live layer env↔env (resolved live, not last deploy) | P3 | A | Distinct from shipped deploy archaeology |
+| 2026-07-19 | adm-diff-env | Improve release↔release to full snapshot union (removes) | P3 | A | Pending-style BuildDiff misses keys only on from |
+| 2026-07-19 | adm-unstage | `unstage --key FOO` / interactive pick | P3 | A | Last-only is enough for now |
+| 2026-07-19 | adm-unstage | Status help line mention `unstage` next to reset | P3 | A | Polish |
 | 2026-07-18 | adm-design | Program SESSION run logs under `program/feedback/` | P3 | process | Optional; create when first ADM feature run needs them |
 | 2026-07-18 | secrets-design | `secret_ref` / external SM (Vault, AWS SM) as future value kind | P2 | D | After S1/S2; do not block typing+redaction |
 | 2026-07-18 | secrets-design | Dual-key secret re-encrypt / rotation job | P3 | D | S2 notes `key_id` prefix; implement when needed |
