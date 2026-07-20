@@ -58,6 +58,7 @@ const (
 	AuditActionReleasePromote  AuditAction = "release.promote"
 	AuditActionReleaseRollback AuditAction = "release.rollback"
 	AuditActionChangesetPush   AuditAction = "changeset.push"
+	AuditActionConfigSet       AuditAction = "config.set"
 )
 
 // AuditEvent is an append-only record of who did what.

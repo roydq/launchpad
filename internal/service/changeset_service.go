@@ -230,6 +230,9 @@ func (s *ChangesetService) PushChangeset(ctx context.Context, projectName, envNa
 				return err
 			}
 		}
+		if err := auditConfigWrites(ctx, s.store, tx, project, sharedWrites, configWrites); err != nil {
+			return err
+		}
 		if err := applyProcessOps(ctx, s.store, tx, svc.ID, processOps); err != nil {
 			return err
 		}
@@ -487,6 +490,45 @@ func applyProcessOps(ctx context.Context, st *store.Store, tx *sql.Tx, serviceID
 		}
 	}
 	return nil
+}
+
+// auditConfigWrites records config.set events with key + sensitivity only (never values).
+func auditConfigWrites(ctx context.Context, st *store.Store, tx *sql.Tx, project *domain.Project, shared, service map[string]store.ConfigWrite) error {
+	emit := func(layer string, writes map[string]store.ConfigWrite) error {
+		for key, w := range writes {
+			sens := domain.SensitivityPlain
+			if w.Sensitivity != nil && *w.Sensitivity != "" {
+				sens = domain.NormalizeSensitivity(*w.Sensitivity)
+				if sens == "" {
+					sens = domain.SensitivityPlain
+				}
+			}
+			unset := "false"
+			if w.Value == nil {
+				unset = "true"
+			}
+			if err := st.CreateAuditEvent(ctx, tx, &domain.AuditEvent{
+				WorkspaceID:  project.WorkspaceID,
+				Action:       domain.AuditActionConfigSet,
+				ResourceType: "config",
+				ResourceID:   project.ID,
+				ProjectName:  project.Name,
+				Detail: map[string]string{
+					"layer":       layer,
+					"key":         key,
+					"sensitivity": sens,
+					"unset":       unset,
+				},
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := emit("shared", shared); err != nil {
+		return err
+	}
+	return emit("service", service)
 }
 
 func upsertProcessSet(ctx context.Context, st *store.Store, tx *sql.Tx, serviceID uuid.UUID, set domain.ProcessSetPayload) error {
