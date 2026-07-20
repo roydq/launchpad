@@ -511,7 +511,7 @@ func NewRoot(cfg Config) *cobra.Command {
 				}
 			}
 			fmt.Printf("pending: %d change(s) for %s (config=%d scale=%d image=%d)\n", n, pin, nConfig, nScale, nImage)
-			fmt.Println(`Run "launchpad diff" to review, "launchpad deploy" to apply, "launchpad reset" to discard.`)
+			fmt.Println(`Run "launchpad diff" to review, "launchpad deploy" to apply, "launchpad unstage" to drop the last change, "launchpad reset" to discard all.`)
 			return nil
 		},
 	})
