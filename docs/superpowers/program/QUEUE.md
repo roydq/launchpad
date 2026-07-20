@@ -10,8 +10,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | secrets-s2 | Secrets S2: AES-GCM at rest | D | pr-open | Spec § S2: `LAUNCHPAD_SECRETS_KEY`; encrypt secret rows + release snapshot; worker decrypt. | `feat/secrets-s2` · [#29](https://github.com/roydq/launchpad/pull/29) |
-| 2 | diff-env-env | Diff env↔env (release archaeology) | A | ready | DX backlog P2; redaction-aware after secrets S1 | — |
+| 1 | diff-env-env | Diff env↔env (release archaeology) | A | pr-open | Spec: `docs/superpowers/specs/2026-07-19-diff-env-env-design.md` | `feat/diff-env-env` · [#30](https://github.com/roydq/launchpad/pull/30) |
 | 3 | unstage-last | Unstage last mutation | A | ready | DX backlog P2 — pending changeset UX | — |
 | 4 | recipes-templates | Recipes / `launchpad new` templates | A | ready | Track A later; keep day-one path short | — |
 | 5 | shell-prompt | Shell prompt awareness (project@env) | A | ready | DX backlog P1 later | — |
@@ -31,6 +30,7 @@ Keep short; full history lives in DX-VISION and merged specs.
 
 | ID | Item | Spec |
 |----|------|------|
+| secrets-s2 | Secrets S2: AES-GCM at rest | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #29 |
 | secrets-s1 | Secrets S1: typing + redaction + CLI `--secret` | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #28 |
 | secrets-design | Secrets-typed config (**design only**) | `docs/superpowers/specs/2026-07-18-secrets-typed-config-design.md` · PR #26 · human-accepted model |
 | server-diff-preview | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` |

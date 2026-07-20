@@ -79,6 +79,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | CLI prints recovery hints | **Shipped** |
 | Sensitive-env confirmations (`production` + `--yes`) | **Shipped** (CLI policy) |
 | Server-side pending/diff preview | **Shipped** |
+| Diff env↔env | **Shipped** |
 | Recipes / `launchpad new` templates | Later |
 | MCP server | After core loop solid |
 
@@ -113,7 +114,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Workspace-scoped tokens | **Shipped** |
 | Principals + membership + audit (phase 1) | **Shipped** (service accounts on tokens; release `created_by`; `GET /v1/audit`) |
 | OIDC (Azure AD / Google / generic) | After phase 1 principals |
-| Secrets-typed config | **S1 shipped**; **S2 implementing** — AES-GCM at rest (`feat/secrets-s2`). [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) |
+| Secrets-typed config | **S1+S2 shipped** — typing/redaction + AES-GCM at rest. [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) |
 | Idempotency keys | Later |
 | Deployment events / SSE | Later |
 | HA workers / packaging | Later |
@@ -152,7 +153,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Promote CLI | **Shipped** |
 | `releases show N` | **Shipped** |
 | Diff release↔release | **Shipped** |
-| Diff env↔env | Later |
+| Diff env↔env | **Shipped** (`--from-env` / `--to-env`) |
 | Unstage last mutation | Later |
 | Sensitive-env confirmations | **Shipped** (`--yes` on production) |
 
@@ -226,7 +227,8 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **Secrets S2 (AES-GCM at rest)** | QUEUE `secrets-s2` — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2; S1 shipped PR #28 |
+| **Diff env↔env** | QUEUE `diff-env-env` — [spec](superpowers/specs/2026-07-19-diff-env-env-design.md) |
+| Secrets S2 (AES-GCM at rest) | **Shipped** (#29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) § S2 |
 | ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Prod-readiness dogfood | `docs/superpowers/specs/2026-07-14-prod-readiness-design.md` (**Shipped**) |
 | Server-side pending/diff preview | `docs/superpowers/specs/2026-07-15-server-diff-preview-design.md` (**Shipped**) |

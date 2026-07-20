@@ -325,7 +325,7 @@ func NewRoot(cfg Config) *cobra.Command {
 
 	diffCmd := &cobra.Command{
 		Use:   "diff",
-		Short: "Show pending staged changes vs last deploy (or compare two releases)",
+		Short: "Show pending staged changes vs last deploy (or compare releases / envs)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, err := requireProject(cfg)
 			if err != nil {
@@ -333,7 +333,38 @@ func NewRoot(cfg Config) *cobra.Command {
 			}
 			fromV, _ := cmd.Flags().GetInt("from-release")
 			toV, _ := cmd.Flags().GetInt("to-release")
-			if fromV > 0 || toV > 0 {
+			fromEnv, _ := cmd.Flags().GetString("from-env")
+			toEnv, _ := cmd.Flags().GetString("to-env")
+			hasRelease := fromV > 0 || toV > 0
+			hasEnv := fromEnv != "" || toEnv != ""
+			if hasRelease && hasEnv {
+				return fmt.Errorf("cannot combine --from-release/--to-release with --from-env/--to-env")
+			}
+			if hasEnv {
+				if fromEnv == "" || toEnv == "" {
+					return fmt.Errorf("both --from-env and --to-env are required for environment compare")
+				}
+				prev, err := client.PreviewEnvironments(cmd.Context(), project, fromEnv, toEnv)
+				if err != nil {
+					return err
+				}
+				fromLabel := fromEnv
+				toLabel := toEnv
+				if prev.FromVersion != nil {
+					fromLabel = fmt.Sprintf("%s (v%d)", fromEnv, *prev.FromVersion)
+				} else {
+					fromLabel = fromEnv + " (none)"
+				}
+				if prev.ToVersion != nil {
+					toLabel = fmt.Sprintf("%s (v%d)", toEnv, *prev.ToVersion)
+				} else {
+					toLabel = toEnv + " (none)"
+				}
+				fmt.Printf("# env %s → %s\n", fromLabel, toLabel)
+				fmt.Print(prev.Summary)
+				return nil
+			}
+			if hasRelease {
 				if fromV < 1 || toV < 1 {
 					return fmt.Errorf("both --from-release and --to-release are required for release compare")
 				}
@@ -356,6 +387,8 @@ func NewRoot(cfg Config) *cobra.Command {
 	}
 	diffCmd.Flags().Int("from-release", 0, "compare release versions (baseline)")
 	diffCmd.Flags().Int("to-release", 0, "compare release versions (target)")
+	diffCmd.Flags().String("from-env", "", "compare last deploy in environment (baseline)")
+	diffCmd.Flags().String("to-env", "", "compare last deploy in environment (target)")
 	root.AddCommand(diffCmd)
 
 	root.AddCommand(&cobra.Command{
