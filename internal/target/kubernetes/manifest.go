@@ -118,8 +118,9 @@ func containerFromProcess(process domain.Process, image string, port int32, proj
 			},
 		},
 	}
+	// Shell form: multi-word Procfile-style commands need /bin/sh (portable DX).
 	if process.Command != "" {
-		c.Command = []string{process.Command}
+		c.Command = []string{"/bin/sh", "-c", process.Command}
 	}
 	return c
 }

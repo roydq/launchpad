@@ -102,7 +102,7 @@ func TestMaterializeChanges(t *testing.T) {
 		{Type: domain.ChangeTypeImage, Payload: imagePayload},
 	}
 
-	shared, cfg, scales, image, err := materializeChanges(changes)
+	shared, cfg, scales, image, ops, err := materializeChanges(changes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +117,9 @@ func TestMaterializeChanges(t *testing.T) {
 	}
 	if image != "app:v2" {
 		t.Fatalf("image: %s", image)
+	}
+	if len(ops.sets) != 0 || len(ops.unsets) != 0 || ops.apply != nil {
+		t.Fatalf("unexpected process ops: %+v", ops)
 	}
 }
 
@@ -444,3 +447,66 @@ func TestStageChangesRejectsWrongService(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+func TestProcessSetAndProcfileApply(t *testing.T) {
+	ctx := context.Background()
+	db, driver, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, driver); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(db, driver)
+	workspaceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	ctx = context.WithValue(ctx, auth.ContextTeamID, workspaceID)
+	project := &domain.Project{WorkspaceID: workspaceID, Name: "proc-app"}
+	if err := st.CreateProject(ctx, project, &domain.Environment{TargetType: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	ps := NewProjectService(st)
+	rs := NewReleaseService(st, ps)
+	cs := NewChangesetService(st, ps, rs)
+
+	cmd := "run-worker"
+	qty := 2
+	exp := "none"
+	if _, err := cs.StageChanges(ctx, "proc-app", DefaultEnvironment, StageChangesInput{Changes: []StageChangeInput{
+		{Type: "process.set", Name: "worker", Command: &cmd, Quantity: &qty, Expose: &exp},
+		{Type: "image", Image: "app:1"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := cs.PushChangeset(ctx, "proc-app", DefaultEnvironment, PushChangesetInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap := result.Release.ProcessSnapshot
+	if snap["worker"].Command != "run-worker" || snap["worker"].Quantity != 2 {
+		t.Fatalf("worker snap: %+v", snap["worker"])
+	}
+	if _, ok := snap["web"]; !ok {
+		t.Fatal("web should remain")
+	}
+	markDeploySucceeded(t, ctx, st, result.Deployment)
+
+	// Procfile apply replaces set
+	pf := "web: serve\nworker: sidekiq\nrelease: migrate\n"
+	if _, err := cs.StageChanges(ctx, "proc-app", DefaultEnvironment, StageChangesInput{Changes: []StageChangeInput{
+		{Type: "process.apply", Procfile: pf},
+		{Type: "image", Image: "app:2"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	result2, err := cs.PushChangeset(ctx, "proc-app", DefaultEnvironment, PushChangesetInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap2 := result2.Release.ProcessSnapshot
+	if snap2["web"].Command != "serve" || snap2["web"].Expose != "http" {
+		t.Fatalf("web: %+v", snap2["web"])
+	}
+	if snap2["release"].Quantity != 0 {
+		t.Fatalf("release qty: %+v", snap2["release"])
+	}
+}

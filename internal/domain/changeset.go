@@ -22,6 +22,9 @@ const (
 	ChangeTypeSharedConfig ChangeType = "shared_config"
 	ChangeTypeScale        ChangeType = "scale"
 	ChangeTypeImage        ChangeType = "image"
+	ChangeTypeProcessSet   ChangeType = "process.set"
+	ChangeTypeProcessUnset ChangeType = "process.unset"
+	ChangeTypeProcessApply ChangeType = "process.apply"
 )
 
 type Changeset struct {
@@ -59,4 +62,23 @@ type ScaleChangePayload struct {
 
 type ImageChangePayload struct {
 	ArtifactRef string `json:"artifact_ref"`
+}
+
+// ProcessSetPayload upserts a process definition (partial update via pointers).
+type ProcessSetPayload struct {
+	Name     string  `json:"name"`
+	Command  *string `json:"command,omitempty"`
+	Quantity *int    `json:"quantity,omitempty"`
+	Expose   *string `json:"expose,omitempty"`
+}
+
+// ProcessUnsetPayload removes a process definition.
+type ProcessUnsetPayload struct {
+	Name string `json:"name"`
+}
+
+// ProcessApplyPayload replaces/merges process definitions from a Procfile or map.
+type ProcessApplyPayload struct {
+	Procfile  string                       `json:"procfile,omitempty"`
+	Processes map[string]ProcessSetPayload `json:"processes,omitempty"`
 }
