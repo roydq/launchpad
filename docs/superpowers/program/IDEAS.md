@@ -44,6 +44,15 @@
 | 2026-07-18 | secrets-s2 | Dual-key rotation job + `key_id` beyond `v1:` prefix | P3 | D | Spec notes dual-key re-encrypt; single key is enough for now |
 | 2026-07-18 | secrets-s2 | Auto-reencrypt legacy plaintext secrets on list | P3 | D | Currently open-as-plaintext until next write seals |
 | 2026-07-18 | secrets-s2 | Dev convenience: generate+persist key under `.launchpad/` | P3 | A | Spec optional; env-only for S2 |
+| 2026-07-19 | adm-smoke | Project-local env shadowed `env use` after `launchpad new` | P1 | A | **Fixed** PR #38 (`saveActiveContext`) |
+| 2026-07-19 | adm-smoke | Clone reports needs_value but no sticky secret rows for set | P2 | D | Promoted QUEUE `clone-secret-placeholder` |
+| 2026-07-19 | adm-smoke | `launchpad new` not covered by e2e-stub / example-60s | P2 | B | Promoted QUEUE `e2e-recipes-new` |
+| 2026-07-19 | adm-smoke | env clone not in e2e-stub | P2 | B | Promoted QUEUE `e2e-env-clone` |
+| 2026-07-19 | adm-smoke | Doctor still helpful; prompt/shell-init local-only ✓ | P3 | A | No action |
+| 2026-07-19 | adm-postgres | Postgres Open used wrong sql driver name (`postgres` vs `pgx`) | P0 | B | **Fixed** in PR #34 |
+| 2026-07-19 | adm-scout | Fish shell-init | P3 | C | bash/zsh only for now |
+| 2026-07-19 | adm-scout | Recipe `web-k8s` with namespace defaults | P3 | A | After k8s dogfood |
+| 2026-07-19 | adm-scout | Concurrent lease stress on Postgres CI job | P3 | B | Optional extend test-postgres |
 
 ## Severity guide
 

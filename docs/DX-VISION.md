@@ -81,7 +81,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Server-side pending/diff preview | **Shipped** |
 | Diff env↔env | **Shipped** |
 | Unstage last mutation | **Shipped** |
-| Recipes / `launchpad new` templates | **Shipping** (`feat/recipes-templates` → ADM integration) |
+| Recipes / `launchpad new` templates | **Shipped** (ADM #32) |
 | MCP server | After core loop solid |
 
 ### Track B — Confidence (engineering)
@@ -93,9 +93,9 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | e2e multi-env + promote + config re-resolution | **Shipped** (`TestPromoteReResolvesTargetConfig`) |
 | Failure-path e2e (409, pin mismatch) | **Shipped** |
 | OpenAPI + CI contract drift | **Shipped** (`docs/openapi.yaml` + `make openapi-check`) |
-| Postgres matrix in CI | **Shipping** — `test-postgres` job + env-gated store tests |
-| Target conformance suite (stub/k8s/…) | **Shipping** — `internal/target/conformance` + stub |
-| Worker lease/supersede stress tests | **Shipping** — concurrent lease + reclaim tests |
+| Postgres matrix in CI | **Shipped** — `test-postgres` + pgx driver fix (ADM #34) |
+| Target conformance suite (stub/k8s/…) | **Shipped** — stub conformance (ADM #35) |
+| Worker lease/supersede stress tests | **Shipped** — concurrent lease + reclaim (ADM #36) |
 
 ### Track C — Surfaces (CLI → TUI → web → docs)
 
@@ -144,7 +144,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Project-local config | **Shipped** |
 | `launchpad doctor` | **Shipped** |
 | `launchpad inspect` | **Shipped** |
-| Shell prompt awareness | **Shipping** — `launchpad prompt` / `shell-init` |
+| Shell prompt awareness | **Shipped** — `launchpad prompt` / `shell-init` (ADM #33) |
 
 ### P2 — Trust and archaeology
 
@@ -165,7 +165,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Server-side pending/diff preview | **Shipped** — `GET …/preview` |
 | `launchpad run` / env pull | Later |
 | Ephemeral / PR environments | Later |
-| Env clone | **Shipping** — `env clone` / `POST …/clone` (plain copy; secrets needs_value) |
+| Env clone | **Shipped** — `env clone` / `POST …/clone` (ADM #37) |
 
 ### P4 — Agent surface
 
@@ -175,7 +175,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | CLI surfaces hints | **Shipped** |
 | MCP server | After core DX loop solid |
 | Idempotency keys | Later |
-| Recipes / templates | **Shipping** — `launchpad new` / `new list` |
+| Recipes / templates | **Shipped** — `launchpad new` / `new list` |
 
 ### Explicit non-goals (for now)
 
@@ -229,15 +229,10 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **ADM integration branch** | `adm/queue-2026-07-19` — remaining ready queue items merge here; final PR → main |
-| Recipes / `launchpad new` | QUEUE `recipes-templates` — [spec](superpowers/specs/2026-07-19-recipes-templates-design.md) |
-| Shell prompt awareness | QUEUE `shell-prompt` |
-| Postgres CI / target conformance / worker stress | QUEUE Track B |
-| Env clone | QUEUE `env-clone` — **ready** (S2 shipped) |
-| Unstage last mutation | **Shipped** (#31) |
-| Diff env↔env | **Shipped** (#30) |
-| Secrets S2 (AES-GCM at rest) | **Shipped** (#29) |
-| ADM process (queue / ideas / persona) | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
+| **ADM integration → main** | `adm/queue-2026-07-19` — PRs #32–#38 (recipes, prompt, postgres-ci, conformance, stress, env-clone, env-use fix) |
+| Next ready QUEUE | e2e-env-clone, e2e-recipes-new, clone-secret-placeholder, status-unstage-hint, audit-config-keys, completions-man |
+| Deferred | oidc-design, mcp-server, multi-service, bindings, launchpad-yaml |
+| ADM process | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
 | Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
 | Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
 
