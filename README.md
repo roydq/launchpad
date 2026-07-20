@@ -34,6 +34,9 @@ Walkthrough: [`examples/hello-stub/README.md`](examples/hello-stub/README.md).
 ## Solo-engineer workflow
 
 ```bash
+# Optional: show project@env in your shell prompt
+# eval "$(launchpad shell-init zsh)"   # or bash
+
 # Recipe bootstrap (or: projects create + use + image)
 launchpad new list
 launchpad new my-api                  # hello-stub: create, use, stage hello:v1
