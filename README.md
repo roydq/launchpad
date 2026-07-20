@@ -265,3 +265,9 @@ See **[AGENTS.md](AGENTS.md)** for domain conventions, toolchain, MVP scope, and
 - **[Domain model](docs/DOMAIN.md)** — entity hierarchy, invariants, roadmap
 - **[System design](docs/DESIGN.md)** — control plane architecture, API, storage, jobs
 - **[AGENTS.md](AGENTS.md)** — contributor and AI agent conventions
+
+## License
+
+Copyright 2026 Roy Quader.
+
+Licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for copyright attribution.
