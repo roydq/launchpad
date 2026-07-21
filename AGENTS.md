@@ -114,13 +114,13 @@ Invoke `/launchpad-feature` at the start of agent-driven feature work.
 | Skill | When to use |
 |-------|-------------|
 | `launchpad-feature` | New features, specs, plans, branching, long-horizon tasks |
-| `launchpad-autonomous` | User-authorized ADM: low-input multi-step work, self-approve recommended path, subagents |
+| `launchpad-autonomous` | User-authorized ADM: named modes, DoD, worktrees, self-approve recommended path, subagents |
 | `launchpad-domain` | Entity changes, API design, invariants |
 | `launchpad-dev` | Build, test, local API/worker, smoke deploy |
 
 Invoke via `/launchpad-feature`, `/launchpad-autonomous`, `/launchpad-domain`, `/launchpad-dev`, or let auto-invocation match the skill description.
 
-**ADM protocol:** `docs/AUTONOMOUS-MODE.md` — only when the user explicitly authorizes autonomous mode. Work queue / ideas / persona: `docs/superpowers/program/`.
+**ADM protocol:** `docs/AUTONOMOUS-MODE.md` — only when the user explicitly authorizes autonomous mode. Named modes: single-feature (default), integration-stack, queue-drain. Work queue / ideas / persona: `docs/superpowers/program/`. Snapshot helper: `scripts/adm-status`.
 
 ## Suggested future tooling (not yet implemented)
 

@@ -209,17 +209,17 @@ Agents may ship recommended options without per-feature design debates when the 
 
 **Canonical protocol:** [`docs/AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md) · skill: `/launchpad-autonomous`
 
-Summary:
+Summary (see protocol for full rules):
 
-- Spec + plan still required for medium+ features; self-approve only after the protocol checklist
-- Subagents for implement + review; docs sync (DOMAIN / OpenAPI / DX-VISION) in the same PR series
-- Verification ladder: `make test` / `build` / `vet`; deploy-path → `e2e-stub`; routes → OpenAPI check
-- Open PR for human dogfood; **no force-merge** unless asked
-- Hard stops: deferred-boundary ambiguity, secrets/auth model forks, 3× verification failure, budget exhausted
-- Program files: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md), [`IDEAS.md`](superpowers/program/IDEAS.md), [`PERSONA-SCRIPTS.md`](superpowers/program/PERSONA-SCRIPTS.md)
-- Persona dogfood + scout → feedback/ and IDEAS; no silent scope expansion
+- **Named modes:** single-feature (default) · integration-stack · queue-drain
+- Spec + plan for medium+; self-approve only after checklist + **Definition of Done**
+- Implementers in **worktrees**; branch lease in QUEUE; push checkpoints
+- Verification: L0 always; **e2e-stub required** for service/jobs/target/deploy CLI; persona S1 once per stack before final PR to main
+- Merge to **main** only when user allows; stack/drain may merge into `adm/*` only
+- Hard stops: deferred-boundary, self-review fail, 3× verify fail, branch ownership conflict, …
+- Program files + `scripts/adm-status`; persona/scout → feedback/ and IDEAS without silent scope expansion
 
-Experimental while the project is early; refine the protocol from real runs. When ADM starts an item, prefer updating **QUEUE** status and link the spec here under Active / next.
+Experimental while the project is early; protocol updated from real runs (2026-07-21). When ADM starts an item, prefer updating **QUEUE** status and link the spec here under Active / next.
 
 ---
 
