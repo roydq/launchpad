@@ -68,6 +68,7 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/config", s.getConfig)
 		r.With(auth.RequireScope("project:write")).Patch("/projects/{project}/config", s.patchConfig)
 
+		r.With(auth.RequireScope("project:read")).Get("/targets/{type}/capabilities", s.targetCapabilities)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/processes", s.listProcesses)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/logs", s.getLogs)
 
@@ -230,6 +231,29 @@ func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request) {
 		out = append(out, processResponse(p))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) targetCapabilities(w http.ResponseWriter, r *http.Request) {
+	typ := chi.URLParam(r, "type")
+	switch typ {
+	case "kubernetes":
+		writeJSON(w, http.StatusOK, map[string]any{
+			"type": "kubernetes",
+			"supports": []string{
+				"deploy", "logs", "status", "scale", "health.http", "health.tcp", "extensions",
+			},
+			"extension_fields": []string{
+				"resources.requests", "resources.limits",
+			},
+		})
+	case "stub":
+		writeJSON(w, http.StatusOK, map[string]any{
+			"type":     "stub",
+			"supports": []string{"deploy", "logs", "status", "scale"},
+		})
+	default:
+		problem.NotFound(w, "unknown target type")
+	}
 }
 
 func (s *Server) getLogs(w http.ResponseWriter, r *http.Request) {

@@ -381,6 +381,91 @@ func NewRoot(cfg Config) *cobra.Command {
 	addWaitFlags(scaleCmd)
 	root.AddCommand(scaleCmd)
 
+	processCmd := &cobra.Command{Use: "process", Short: "Manage process definitions (stages by default)"}
+	processSetCmd := &cobra.Command{
+		Use:   "set [name]",
+		Short: "Stage process definition (command, quantity, expose)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			ch := map[string]any{"type": "process.set", "name": args[0]}
+			if cmd.Flags().Changed("command") {
+				c, _ := cmd.Flags().GetString("command")
+				ch["command"] = c
+			}
+			if cmd.Flags().Changed("quantity") {
+				q, _ := cmd.Flags().GetInt("quantity")
+				ch["quantity"] = q
+			}
+			if cmd.Flags().Changed("expose") {
+				e, _ := cmd.Flags().GetString("expose")
+				ch["expose"] = e
+			}
+			if cmd.Flags().Changed("health") {
+				ht, _ := cmd.Flags().GetString("health")
+				health := map[string]any{"type": ht}
+				if path, _ := cmd.Flags().GetString("health-path"); path != "" {
+					health["path"] = path
+				}
+				if port, _ := cmd.Flags().GetInt("health-port"); port > 0 {
+					health["port"] = port
+				}
+				ch["health"] = health
+			}
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{ch}, false, "",
+				fmt.Sprintf("Staged process set %s", args[0]), false, 0)
+		},
+	}
+	processSetCmd.Flags().String("command", "", "process command (shell form)")
+	processSetCmd.Flags().Int("quantity", 1, "replica quantity")
+	processSetCmd.Flags().String("expose", "", "http|tcp|none")
+	processSetCmd.Flags().String("health", "", "readiness type: http|tcp|exec|none")
+	processSetCmd.Flags().String("health-path", "", "HTTP path (default /healthz for type=http)")
+	processSetCmd.Flags().Int("health-port", 0, "probe port (0 = container PORT)")
+	processCmd.AddCommand(processSetCmd)
+	processCmd.AddCommand(&cobra.Command{
+		Use:   "unset [name]",
+		Short: "Stage removal of a process definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{
+				{"type": "process.unset", "name": args[0]},
+			}, false, "", fmt.Sprintf("Staged process unset %s", args[0]), false, 0)
+		},
+	})
+	processApplyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Stage process set from a Procfile",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			path, _ := cmd.Flags().GetString("procfile")
+			if path == "" {
+				return fmt.Errorf("--procfile is required")
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			return stageAndMaybeNow(cmd.Context(), client, project, []map[string]any{
+				{"type": "process.apply", "procfile": string(data)},
+			}, false, "", fmt.Sprintf("Staged process apply from %s", path), false, 0)
+		},
+	}
+	processApplyCmd.Flags().String("procfile", "", "path to Procfile")
+	_ = processApplyCmd.MarkFlagRequired("procfile")
+	processCmd.AddCommand(processApplyCmd)
+	root.AddCommand(processCmd)
+
 	imageCmd := &cobra.Command{
 		Use:   "image [ref]",
 		Short: "Stage a container image change",
@@ -511,7 +596,7 @@ func NewRoot(cfg Config) *cobra.Command {
 				}
 			}
 			fmt.Printf("pending: %d change(s) for %s (config=%d scale=%d image=%d)\n", n, pin, nConfig, nScale, nImage)
-			fmt.Println(`Run "launchpad diff" to review, "launchpad deploy" to apply, "launchpad reset" to discard.`)
+			fmt.Println(`Run "launchpad diff" to review, "launchpad deploy" to apply, "launchpad unstage" to drop the last change, "launchpad reset" to discard all.`)
 			return nil
 		},
 	})
@@ -841,6 +926,60 @@ func NewRoot(cfg Config) *cobra.Command {
 			}
 			fmt.Print(script)
 			return nil
+		},
+	})
+
+	targetCmd := &cobra.Command{Use: "target", Short: "Target backend info"}
+	targetCmd.AddCommand(&cobra.Command{
+		Use:   "capabilities [type]",
+		Short: "Show target capabilities",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			typ := "stub"
+			if len(args) == 1 {
+				typ = args[0]
+			}
+			out, err := client.TargetCapabilities(cmd.Context(), typ)
+			if err != nil {
+				return err
+			}
+			b, _ := json.MarshalIndent(out, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		},
+	})
+	root.AddCommand(targetCmd)
+
+
+	root.AddCommand(&cobra.Command{
+		Use:   "completion [bash|zsh|fish|powershell]",
+		Short: "Generate shell completion script",
+		Long: `To load completions:
+
+  # bash
+  source <(launchpad completion bash)
+
+  # zsh
+  source <(launchpad completion zsh)
+
+  # fish
+  launchpad completion fish | source
+`,
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"bash", "zsh", "fish", "powershell"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			switch args[0] {
+			case "bash":
+				return root.GenBashCompletion(cmd.OutOrStdout())
+			case "zsh":
+				return root.GenZshCompletion(cmd.OutOrStdout())
+			case "fish":
+				return root.GenFishCompletion(cmd.OutOrStdout(), true)
+			case "powershell":
+				return root.GenPowerShellCompletionWithDesc(cmd.OutOrStdout())
+			default:
+				return fmt.Errorf("unsupported shell %q", args[0])
+			}
 		},
 	})
 

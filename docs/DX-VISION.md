@@ -233,12 +233,8 @@ Experimental while the project is early; refine the protocol from real runs. Whe
 
 | Work | Spec / queue |
 |------|----------------|
-| **ADM integration → main** | `adm/queue-2026-07-19` — PRs #32–#38 (recipes, prompt, postgres-ci, conformance, stress, env-clone, env-use fix) |
-| **Runtime target depth (designed)** | [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) — QUEUE: `process-commands` → `deploy-health` → `release-config-materialization` → `target-extensions` |
-| Next ready QUEUE (polish) | e2e-env-clone, e2e-recipes-new, clone-secret-placeholder, status-unstage-hint, audit-config-keys, completions-man |
-| Deferred | oidc-design, mcp-server, multi-service, bindings, launchpad-yaml |
-| ADM process | `docs/AUTONOMOUS-MODE.md` + `docs/superpowers/program/` |
-| Promote (Wave 3) | `docs/superpowers/specs/2026-07-13-promote-design.md` (**Shipped**) |
-| Problem+json recovery hints | `docs/superpowers/specs/2026-07-13-problem-recovery-hints-design.md` (**Shipped**) |
+| **ADM integration** | `adm/queue-2026-07-20` — runtime depth + polish; final PR → main |
+| Queue ready work | **Empty** — only deferred (OIDC, MCP, multi-service, bindings, launchpad.yaml) |
+| Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
 Ordered agent work: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md).

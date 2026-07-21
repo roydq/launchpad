@@ -28,8 +28,20 @@ type Options struct {
 }
 
 type targetConfig struct {
-	Namespace string `json:"namespace"`
-	Cluster   string `json:"cluster"`
+	Namespace     string `json:"namespace"`
+	Cluster       string `json:"cluster"`
+	DeployTimeout string `json:"deploy_timeout,omitempty"` // e.g. "20m"
+}
+
+func (c targetConfig) deployTimeoutOr(fallback time.Duration) time.Duration {
+	if c.DeployTimeout == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(c.DeployTimeout)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }
 
 func parseTargetConfig(env domain.Environment) (targetConfig, error) {
@@ -55,7 +67,13 @@ func deploymentName(projectName, serviceName, process string) string {
 }
 
 func secretName(projectName, serviceName string) string {
+	// Legacy stable name (Destroy still cleans it).
 	return resourcePrefix(projectName, serviceName) + "-config"
+}
+
+// configSecretName returns a content-addressed immutable config Secret name.
+func configSecretName(projectName, serviceName, configHash string) string {
+	return resourcePrefix(projectName, serviceName) + "-cfg-" + configHash
 }
 
 func serviceName(projectName, serviceName, process string) string {

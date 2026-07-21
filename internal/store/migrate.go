@@ -20,6 +20,8 @@ var migrationFiles = map[Driver][]string{
 		"003_shared_config.sqlite.up.sql",
 		"004_identity_principals.sqlite.up.sql",
 		"005_config_sensitivity.sqlite.up.sql",
+		"006_process_health.sqlite.up.sql",
+		"007_process_target_extensions.sqlite.up.sql",
 	},
 	DriverPostgres: {
 		"001_initial.postgres.up.sql",
@@ -27,6 +29,8 @@ var migrationFiles = map[Driver][]string{
 		"003_shared_config.postgres.up.sql",
 		"004_identity_principals.postgres.up.sql",
 		"005_config_sensitivity.postgres.up.sql",
+		"006_process_health.postgres.up.sql",
+		"007_process_target_extensions.postgres.up.sql",
 	},
 }
 
