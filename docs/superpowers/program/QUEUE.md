@@ -38,10 +38,32 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 ## How ADM uses this file
 
-1. On session start, read this queue + DX-VISION **Active / next**.
-2. Select the highest-priority `ready` item within the user budget (or the user-named item).
-3. Move status → `designing` / `implementing` / `pr-open` as you go; commit queue updates on the feature branch or a docs commit.
-4. On ship (merge), set `shipped` and update DX-VISION.
-5. Promote rows from `IDEAS.md` only when: human asks, pre-authorized class (e.g. “any P0 from persona”), or the idea unblocks current dogfood **and** fits MVP.
+Canonical protocol: [`docs/AUTONOMOUS-MODE.md`](../../AUTONOMOUS-MODE.md) (named modes, DoD, worktrees, verification).
+
+1. On session start, read this queue + DX-VISION **Active / next** (+ optional `scripts/adm-status`).
+2. Select the highest-priority `ready` item within the **mode** budget (or the user-named item).
+3. Before code: ensure **Definition of Done / acceptance** exists (spec success criteria, plan Final verification, or notes cell).
+4. Move status → `designing` / `implementing` / `pr-open` as you go; set **Branch / PR** as the implementer **lease**.
+5. **Update this file on every feature merge** into the integration branch (not only at session end).
+6. On ship (merge to main or integrated + closed), set `shipped`, short Recently shipped row, and DX-VISION if product-facing.
+7. Promote rows from `IDEAS.md` only when: human asks, pre-authorized class (e.g. “any P0 from persona”), or the idea unblocks current dogfood **and** fits MVP.
+
+### Definition of Done (minimum for `ready` → `shipped`)
+
+- Spec self-review or human-approved design linked  
+- L0: `mise exec -- make test && make build && go vet ./...`  
+- Triggered ladder levels (e2e-stub required for service/jobs/target/deploy CLI)  
+- Docs sync for what changed  
+- PR linked; no half-shipped surface  
+
+### Deferred / blocked rows
+
+Include a one-line **Decision needed:** in Spec / notes so humans can unstick without re-reading all of DOMAIN.
 
 Do not implement `deferred` or `blocked` items without an explicit human override and a spec.
+
+### Row template (new work)
+
+```markdown
+| N | my-feature | Short title | A | ready | DoD: <CLI/API/test bullets>. Spec: `docs/superpowers/specs/…` | — |
+```

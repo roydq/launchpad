@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# ADM session snapshot: queue ready rows, integration branches, worktrees, open PRs.
+# Usage: ./scripts/adm-status   (from repo root)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+QUEUE="${ROOT}/docs/superpowers/program/QUEUE.md"
+
+echo "== ADM status ($(date -u +%Y-%m-%dT%H:%MZ)) =="
+echo
+echo "-- git --"
+git rev-parse --abbrev-ref HEAD 2>/dev/null || true
+git rev-parse --short HEAD 2>/dev/null || true
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+    echo "working tree: DIRTY"
+    git status -sb 2>/dev/null | head -20
+  else
+    echo "working tree: clean"
+  fi
+fi
+
+echo
+echo "-- QUEUE ready / designing / implementing / pr-open --"
+active=0
+if [[ -f "$QUEUE" ]]; then
+  while IFS= read -r line; do
+    # Markdown table data rows start with "| <digit>"
+    case "$line" in
+      \|[[:space:]][0-9]*)
+        # shellcheck disable=SC2086
+        status=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$6); print $6}')
+        case "$status" in
+          ready|designing|implementing|pr-open)
+            id=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$3); print $3}')
+            item=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$4); print $4}')
+            branch=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$8); print $8}')
+            printf '  [%s] %s — %s  (%s)\n' "$status" "$id" "$item" "$branch"
+            active=1
+            ;;
+        esac
+        ;;
+    esac
+  done < "$QUEUE"
+  if [[ "$active" -eq 0 ]]; then
+    echo "  (none — only deferred/blocked or empty)"
+  fi
+
+  echo
+  echo "-- QUEUE deferred / blocked --"
+  while IFS= read -r line; do
+    case "$line" in
+      \|[[:space:]][0-9]*)
+        status=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$6); print $6}')
+        case "$status" in
+          deferred|blocked)
+            id=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$3); print $3}')
+            item=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$4); print $4}')
+            notes=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$7); print $7}')
+            printf '  [%s] %s — %s\n' "$status" "$id" "$item"
+            printf '       %s\n' "$notes"
+            ;;
+        esac
+        ;;
+    esac
+  done < "$QUEUE"
+else
+  echo "  (missing $QUEUE)"
+fi
+
+echo
+echo "-- integration branches (local) --"
+if git branch --list 'adm/*' 2>/dev/null | grep -q .; then
+  git branch --list 'adm/*' 2>/dev/null | sed 's/^/  /'
+else
+  echo "  (none)"
+fi
+
+echo
+echo "-- worktrees --"
+if git worktree list 2>/dev/null | grep -q .; then
+  git worktree list | sed 's/^/  /'
+else
+  echo "  (none)"
+fi
+
+echo
+echo "-- open GitHub PRs (if gh available) --"
+if command -v gh >/dev/null 2>&1; then
+  gh pr list --state open --limit 15 2>/dev/null | sed 's/^/  /' || echo "  (gh pr list failed)"
+else
+  echo "  (gh not installed)"
+fi
+
+echo
+echo "Protocol: docs/AUTONOMOUS-MODE.md"
+echo "Skill:    .grok/skills/launchpad-autonomous/SKILL.md"
