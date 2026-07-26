@@ -76,7 +76,7 @@ Resources created per service:
 
 | Resource | Name |
 |----------|------|
-| Secret (config) | `launchpad-{project}-{service}-config` |
+| Secret (config) | `launchpad-{project}-{service}-cfg-{hash}` (content-addressed, immutable) |
 | Deployment (per process) | `launchpad-{project}-{service}-{process}` |
 | Service (http processes) | `launchpad-{project}-{service}-{process}` |
 

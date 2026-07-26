@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,8 +21,10 @@ func deploymentName(project, service, process string) string {
 	return fmt.Sprintf("launchpad-%s-%s-%s", project, service, process)
 }
 
-func secretName(project, service string) string {
-	return fmt.Sprintf("launchpad-%s-%s-config", project, service)
+// configSecretNamePrefix is the content-addressed immutable config Secret prefix
+// (launchpad-{project}-{service}-cfg-{hash12}).
+func configSecretNamePrefix(project, service string) string {
+	return fmt.Sprintf("launchpad-%s-%s-cfg-", project, service)
 }
 
 func kubeClient(t *testing.T) kubernetes.Interface {
@@ -90,9 +93,26 @@ func TestKindClusterResources(t *testing.T) {
 
 	k8s := kubeClient(t)
 	depName := deploymentName(name, name, "web")
-	waitDeploymentReady(t, ctx, k8s, namespace, depName, timeout)
+	dep := waitDeploymentReady(t, ctx, k8s, namespace, depName, timeout)
 
-	secName := secretName(name, name)
+	// Config is materialised as an immutable content-hashed Secret and mounted via envFrom.
+	var secName string
+	if len(dep.Spec.Template.Spec.Containers) == 0 {
+		t.Fatal("deployment has no containers")
+	}
+	for _, envFrom := range dep.Spec.Template.Spec.Containers[0].EnvFrom {
+		if envFrom.SecretRef != nil && envFrom.SecretRef.Name != "" {
+			secName = envFrom.SecretRef.Name
+			break
+		}
+	}
+	if secName == "" {
+		t.Fatal("deployment missing envFrom secretRef for config")
+	}
+	prefix := configSecretNamePrefix(name, name)
+	if !strings.HasPrefix(secName, prefix) {
+		t.Fatalf("config secret name %q want prefix %q", secName, prefix)
+	}
 	if _, err := k8s.CoreV1().Secrets(namespace).Get(ctx, secName, metav1.GetOptions{}); err != nil {
 		t.Fatalf("expected secret %s: %v", secName, err)
 	}
