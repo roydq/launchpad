@@ -29,14 +29,6 @@ func (s *Store) Secrets() *secrets.Box {
 	return s.secrets
 }
 
-func (s *Store) DB() *sql.DB {
-	return s.db
-}
-
-func (s *Store) Driver() Driver {
-	return s.driver
-}
-
 func (s *Store) Transact(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

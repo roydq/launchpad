@@ -11,10 +11,6 @@ import (
 	"github.com/launchpad/launchpad/pkg/launchpad"
 )
 
-func (s *Store) CreateService(ctx context.Context, svc *domain.Service) error {
-	return s.createServiceTx(ctx, nil, svc)
-}
-
 func (s *Store) createServiceTx(ctx context.Context, tx *sql.Tx, svc *domain.Service) error {
 	if svc.ID == uuid.Nil {
 		svc.ID = uuid.New()

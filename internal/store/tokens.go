@@ -12,32 +12,6 @@ import (
 	"github.com/launchpad/launchpad/pkg/launchpad"
 )
 
-func (s *Store) CreateToken(ctx context.Context, token *domain.APIToken) error {
-	if token.ID == uuid.Nil {
-		token.ID = uuid.New()
-	}
-	token.CreatedAt = time.Now().UTC()
-	scopes, err := json.Marshal(token.Scopes)
-	if err != nil {
-		return err
-	}
-	var expiresAt any
-	if token.ExpiresAt != nil {
-		expiresAt = formatTime(s.driver, *token.ExpiresAt)
-	}
-	var principalID any
-	if token.PrincipalID != nil {
-		principalID = token.PrincipalID.String()
-	}
-	_, err = s.db.ExecContext(ctx, s.q(`
-		INSERT INTO api_tokens (id, workspace_id, name, token_hash, scopes, expires_at, created_at, principal_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
-		token.ID.String(), token.WorkspaceID.String(), token.Name, token.TokenHash, string(scopes), expiresAt,
-		formatTime(s.driver, token.CreatedAt), principalID,
-	)
-	return err
-}
-
 // CreateTokenTx inserts a token inside an existing transaction.
 func (s *Store) CreateTokenTx(ctx context.Context, tx *sql.Tx, token *domain.APIToken) error {
 	if token.ID == uuid.Nil {

@@ -3,11 +3,10 @@ package domain
 type ProjectStatus string
 
 const (
-	ProjectStatusCreated     ProjectStatus = "created"
-	ProjectStatusDeploying   ProjectStatus = "deploying"
-	ProjectStatusRunning     ProjectStatus = "running"
-	ProjectStatusFailed      ProjectStatus = "failed"
-	ProjectStatusMaintenance ProjectStatus = "maintenance"
+	ProjectStatusCreated   ProjectStatus = "created"
+	ProjectStatusDeploying ProjectStatus = "deploying"
+	ProjectStatusRunning   ProjectStatus = "running"
+	ProjectStatusFailed    ProjectStatus = "failed"
 )
 
 type JobStatus string
@@ -15,10 +14,8 @@ type JobStatus string
 const (
 	JobStatusQueued    JobStatus = "queued"
 	JobStatusLeased    JobStatus = "leased"
-	JobStatusRunning   JobStatus = "running"
 	JobStatusSucceeded JobStatus = "succeeded"
 	JobStatusFailed    JobStatus = "failed"
-	JobStatusDead      JobStatus = "dead"
 )
 
 type ReleaseStatus string

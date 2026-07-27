@@ -13,10 +13,6 @@ import (
 	"github.com/launchpad/launchpad/pkg/launchpad"
 )
 
-func (s *Store) CreateProcess(ctx context.Context, process *domain.Process) error {
-	return s.createProcessTx(ctx, nil, process)
-}
-
 func (s *Store) createProcessTx(ctx context.Context, tx *sql.Tx, process *domain.Process) error {
 	if process.ID == uuid.Nil {
 		process.ID = uuid.New()
@@ -67,13 +63,6 @@ func (s *Store) ListProcessesTx(ctx context.Context, tx *sql.Tx, serviceID uuid.
 		processes = append(processes, *p)
 	}
 	return processes, rows.Err()
-}
-
-func (s *Store) GetProcess(ctx context.Context, serviceID uuid.UUID, name string) (*domain.Process, error) {
-	row := s.db.QueryRowContext(ctx, s.q(`
-		SELECT id, service_id, name, command, quantity, expose, COALESCE(health, ''), COALESCE(target_extensions, ''), created_at, updated_at
-		FROM processes WHERE service_id = ? AND name = ?`), serviceID.String(), name)
-	return scanProcess(row, s.driver)
 }
 
 func (s *Store) UpdateProcessQuantity(ctx context.Context, tx *sql.Tx, serviceID uuid.UUID, name string, quantity int) error {

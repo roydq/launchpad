@@ -23,11 +23,6 @@ func (s *Store) ListConfigVars(ctx context.Context, serviceID, environmentID uui
 	return vals, err
 }
 
-func (s *Store) ListConfigVarsTx(ctx context.Context, tx *sql.Tx, serviceID, environmentID uuid.UUID) (map[string]string, error) {
-	vals, _, err := s.ListConfigVarsWithSensitivityTx(ctx, tx, serviceID, environmentID)
-	return vals, err
-}
-
 func (s *Store) ListConfigVarsWithSensitivityTx(ctx context.Context, tx *sql.Tx, serviceID, environmentID uuid.UUID) (map[string]string, map[string]string, error) {
 	rows, err := s.exec(tx).QueryContext(ctx, s.q(`
 		SELECT key, value, COALESCE(sensitivity, 'plain') FROM config_vars
@@ -52,16 +47,6 @@ func (s *Store) MergeConfigVars(ctx context.Context, serviceID, environmentID uu
 	return s.Transact(ctx, func(tx *sql.Tx) error {
 		return s.MergeConfigVarsTx(ctx, tx, serviceID, environmentID, updates)
 	})
-}
-
-func (s *Store) ListSharedConfigVars(ctx context.Context, projectID, environmentID uuid.UUID) (map[string]string, error) {
-	vals, _, err := s.ListSharedConfigVarsWithSensitivityTx(ctx, nil, projectID, environmentID)
-	return vals, err
-}
-
-func (s *Store) ListSharedConfigVarsTx(ctx context.Context, tx *sql.Tx, projectID, environmentID uuid.UUID) (map[string]string, error) {
-	vals, _, err := s.ListSharedConfigVarsWithSensitivityTx(ctx, tx, projectID, environmentID)
-	return vals, err
 }
 
 func (s *Store) ListSharedConfigVarsWithSensitivityTx(ctx context.Context, tx *sql.Tx, projectID, environmentID uuid.UUID) (map[string]string, map[string]string, error) {
