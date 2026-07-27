@@ -346,7 +346,7 @@ Each change targets a specific service:
 |------|---------|---------|
 | `config` | `{ key, value?, sensitivity? }` | `PORT=3000`; `value: null` deletes; `sensitivity: secret\|plain` |
 | `scale` | `{ process, quantity }` | `web=3` |
-| `process.set` / `process.unset` / `process.apply` | Process definition fields (command, quantity, expose, health, extensions) or Procfile body | **Planned** — runtime depth |
+| `process.set` / `process.unset` / `process.apply` | Process definition fields (command, quantity, expose, health, extensions) or Procfile body | **Shipped** — runtime depth |
 | `image` | `{ artifact_ref }` | `api:v2.1.0` |
 | `binding` | `{ key, ref }` | `DATABASE_URL → services.postgres.config.DATABASE_URL` |
 
@@ -662,8 +662,8 @@ Design: same runtime-target-depth spec (slice 4).
 | `Logs` | **Shipped** | stub + kubernetes |
 | `Status` | Partial (`ps` / inspect) | stub + k8s helpers |
 | Portable health → readiness | **Shipped** | K8s probes; deploy_timeout in target_config |
-| Immutable config objects | **Planned** | K8s Secrets content-hash |
-| Target extensions + capabilities | **Planned** | schema + apply |
+| Immutable config objects | **Shipped** | K8s Secrets content-hash (`…-cfg-{hash}`) |
+| Target extensions + capabilities | **Shipped** | schema + apply; `GET /v1/targets/{type}/capabilities` |
 | Process command mutations + Procfile | **Shipped** | process.set/unset/apply; shell form |
 | `Scale` / `Destroy` / target-side `Rollback` | Scale/destroy not exposed as worker jobs yet | May exist as helpers |
 
@@ -695,9 +695,9 @@ PATCH  /v1/projects/{project}/config
 GET    /v1/projects/{project}/environments
 POST   /v1/projects/{project}/environments
 GET    /v1/projects/{project}/environments/{name}
+POST   /v1/projects/{project}/environments/{name}/clone
 GET    /v1/projects/{project}/processes
-# Planned (runtime depth): PUT/DELETE …/processes/{name}, POST …/processes/apply
-# Planned: GET /v1/targets/{type}/capabilities
+GET    /v1/targets/{type}/capabilities
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
 POST   /v1/projects/{project}/rollback
@@ -705,6 +705,7 @@ POST   /v1/projects/{project}/promote
 GET    /v1/projects/{project}/logs
 GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
+DELETE /v1/projects/{project}/changeset/changes/last
 DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
 GET    /v1/projects/{project}/preview   # pending vs baseline; ?from_release=&to_release=
@@ -757,14 +758,8 @@ GET    /healthz
 | `launchpad diff --from-env A --to-env B` | Env↔env: last deployed release snapshots |
 | `launchpad rollback N` | New release from prior version; config re-resolved |
 | `launchpad config … --layer shared\|service` | Layered config (2b); workspace layer deferred |
-
-### Planned (runtime depth)
-
-| Command | Notes |
-|---------|-------|
 | `launchpad process set/unset` | Stage process definition (command, quantity, expose, health, target extensions) |
 | `launchpad process apply --procfile` | Import Procfile into staged process set |
-| `launchpad processes` | Alias/list (today: `ps`) |
 | `launchpad target capabilities` | Discover health + extension schema for ambient env’s target |
 | `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |
 
@@ -817,9 +812,9 @@ On `POST /v1/projects`:
 | **4** | Planned | Bindings and ref resolution | Service linking |
 | **5** | **Shipped** (primary-service promote) | Promotion API + CLI | staging → production flow |
 | **6** | Planned | `launchpad.yaml` import/export | CI, agent, and tool integration |
-| **Runtime depth** | **Designed** (impl queued) | Process commands + Procfile; portable health; immutable config materialization; target extensions | Multi-process images, real deploy success, multi-backend power without domain pollution — [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
+| **Runtime depth** | **Shipped** | Process commands + Procfile; portable health; immutable config materialization; target extensions + capabilities | Multi-process images, real deploy success, multi-backend power without domain pollution — [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
-Each phase updates API, store, worker, CLI, and target interface together. Runtime depth slices may ship independently per ADM queue order.
+Each phase updates API, store, worker, CLI, and target interface together.
 
 ---
 
@@ -832,7 +827,7 @@ Each phase updates API, store, worker, CLI, and target interface together. Runti
 5. **`launchpad.yaml` authority.** Import sets desired state; runtime mutations via API/CLI. File is not continuously reconciled (not GitOps). Defer to phase 6. Process commands / health / extensions should round-trip through the manifest when phase 6 lands.
 6. **Release status under multi-env.** Refine when multi-env status model needs it; deployments remain env-specific outcomes.
 7. **Rollback config policy.** Default above is re-resolve config + copy process topology/artifact; revisit if users need bit-identical config rollback.
-8. **Process command / health / config materialization / target extensions.** **End state approved** — see runtime-target-depth design; implementation tracked in `docs/superpowers/program/QUEUE.md`.
+8. **Process command / health / config materialization / target extensions.** **Shipped** — see runtime-target-depth design and reading guide.
 
 ---
 
