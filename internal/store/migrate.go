@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 )
@@ -140,23 +139,4 @@ func markMigrationApplied(ctx context.Context, db *sql.DB, driver Driver, versio
 	_, err := db.ExecContext(ctx, rebind(driver, `
 		INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`), version, now)
 	return err
-}
-
-// ListMigrations returns applied migration versions (for debugging).
-func ListMigrations(ctx context.Context, db *sql.DB) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `SELECT version FROM schema_migrations ORDER BY version`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var versions []string
-	for rows.Next() {
-		var v string
-		if err := rows.Scan(&v); err != nil {
-			return nil, err
-		}
-		versions = append(versions, v)
-	}
-	sort.Strings(versions)
-	return versions, rows.Err()
 }

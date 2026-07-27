@@ -547,28 +547,6 @@ type TokenCreateResult struct {
 	PrincipalKind  string   `json:"principal_kind,omitempty"`
 }
 
-type AuditEvent struct {
-	ID           string            `json:"id"`
-	Action       string            `json:"action"`
-	ResourceType string            `json:"resource_type"`
-	ResourceID   string            `json:"resource_id"`
-	PrincipalID  string            `json:"principal_id,omitempty"`
-	TokenID      string            `json:"token_id,omitempty"`
-	ProjectName  string            `json:"project_name,omitempty"`
-	Detail       map[string]string `json:"detail,omitempty"`
-	CreatedAt    string            `json:"created_at"`
-}
-
-func (c *Client) ListAudit(ctx context.Context, limit int) ([]AuditEvent, error) {
-	path := "/v1/audit"
-	if limit > 0 {
-		path += "?limit=" + url.QueryEscape(fmt.Sprintf("%d", limit))
-	}
-	var events []AuditEvent
-	_, err := c.do(ctx, http.MethodGet, path, nil, &events)
-	return events, err
-}
-
 func (c *Client) TargetCapabilities(ctx context.Context, typeName string) (map[string]any, error) {
 	var out map[string]any
 	_, err := c.do(ctx, http.MethodGet, "/v1/targets/"+typeName+"/capabilities", nil, &out)
