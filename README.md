@@ -234,6 +234,8 @@ Precedence: `LAUNCHPAD_PROJECT` / `LAUNCHPAD_ENV` → `.launchpad/config` → `~
 
 ## API (MVP)
 
+Canonical contract: [`docs/openapi.yaml`](docs/openapi.yaml). Shipped routes:
+
 ```
 POST   /v1/projects
 GET    /v1/projects
@@ -243,14 +245,22 @@ PATCH  /v1/projects/{project}/config
 GET    /v1/projects/{project}/environments
 POST   /v1/projects/{project}/environments
 GET    /v1/projects/{project}/environments/{name}
+POST   /v1/projects/{project}/environments/{name}/clone
+GET    /v1/projects/{project}/processes
+GET    /v1/projects/{project}/logs
 GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
+DELETE /v1/projects/{project}/changeset/changes/last
 DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
+GET    /v1/projects/{project}/preview
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
-GET    /v1/projects/{project}/processes
+POST   /v1/projects/{project}/rollback
+POST   /v1/projects/{project}/promote
+GET    /v1/targets/{type}/capabilities
 GET    /v1/jobs/{id}
+GET    /v1/audit
 POST   /v1/tokens
 GET    /healthz
 ```

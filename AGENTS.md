@@ -12,12 +12,14 @@ Launchpad is a self-hosted deployment control plane: Heroku-style developer expe
 
 | Priority | Document | Use when |
 |----------|----------|----------|
-| 1 | `docs/DOMAIN.md` | Any entity, API shape, lifecycle, or invariant question |
-| 2 | `docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md` | Current MVP scope and what's deferred |
+| 1 | `docs/DOMAIN.md` | Any entity, API shape, lifecycle, shipped vs deferred, or invariant question |
+| 2 | `AGENTS.md` (this file) + `docs/DOMAIN.md` MVP / phased tables | Current MVP scope boundaries and what's deferred |
 | 3 | `README.md` | Running locally, CLI examples |
 | 4 | `docs/DESIGN.md` | Control-plane architecture, jobs, auth, roadmap |
 | 5 | `docs/FEATURE-DEVELOPMENT.md` | Starting a feature, branching, specs, plans, commits, PRs |
 | 6 | `docs/AUTONOMOUS-MODE.md` | User-authorized autonomous / low-input multi-step agent work |
+
+Historical implementation record only (not current scope): `docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md`.
 
 Do not reintroduce the old `App` model, `/v1/apps` routes, or per-environment duplicate apps.
 
@@ -89,11 +91,9 @@ Kind e2e (`make e2e-kind`) is optional/nightly — needs Docker, kind, and kubec
 
 ## MVP scope boundaries
 
-**In scope now:** multi-env (ambient header + CLI `env *`), layered config (shared + service), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, promote, logs, inspect, release archaeology, doctor, project-local context, deploy worker, stub + K8s targets. Identity phase 1: service-account principals on tokens, release attribution, audit events.
+**In scope now (shipped):** multi-env (ambient header + CLI `env *`), layered config (shared + service), single primary service per project, image-only releases, implicit staging CLI, deploy `--wait`, rollback, promote, logs, inspect, release archaeology, doctor, project-local context, deploy worker, stub + K8s targets. Runtime depth: process commands + Procfile, portable health/readiness, release-immutable config materialization, target extensions + capabilities. Secret config at rest (AES-GCM); OpenAPI contract (`docs/openapi.yaml` — keep in sync when adding routes). Identity phase 1: service-account principals on tokens, release attribution, audit events.
 
-**Deferred (do not half-build):** multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace config layer, OIDC login (after principals phase 1), scale API (target-side), SSE/events, idempotency, builds, Helm. OpenAPI skeleton is shipped (`docs/openapi.yaml`); keep it in sync when adding routes.
-
-**Designed runtime depth (implement via QUEUE, do not half-build snapshots without target wiring):** process commands + Procfile, portable health/readiness, release-immutable config materialization, target extensions + capabilities — `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md`.
+**Deferred (do not half-build):** multi-service ReleaseSet, config bindings (`${{ refs }}`), workspace config layer, OIDC login (after principals phase 1), scale API (as worker job), SSE/events, idempotency, builds, Helm.
 
 If a task crosses a deferred boundary, update `docs/DOMAIN.md` or write a new spec in `docs/superpowers/specs/` first.
 

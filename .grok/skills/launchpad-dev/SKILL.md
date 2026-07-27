@@ -86,6 +86,7 @@ Create projects with `--target kubernetes --namespace <ns>`. Resources use prefi
 |----------|-------------|
 | `LAUNCHPAD_DATABASE_URL` | SQLite file or Postgres DSN |
 | `LAUNCHPAD_BOOTSTRAP_TOKEN` | First-run admin bootstrap |
+| `LAUNCHPAD_SECRETS_KEY` | Base64 32-byte AES key for secret config at rest (API **and** worker). Required for `config set --secret`. Generate: `openssl rand -base64 32` |
 | `LAUNCHPAD_API_ADDR` | API listen (default `:8080`) |
 | `LAUNCHPAD_ENABLE_KUBERNETES` | `false` to use stub only |
 
@@ -100,4 +101,5 @@ Create projects with `--target kubernetes --namespace <ns>`. Resources use prefi
 
 - [ ] `mise exec -- make test` passes
 - [ ] `mise exec -- make build` passes
-- [ ] Deploy flow verified on stub if worker/service/target changed
+- [ ] Deploy flow verified on stub if worker/service/target/jobs changed
+- [ ] For behavioral deploy-flow changes: `make e2e-stub` (canonical automated path — real API + worker, stub target)

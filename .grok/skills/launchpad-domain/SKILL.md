@@ -14,7 +14,7 @@ description: >
 
 Read `docs/DOMAIN.md` in full before proposing or implementing domain changes.
 
-For current shipped scope, also read `docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md`.
+For **current shipped vs deferred scope**, use `docs/DOMAIN.md` (reading guide + phased table) and `AGENTS.md` MVP boundaries. The greenfield doc `docs/superpowers/specs/2026-07-04-mvp-core-greenfield-design.md` is a **historical implementation record only** — do not treat its deferred list as current.
 
 ## Core hierarchy
 
@@ -32,18 +32,18 @@ Changeset (per Project, 0..1 open)
 2. Config is **resolved at release creation** into `config_resolved` / snapshot fields.
 3. **Environments own targets** (`target_type`, `target_config`), not projects.
 4. **Changesets stage intent**; push creates release(s) + deployment(s) + job(s).
-5. **Composition via refs** (`${{ services.* }}`), not parent/child apps (deferred in MVP).
+5. **Composition via refs** (`${{ services.* }}`), not parent/child apps (deferred).
 6. Multi-service push requires explicit `parallel` | `atomic` mode (deferred until multi-service).
 
 ## MVP cut line
 
-| In MVP | Deferred |
-|--------|----------|
-| Single `dev` environment | `staging`/`prod`, promotion |
-| Single primary service | Multi-service, ReleaseSet |
-| Service-scoped config | Workspace/shared layers, bindings |
-| Image-only deploy | In-cluster builds |
-| Deploy job only | Scale/rollback jobs, SSE, cancel |
+| Shipped (in scope) | Deferred |
+|--------------------|----------|
+| Multi-env (ambient header + CLI `env *`), promote, env clone | Multi-service, ReleaseSet, coordination modes |
+| Layered config (shared + service); secret AES-GCM at rest | Workspace config layer, bindings (`${{ refs }}`) |
+| Single primary service; image-only releases | In-cluster builds |
+| Rollback, logs, preview, audit, deploy worker | Scale as worker job, SSE/events, cancel |
+| Runtime depth: process set/unset/apply, health, immutable cfg, extensions + capabilities | OIDC login, idempotency, Helm |
 
 Do not add deferred tables or API routes without updating the domain spec first.
 

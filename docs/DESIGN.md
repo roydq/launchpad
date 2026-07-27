@@ -20,15 +20,18 @@ The system separates **control plane** (API, auth, persistence, job queue) from 
 ### Shipped today (MVP + DX waves)
 
 - Project / environment / service / process hierarchy
-- Image-only releases, deploy worker, changeset workflow
+- Image-only releases, deploy worker, changeset workflow (implicit CLI staging; no `changeset` subcommand)
 - Multi-env (ambient header + CLI `env *`), layered config (shared + service)
+- Promote, rollback, preview, logs, audit, env clone, unstage-last
+- Runtime depth: process command mutations + Procfile, portable health, immutable config Secrets, target extensions + capabilities
+- Secret config at rest (AES-256-GCM when `LAUNCHPAD_SECRETS_KEY` is set); OpenAPI contract (`docs/openapi.yaml` + CI check)
 - Stub and Kubernetes targets; process logs via target
 - SQLite + Postgres storage, bootstrap token auth
-- CLI: `projects create`, `use`, `config`, `changeset`, `deploy --wait`, `ps`, `releases show`, `diff`, `inspect`, `logs`, `rollback`, `doctor`
+- CLI: `projects create`, `use`, `env *`, `config`, `process`, `scale`, `image`, `deploy --wait`, `ps`, `releases`, `diff`, `inspect`, `logs`, `rollback`, `promote`, `target capabilities`, `doctor`, `context`
 
 ### Roadmap
 
-See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Next:** promotion. Deferred: multi-service, bindings.
+See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Next / deferred:** multi-service ReleaseSet, config bindings, workspace config layer, OIDC, scale API, SSE/events, idempotency, builds, Helm.
 
 ---
 
@@ -223,9 +226,9 @@ MVP control plane only invokes **Deploy**. Other `Target` methods may exist for 
 | `stub` | Always available (tests, local smoke) |
 | `kubernetes` | When kubeconfig available; disable with `LAUNCHPAD_ENABLE_KUBERNETES=false` |
 
-K8s resources: `launchpad-{project}-{service}-{process}` in the environment namespace.
+K8s resources: `launchpad-{project}-{service}-{process}` in the environment namespace; config Secrets `launchpad-{project}-{service}-cfg-{hash}`.
 
-**Runtime depth (designed, not all shipped):** process command mutations + Procfile; portable health → readiness probes; immutable content-hashed config Secrets; namespaced `target_extensions` + capabilities. See `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md` and DOMAIN “Target Interface”.
+**Runtime depth (shipped):** process command mutations + Procfile; portable health → readiness probes; immutable content-hashed config Secrets; namespaced `target_extensions` + capabilities (`GET /v1/targets/{type}/capabilities`). See `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md` and DOMAIN “Target Interface”.
 
 ---
 
@@ -246,7 +249,7 @@ Tokens are workspace-scoped. The default workspace `default` is seeded at migrat
 
 ## REST API (shipped)
 
-Base path `/v1`. Errors: RFC 7807 (`application/problem+json`). Long operations return `202 Accepted`. JSON responses use **snake_case** DTOs (domain types are not serialized directly).
+Base path `/v1`. Errors: RFC 7807 (`application/problem+json`). Long operations return `202 Accepted`. JSON responses use **snake_case** DTOs (domain types are not serialized directly). Canonical contract: [`docs/openapi.yaml`](openapi.yaml).
 
 ```
 POST   /v1/projects
@@ -254,37 +257,50 @@ GET    /v1/projects
 GET    /v1/projects/{project}
 GET    /v1/projects/{project}/config
 PATCH  /v1/projects/{project}/config
+GET    /v1/projects/{project}/environments
+POST   /v1/projects/{project}/environments
+GET    /v1/projects/{project}/environments/{name}
+POST   /v1/projects/{project}/environments/{name}/clone
 GET    /v1/projects/{project}/processes
+GET    /v1/projects/{project}/logs
 POST   /v1/projects/{project}/releases
 GET    /v1/projects/{project}/releases
+POST   /v1/projects/{project}/rollback
+POST   /v1/projects/{project}/promote
 GET    /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/changes
+DELETE /v1/projects/{project}/changeset/changes/last
 DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
+GET    /v1/projects/{project}/preview
+GET    /v1/targets/{type}/capabilities
 GET    /v1/jobs/{id}
+GET    /v1/audit
 POST   /v1/tokens
 GET    /healthz
 ```
 
-Release source: `{"type":"image","image":"<artifact-ref>"}` only. MVP environment/service context is implicit (`dev`, primary service); no `X-Launchpad-*` headers yet.
+Release source: `{"type":"image","image":"<artifact-ref>"}` only. Environment is ambient via **`X-Launchpad-Environment`** (default `dev`); service is the project's `primary_service` until multi-service.
 
 ---
 
 ## CLI (shipped)
 
-CLI stages mutations into the open changeset; `deploy` calls push. There is no `changeset` subcommand. Environment is ambient (`env use` / `LAUNCHPAD_ENV`, default `dev`) via `X-Launchpad-Environment`.
+CLI stages mutations into the open changeset; `deploy` calls push. There is no `changeset` subcommand — staging is implicit via `config`/`scale`/`image`/`process` and `deploy`. Environment is ambient (`env use` / `LAUNCHPAD_ENV`, default `dev`) via `X-Launchpad-Environment`.
 
 | Command | API |
 |---------|-----|
 | `launchpad projects create` | `POST /v1/projects` |
 | `launchpad use` | Writes project to `~/.launchpad/config` |
-| `launchpad env list/create/use` | `GET/POST …/environments` |
+| `launchpad env list/create/use/clone` | `GET/POST …/environments`, `POST …/clone` |
 | `launchpad config get` | `GET /config` (live, current env) |
-| `launchpad config set/unset`, `scale`, `image` | `POST …/changeset/changes` (`--now` → stage + push) |
-| `launchpad diff` / `status` / `reset` | `GET …/changeset` (+ releases for per-env baseline); `DELETE …/changeset` |
+| `launchpad config set/unset`, `scale`, `image`, `process set/unset/apply` | `POST …/changeset/changes` (`--now` → stage + push) |
+| `launchpad diff` / `status` / `reset` / `unstage` | `GET …/changeset` (+ releases); `DELETE …/changeset` / `…/changes/last` |
 | `launchpad deploy` | Optional stage + `POST …/changeset/push` |
 | `launchpad ps` | `GET /processes` |
-| `launchpad releases` | `GET /releases` (with deployment annotations) |
+| `launchpad logs` / `inspect` | `GET /logs`; composite inspect |
+| `launchpad releases` / `rollback` / `promote` | `GET /releases`; `POST …/rollback`; `POST …/promote` |
+| `launchpad target capabilities` | `GET /v1/targets/{type}/capabilities` |
 
 Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API_URL`. Primary service is still implicit.
 
@@ -319,8 +335,10 @@ Not yet implemented; design targets retained for planning:
 | **Rate limiting** | Per-token buckets; ingress as authoritative limiter in prod |
 | **HA packaging** | Helm chart, API/worker replicas, migration Job, PDBs |
 | **Builds** | In-cluster build service (Kaniko/Buildkit), `building` deploy state |
-| **Secrets** | AES-GCM encryption for config vars at rest |
-| **OpenAPI** | `docs/openapi.yaml` contract with CI diff check |
+| **OIDC / interactive login** | After identity principals phase 1 |
+| **Scale as worker job** | Control-plane scale API enqueueing target Scale |
+
+**Shipped (no longer future work):** secret config AES-256-GCM at rest (`LAUNCHPAD_SECRETS_KEY`, `internal/secrets`); OpenAPI contract (`docs/openapi.yaml`, `make openapi-check`, `openapi_contract_test`).
 
 ---
 
@@ -330,10 +348,11 @@ Not yet implemented; design targets retained for planning:
 |---------|----------------|
 | Stolen API token | Scoped tokens, revocation |
 | Tenant crossover | Workspace ID enforced on every query |
-| Config leakage in logs | Redact known secret keys (planned) |
+| Config leakage in logs | Secret values redacted on control-plane reads; log redaction of known secret keys (planned) |
 | K8s RBAC | Dedicated ServiceAccount per Launchpad install |
+| Secret config at rest | AES-256-GCM (`v1:` ciphertext) when `LAUNCHPAD_SECRETS_KEY` is set; refuse secret writes without key |
 
-Config vars are plaintext in DB in MVP; access controlled via DB permissions and network policy.
+Config vars with sensitivity `plain` are stored as UTF-8 plaintext. Vars with sensitivity `secret` are sealed with AES-256-GCM (requires `LAUNCHPAD_SECRETS_KEY` on API and worker). Access is also controlled via DB permissions and network policy.
 
 ---
 
