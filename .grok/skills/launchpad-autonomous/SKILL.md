@@ -3,10 +3,11 @@ name: launchpad-autonomous
 description: >
   Launchpad Autonomous Development Mode (ADM). Long-running, low-input feature
   work: named modes (single-feature / integration-stack / queue-drain),
-  recommended path, spec+plan, worktree-isolated subagents, docs sync,
-  verification ladder, hard stops, optional persona dogfood. Use when user
-  authorizes autonomous mode, ADM, feature program, "ship without design debates",
-  multi-feature agent loop, queue drain, or "/launchpad-autonomous".
+  recommended path, spec+plan, worktree-isolated subagents, Grok workflows at
+  review gates, docs sync, verification ladder, hard stops, optional persona
+  dogfood. Use when user authorizes autonomous mode, ADM, feature program,
+  "ship without design debates", multi-feature agent loop, queue drain, or
+  "/launchpad-autonomous".
 ---
 
 # Launchpad Autonomous Development Mode
@@ -23,6 +24,16 @@ description: >
 | `docs/superpowers/program/feedback/` | Persona write-ups + optional `SESSION-*.md` |
 
 **Helpers:** `scripts/adm-status` — ready rows, integration tip, dirty worktrees, open PRs.
+
+**Gate workflows** (prefer these over ad-hoc multi-agent panels; parent still owns policy):
+
+| Workflow | Gate | Example |
+|----------|------|---------|
+| `adm-spec-review` | Before self-approve | `/workflow adm-spec-review {"spec_path":"docs/superpowers/specs/….md"}` |
+| `adm-review` | After implementer / before PR | `/workflow adm-review {"target":"HEAD","base":"origin/main"}` |
+| `project-audit` | Optional L4 / stack closeout | `/workflow project-audit {"apply_docs":false}` |
+
+See `docs/AUTONOMOUS-MODE.md` § **Workflows as ADM subroutines**. Project `.grok/workflows/` needs folder trust (`/hooks-trust`); else install under `~/.grok/workflows/`.
 
 **Also read:** `docs/FEATURE-DEVELOPMENT.md`, `docs/DX-VISION.md` (Active / next), `docs/DOMAIN.md` when entities/APIs move.
 
@@ -47,16 +58,18 @@ Restate mode + knobs in the first turn.
 1. **Mode + budget** — single-feature | integration-stack | queue-drain; merge policy; stop condition.
 2. **Scope** — user-named feature or top `ready` row in `QUEUE.md` (cross-check DX-VISION); refuse `deferred`/`blocked` without override.
 3. **DoD** — acceptance criteria on the row / plan / spec before code.
-4. **Design** — spec + plan; recommended approach; self-review; QUEUE → `designing`.
+4. **Design** — spec + plan; recommended approach; **prefer `adm-spec-review` workflow**; QUEUE → `designing`. On `pass=false`, hard stop.
 5. **Branch / worktree** — never on `main`; **implementers in `.worktrees/feat-<name>`**; QUEUE Branch column = lease. QUEUE → `implementing`.
 6. **Implement** — plan order; one Go layer per commit; tests with code; **push after each task**.
-7. **Review** — two-stage (spec then quality) for service/api/jobs/cli/domain; combined only for trivial 1–2 file tasks.
+7. **Review** — **prefer `adm-review` workflow** (spec + quality + adversarial). Trivial 1–2 file tasks: one combined subagent OK. On `approve=false`, return `must_fix` to implementer.
 8. **Docs sync** — DOMAIN / OpenAPI / DX-VISION / QUEUE / plan checkboxes.
-9. **Verify** — ladder L0–L4; **L1 e2e-stub required** for service/jobs/target/deploy CLI; always `mise exec --`.
+9. **Verify** — ladder L0–L4; **L1 e2e-stub required** for service/jobs/target/deploy CLI; always `mise exec --`. Optional L4: `project-audit` report-only.
 10. **Persona** — CLI/deploy UX: PERSONA-SCRIPTS → `feedback/`; stack/drain: S1 once before final PR to main (L1.5).
 11. **Scout** — append IDEAS; promote only per protocol (same-PR fix / QUEUE / IDEAS only).
 12. **Integrate** — push + `gh pr create`; QUEUE → `pr-open`. Stack/drain: merge into **integration only**; update QUEUE on that merge. Final PR integration → main; **no force-merge to main**.
 13. **Stop** — mode stop (budget, drain complete = only deferred/blocked), or hard stop → report decision needed; leave trees intact.
+
+**Do not** replace this loop with one mega-workflow that implements and merges. Workflows are subroutines; you own hard stops, QUEUE, and git policy.
 
 ## Isolation rules (non-negotiable)
 
@@ -66,7 +79,7 @@ Restate mode + knobs in the first turn.
 
 ## Hard stops (do not override)
 
-Deferred-boundary / DOMAIN fork · self-review fail · 3× same-task verify fail · unfixable P0 dogfood · destructive git/shared actions · budget/mode stop · unexpected dirty WIP · branch ownership conflict.
+Deferred-boundary / DOMAIN fork · self-review fail (`adm-spec-review` pass=false) · 3× same-task verify fail · unfixable P0 dogfood · destructive git/shared actions · budget/mode stop · unexpected dirty WIP · branch ownership conflict.
 
 ## Related skills
 
@@ -83,4 +96,9 @@ Deferred-boundary / DOMAIN fork · self-review fail · 3× same-task verify fail
 ADM authorized: single-feature — ship <feature>; 1 PR; no merge
 ADM authorized: integration-stack — base adm/queue-2026-07-21; merge into adm; up to 3 PRs; final PR to main
 ADM authorized: queue-drain — remaining ready items; merge into adm/…; stop when only deferred remain
+
+# Gates (from orchestrator after design / implement):
+/workflow adm-spec-review {"spec_path":"docs/superpowers/specs/<name>-design.md","plan_path":"docs/superpowers/plans/<name>.md"}
+/workflow adm-review {"target":"HEAD","base":"origin/main","spec_path":"docs/superpowers/specs/<name>-design.md"}
+/workflow project-audit {"apply_docs":false}
 ```

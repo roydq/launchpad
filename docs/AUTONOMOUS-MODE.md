@@ -2,13 +2,13 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Experimental — process protocol (docs + skill + program files) |
-| **Date** | 2026-07-21 |
-| **Related** | `docs/FEATURE-DEVELOPMENT.md`, `docs/DX-VISION.md`, `.grok/skills/launchpad-autonomous/SKILL.md`, `docs/superpowers/program/` |
+| **Status** | Experimental — process protocol (docs + skill + program files + Grok workflows) |
+| **Date** | 2026-07-28 |
+| **Related** | `docs/FEATURE-DEVELOPMENT.md`, `docs/DX-VISION.md`, `.grok/skills/launchpad-autonomous/SKILL.md`, `docs/superpowers/program/`, `.grok/workflows/` |
 
-Long-running, low-input agent work: pick recommended paths, implement planned features, keep docs in sync, expand verification when risk warrants it, use subagents, and stop cleanly when human judgment is required.
+Long-running, low-input agent work: pick recommended paths, implement planned features, keep docs in sync, expand verification when risk warrants it, use subagents **and fixed multi-agent workflows at gates**, and stop cleanly when human judgment is required.
 
-This is **process**, not product code. Refined from real ADM runs (2026-07-18–21); keep experiments cheap while the product is early.
+This is **process**, not product code. Refined from real ADM runs (2026-07-18–21); workflows integrated 2026-07-28. Keep experiments cheap while the product is early.
 
 ### Program files (Approach B)
 
@@ -49,9 +49,10 @@ Without that phrase (or equivalent), do **not** self-approve designs or run mult
 5. **Hard stops beat cleverness** — escalate rather than invent product policy.
 6. **Docs are part of the feature** — DOMAIN, OpenAPI, DX-VISION, plan checkboxes, and queue status stay current in the same PR series.
 7. **Subagents for focus** — fresh implementer context per task when the plan is multi-task; orchestrator coordinates only.
-8. **Queue over vibes** — pick work from `QUEUE.md` (aligned with DX-VISION); park discoveries in `IDEAS.md` without silent scope expansion.
-9. **Isolation over thrash** — implementers work in leased branches/worktrees; orchestrator does not reset or force-push work it does not own.
-10. **Definition of Done before “shipped”** — a QUEUE row is not done until its acceptance criteria are green (see [Definition of Done](#definition-of-done-queue-rows)).
+8. **Workflows for fixed gates** — prefer named Grok workflows (`.grok/workflows/`) for repeatable multi-agent panels (spec self-review, dual review, project audit); keep policy and hard stops in the parent orchestrator (see [Workflows as ADM subroutines](#workflows-as-adm-subroutines)).
+9. **Queue over vibes** — pick work from `QUEUE.md` (aligned with DX-VISION); park discoveries in `IDEAS.md` without silent scope expansion.
+10. **Isolation over thrash** — implementers work in leased branches/worktrees; orchestrator does not reset or force-push work it does not own.
+11. **Definition of Done before “shipped”** — a QUEUE row is not done until its acceptance criteria are green (see [Definition of Done](#definition-of-done-queue-rows)).
 
 ---
 
@@ -163,15 +164,17 @@ User authorizes ADM + named mode + budget
   → Select work item (user-named or top ready QUEUE row / Active / next)
   → Update QUEUE status → designing; fill DoD if missing
   → Designer: approaches → recommended → spec + plan
-  → Spec self-review checklist → self-approve OR hard stop
+  → Spec self-review: prefer workflow adm-spec-review → self-approve OR hard stop
   → Feature worktree + branch from integration (or main in single-feature mode)
   → QUEUE → implementing (lease Branch column)
   → For each plan task:
-        Implementer (worktree) → L0 verify → review(s) → commit → push checkpoint → check off plan
+        Implementer (worktree) → L0 verify
+        → Dual review: prefer workflow adm-review → commit → push checkpoint → check off plan
   → Docs sync if model/routes/CLI changed
   → Verification ladder (L0–L4 as triggered)
   → Persona dogfood when CLI/deploy UX in scope (PERSONA-SCRIPTS)
   → Scout pass → append IDEAS.md (no code from ideas alone)
+  → Optional hygiene: workflow project-audit (report-only) before final PR / stack closeout
   → Push + open PR (link spec; test plan; DoD); QUEUE → pr-open
   → (stack/drain) merge feature PR into integration; QUEUE + DX-VISION update on integration
   → Update DX-VISION status if applicable
@@ -280,7 +283,7 @@ Closeout / QUEUE bulk status updates: commit on the **integration branch** (or a
 | **L1.5** | Once per integration stack / before final PR to main | Persona **S1** (and S4 if CLI error paths touched); write `program/feedback/` |
 | **L2** | New/changed HTTP routes | Update OpenAPI + `make openapi-check` |
 | **L3** | Multi-env, promote, config resolution, secrets-aware flows | Existing e2e coverage or add cases in the same PR |
-| **L4** | Before feature PR and before final integration→main PR | All triggered levels + plan “Final verification” + no debug leftovers |
+| **L4** | Before feature PR and before final integration→main PR | All triggered levels + plan “Final verification” + no debug leftovers; optional `project-audit` workflow (report-only) for docs/dead-code/security drift |
 
 **Expand verification when:** persona or reviewer finds an uncovered failure mode; auth/config/deploy semantics change; a bug fix needs a regression test. Expansion lands in the same PR when practical; otherwise note a follow-up in the PR body (not silent drop).
 
@@ -381,6 +384,55 @@ Reuse patterns from superpowers `subagent-driven-development` and bundled `execu
 
 ---
 
+## Workflows as ADM subroutines
+
+Grok **workflows** (`.grok/workflows/*.rhai`) are deterministic multi-agent scripts: parallel fan-out, adversarial verification, structured results, and a report artifact. They are **not** a replacement for the ADM orchestrator.
+
+| Owns | Parent orchestrator (this protocol) | Named workflows |
+|------|-------------------------------------|-----------------|
+| Mode, budget, stop conditions | Yes | No |
+| QUEUE selection + branch leases | Yes | No |
+| Hard stops / product taste | Yes | Report only; parent decides |
+| Implementers (worktrees, commits, push) | Yes (subagents) | No |
+| PR open / merge policy | Yes | No |
+| Multi-session resume | Files + git | Same-process journal only |
+| Spec self-review panel | Dispatches | `adm-spec-review` |
+| Post-impl dual review | Dispatches | `adm-review` |
+| Docs/dead-code/security audit | Dispatches | `project-audit` |
+
+### Catalog (project)
+
+| Workflow | When | Args (JSON) | Orchestrator action on result |
+|----------|------|-------------|-------------------------------|
+| **`adm-spec-review`** | After spec (+ plan) drafted; before self-approve | `{"spec_path":"docs/superpowers/specs/….md","plan_path":"…"}` optional `domain_path` | `pass=false` → **hard stop** design gate; `pass=true` → mark `Approved (self-approve — ADM)` and implement |
+| **`adm-review`** | After implementer task / before feature PR | `{"target":"HEAD","base":"origin/main","spec_path":"…","plan_path":"…"}` | `approve=false` → send `must_fix` back to implementer; do not open PR until green. Trivial 1–2 file tasks may skip and use a single combined subagent review |
+| **`project-audit`** | Optional L4 / stack closeout / hygiene | `{"apply_docs":false}` preferred in ADM | Treat report as scout input: same-PR fix / QUEUE / IDEAS only. Prefer **report-only** (`apply_docs=false`); if applying docs, keep edits on a docs or feature branch the orchestrator owns |
+
+### How to launch
+
+```text
+/workflow adm-spec-review {"spec_path":"docs/superpowers/specs/2026-07-28-example-design.md","plan_path":"docs/superpowers/plans/2026-07-28-example.md"}
+/workflow adm-review {"target":"HEAD","base":"origin/main","spec_path":"docs/superpowers/specs/….md"}
+/workflow project-audit {"apply_docs":false}
+```
+
+From the agent tool: `workflow` with `name` + `args` (and an `agent_budget` if the default 128 is too tight or too loose). Progress: `/workflows`.
+
+**Trust:** project workflows under `.grok/workflows/` require folder trust (`/hooks-trust` or launch with `--trust`). Without trust, copy or symlink into `~/.grok/workflows/` (user scope). Built-in `/workflow` discovery uses `meta.name` in the script.
+
+### Budget and failure policy
+
+- Size workflow `agent_budget` for the gate (roughly: spec-review ≤ 25, dual review ≤ 30, project-audit ≤ 40). Leave headroom if the parent session also spawns implementers.
+- Workflows **fail closed** on missing verification evidence (unconfirmed findings do not count as proof of bugs, but failed review agents on critical panels are treated as non-approve / non-pass).
+- Do **not** encode merge-to-main, QUEUE status transitions, or hard-stop *resolution* inside Rhai — only structured reports.
+- Do **not** put multi-task implementers or queue-drain loops entirely inside one workflow; journal resume is same-process only and cannot own multi-day git leases.
+
+### Fallback
+
+If workflows are disabled (`GROK_WORKFLOWS=0`) or unavailable, the orchestrator runs the same gates with ordinary subagents and the checklists in this doc. Policy does not change.
+
+---
+
 ## Session log (optional)
 
 For multi-hour or multi-session stack/drain runs, write:
@@ -403,6 +455,7 @@ Suggested contents: mode, integration branch, PRs merged, next ready ID, hard st
 | `.grok/skills/launchpad-autonomous` | Agent entrypoint for this protocol |
 | `.grok/skills/launchpad-dev` | Build, test, smoke, local processes |
 | `.grok/skills/launchpad-domain` | Entity / API / invariant questions |
+| `.grok/workflows/*.rhai` | Fixed multi-agent ADM gates (spec review, dual review, audit) |
 
 ---
 
@@ -414,20 +467,23 @@ Suggested contents: mode, integration branch, PRs merged, next ready ID, hard st
 - Not multi-service or deferred-boundary implementation without an explicit design path.
 - Not a substitute for human product taste on hard stops.
 - Not a license for the orchestrator to thrash implementer branches.
+- Not a single mega-workflow that designs, implements, and merges the queue (workflows are **subroutines**; policy stays in the parent).
 
 ---
 
 ## Evolution
 
-Current = protocol + skill + program files + light status script. Learned from ADM runs:
+Current = protocol + skill + program files + light status script + **gate workflows** (`adm-spec-review`, `adm-review`, `project-audit`). Learned from ADM runs:
 
 - Shared-workspace thrash → mandatory worktrees + branch leases  
 - Implicit “merge into adm / drain queue” budgets → named modes  
 - Half-shipped surfaces → Definition of Done  
 - Stale QUEUE → update on every merge  
+- Repeated multi-agent review graphs → named workflows at fixed gates  
 
 When runs are boringly useful, consider next:
 
+- `adm-scout` / `adm-persona` workflows (structured IDEAS rows + PERSONA-SCRIPTS feedback)
 - Scheduler-backed continuation (session ticks, like `/pr-babysit`)
 - Standalone `/launchpad-persona` skill
 - Launchpad MCP for API dogfood without shell curl
