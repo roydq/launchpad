@@ -31,7 +31,7 @@ The system separates **control plane** (API, auth, persistence, job queue) from 
 
 ### Roadmap
 
-See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Next / deferred:** multi-service ReleaseSet, config bindings, workspace config layer, OIDC, scale API, SSE/events, idempotency, builds, Helm.
+See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Next:** `launchpad.yaml` v1 then MCP. **Parked:** multi-service ReleaseSet, config bindings, OIDC. **Later:** workspace config layer, scale API, SSE/events, idempotency, builds, Helm. Disposition: [`program/feedback/2026-08-22-queue-disposition.md`](superpowers/program/feedback/2026-08-22-queue-disposition.md).
 
 ---
 
@@ -314,10 +314,10 @@ Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API
 | **1b — Release invariants** | **Shipped** | Snapshot-only deploy, atomic push, API DTOs (see domain doc) |
 | **2a — Multi-env** | **Shipped** | Ambient env, env CRUD, CLI `env *` |
 | **2b — Layered config** | **Shipped** | Shared + service layers; resolve at release |
-| **3 — Multi-service** | Planned | Multiple services, ReleaseSet, coordination modes |
-| **4 — Bindings** | Planned | `${{ ref }}` config linking between services |
+| **3 — Multi-service** | Parked | Multiple services, ReleaseSet, coordination modes |
+| **4 — Bindings** | Parked with phase 3 | `${{ ref }}` config linking between services |
 | **5 — Promotion** | **Shipped** (primary service) | `promote` across environments |
-| **6 — Integrations** | Planned | `launchpad.yaml` import/export, agent/MCP hooks |
+| **6 — Integrations** | **Next (v1)** | `launchpad.yaml` import/export of shipped model, then MCP |
 
 Each phase updates domain → store → service → worker → api → cli → target together. Canonical phase narrative: [`DOMAIN.md`](DOMAIN.md).
 
@@ -335,7 +335,7 @@ Not yet implemented; design targets retained for planning:
 | **Rate limiting** | Per-token buckets; ingress as authoritative limiter in prod |
 | **HA packaging** | Helm chart, API/worker replicas, migration Job, PDBs |
 | **Builds** | In-cluster build service (Kaniko/Buildkit), `building` deploy state |
-| **OIDC / interactive login** | After identity principals phase 1 |
+| **OIDC / interactive login** | Parked until second human user or hosted spike; generic OIDC first |
 | **Scale as worker job** | Control-plane scale API enqueueing target Scale |
 
 **Shipped (no longer future work):** secret config AES-256-GCM at rest (`LAUNCHPAD_SECRETS_KEY`, `internal/secrets`); OpenAPI contract (`docs/openapi.yaml`, `make openapi-check`, `openapi_contract_test`).

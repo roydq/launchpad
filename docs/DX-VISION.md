@@ -57,10 +57,10 @@ North star: **the mise of runtime application management** — zero ceremony for
 |-------|-------|--------|
 | **2a** | Multi-env | **Shipped** |
 | **2b** | Layered config | **Shipped** |
-| **3** | Multi-service + ReleaseSet | Planned (deferred — do not half-build) |
-| **4** | Bindings | Planned (deferred — do not half-build) |
+| **3** | Multi-service + ReleaseSet | Parked — do not half-build; start when a project needs a second independently versioned artifact |
+| **4** | Bindings | Parked with phase 3 (not independent) |
 | **5** | Promote | **Shipped** (primary service) |
-| **6** | `launchpad.yaml` | Planned |
+| **6** | `launchpad.yaml` | **Next (v1)** — shipped model only; MCP after spec |
 
 Do not half-build deferred phases. Each gets a spec.
 
@@ -82,10 +82,11 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Diff env↔env | **Shipped** |
 | Unstage last mutation | **Shipped** |
 | Recipes / `launchpad new` templates | **Shipped** (ADM #32) |
-| Process commands + Procfile | **Designed** — QUEUE `process-commands` ([runtime-target-depth](superpowers/specs/2026-07-20-runtime-target-depth-design.md)) |
-| Portable health / deploy readiness | **Designed** — QUEUE `deploy-health` |
-| Target extensions (resources, annotations, …) | **Designed** — QUEUE `target-extensions` |
-| MCP server | After core loop solid |
+| Process commands + Procfile | **Shipped** (ADM #45) — [runtime-target-depth](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
+| Portable health / deploy readiness | **Shipped** (ADM #46) |
+| Target extensions (resources, annotations, …) | **Shipped** (ADM #48) |
+| `launchpad.yaml` v1 (current model) | **Next** — QUEUE `launchpad-yaml` (import/export; not GitOps; not multi-service) |
+| MCP server | **After yaml spec** — QUEUE `mcp-server` (thin OpenAPI/CLI tools) |
 
 ### Track B — Confidence (engineering)
 
@@ -99,14 +100,14 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Postgres matrix in CI | **Shipped** — `test-postgres` + pgx driver fix (ADM #34) |
 | Target conformance suite (stub/k8s/…) | **Shipped** — stub conformance (ADM #35) |
 | Worker lease/supersede stress tests | **Shipped** — concurrent lease + reclaim (ADM #36) |
-| Release-immutable config materialization (K8s) | **Designed** — QUEUE `release-config-materialization` |
+| Release-immutable config materialization (K8s) | **Shipped** (ADM #47) |
 
 ### Track C — Surfaces (CLI → TUI → web → docs)
 
 | Item | Status |
 |------|--------|
 | CLI verbs + wait + context | **Shipped** |
-| Completions / man pages | Later |
+| Completions / man pages | Completions **shipped** (ADM #51); man pages later |
 | TUI (inspect / deploy / releases) | Later — same apiclient |
 | Docs site (get-started + mental model) | Later |
 | `examples/` + 60s path CI | **Shipped** (`examples/hello-stub`, `make example-60s`) |
@@ -118,7 +119,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 |------|--------|
 | Workspace-scoped tokens | **Shipped** |
 | Principals + membership + audit (phase 1) | **Shipped** (service accounts on tokens; release `created_by`; `GET /v1/audit`) |
-| OIDC (Azure AD / Google / generic) | After phase 1 principals |
+| OIDC (generic first; Azure/Google presets later) | **Parked** until second human user or hosted spike |
 | Secrets-typed config | **S1+S2 shipped** — typing/redaction + AES-GCM at rest. [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md) |
 | Idempotency keys | Later |
 | Deployment events / SSE | Later |
@@ -177,7 +178,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 |------|-------|
 | Problem+json recovery hints | **Shipped** |
 | CLI surfaces hints | **Shipped** |
-| MCP server | After core DX loop solid |
+| MCP server | After `launchpad.yaml` v1 spec — QUEUE `mcp-server` |
 | Idempotency keys | Later |
 | Recipes / templates | **Shipped** — `launchpad new` / `new list` |
 
@@ -198,10 +199,11 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 3. ~~Server-side pending/diff preview~~ (**Shipped**)
 4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
 5. Secrets S1+S2 — **shipped** (PRs #28, #29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
-6. ADM remaining ready queue (base `adm/queue-2026-07-19`): recipes → shell-prompt → Track B → env-clone
-7. Surfaces (docs site → TUI → dashboard) only with stable API
-8. OIDC (after principals phase 1 dogfood)
-9. **Multi-service** only after dogfood of core loop
+6. ~~ADM remaining ready queue~~ (**Shipped** — recipes, shell-prompt, Track B, env-clone, runtime depth, polish)
+7. **Integrations (now):** `launchpad.yaml` v1 of the shipped model, then MCP over OpenAPI/CLI — [queue disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md)
+8. Surfaces (docs site → TUI → dashboard) after the project file + MCP exist
+9. OIDC **parked** until a second human user or hosted control-plane spike; generic OIDC first
+10. **Multi-service + bindings parked** until a project needs a second independently versioned artifact
 
 ### Autonomous feature program
 
@@ -233,8 +235,9 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 
 | Work | Spec / queue |
 |------|----------------|
-| **ADM integration** | `adm/queue-2026-07-20` — runtime depth + polish; final PR → main |
-| Queue ready work | **Empty** — only deferred (OIDC, MCP, multi-service, bindings, launchpad.yaml) |
+| **Next** | QUEUE `launchpad-yaml` — **designing** on `feat/launchpad-yaml` — [spec](superpowers/specs/2026-08-22-launchpad-yaml-design.md) |
+| Then | QUEUE `mcp-server` — thin MCP tools after the yaml spec exists |
+| Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
 Ordered agent work: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md).

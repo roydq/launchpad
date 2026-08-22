@@ -6,19 +6,24 @@
 
 Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped` | `blocked` | `deferred`
 
+**Disposition (2026-08-22):** Remaining July deferred rows were product-parked or promoted. See `docs/superpowers/program/feedback/2026-08-22-queue-disposition.md`. Do not start parked rows without a new override.
+
 ## Active queue
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | oidc-design | OIDC (Azure AD / Google / generic) design | D | deferred | After principals phase 1 dogfood; design before code — **human review required** | — |
-| 2 | mcp-server | Launchpad MCP server | A/C | deferred | After core DX loop solid — **human review of product surface** | — |
-| 3 | multi-service | Multi-service + ReleaseSet | domain-3 | deferred | Do not half-build; full spec required — **human design** | — |
-| 4 | bindings | Config bindings `${{ refs }}` | domain-4 | deferred | Do not half-build; full spec required — **human design** | — |
-| 5 | launchpad-yaml | `launchpad.yaml` project manifest | domain-6 | deferred | Domain roadmap phase 6 — **human design** | — |
+| 1 | launchpad-yaml | `launchpad.yaml` v1 (current model) | A / domain-6 | designing | Spec: `docs/superpowers/specs/2026-08-22-launchpad-yaml-design.md`. DoD: spec + apply/export + e2e-stub; secrets never in the file; not GitOps. | `feat/launchpad-yaml` |
+| 2 | mcp-server | Launchpad MCP server | A/C | ready | **After yaml spec exists** (same integrations program). Thin tools over existing OpenAPI/CLI; token auth; no new domain entities. Prefer an `apply` manifest tool once yaml v1 is specified. DoD: spec with tool list + auth story; no DOMAIN fork. | — |
 
-**ADM stop condition (2026-07-20):** No `ready` / implementable items remain. Queue is only deferred items that require human product design review before code.
+## Parked (not ADM-ready)
 
-**Runtime depth program (shipped this ADM run):** process-commands → deploy-health → release-config-materialization → target-extensions. Design: `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md`.
+| Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
+|-----|-----|------|-------|--------|--------------|-------------|
+| — | oidc-design | OIDC login | D | deferred | **Parked.** Tokens + service-account principals already cover CLI/CI/agents. **Start when:** a second human user or a hosted control-plane spike needs interactive login. **IdP:** generic OIDC first (authorization code + CLI device flow); Azure AD / Google as issuer presets later — not a vendor-first design. | — |
+| — | multi-service | Multi-service + ReleaseSet | domain-3 | deferred | **Parked.** Processes already cover web+worker on one image. **Start when:** a project needs a second independently versioned artifact (not just another process). Full spec required; do not half-build. Atomic rollback depth still an open DOMAIN question. | — |
+| — | bindings | Config bindings `${{ refs }}` | domain-4 | deferred | **Parked — not independent.** Design as slice 2 of multi-service (composition via refs). Do not spec or ship bindings for a single primary service. | — |
+
+**Runtime depth program (shipped 2026-07-20):** process-commands → deploy-health → release-config-materialization → target-extensions. Design: `docs/superpowers/specs/2026-07-20-runtime-target-depth-design.md`.
 
 ## Recently shipped (reference)
 
