@@ -76,6 +76,18 @@ func matchSpecificPhrases(detail string) (code string, hints []Hint) {
 		return "config_layer_invalid", []Hint{
 			{Action: "use_layer", Message: "Use layer shared, service, or resolved.", Command: "launchpad config get --layer shared"},
 		}
+	case strings.Contains(d, "unknown manifest field"),
+		strings.Contains(d, "empty manifest"),
+		strings.Contains(d, "must be a scalar string"),
+		strings.Contains(d, "must not be null"),
+		strings.Contains(d, "manifest environments is required"),
+		strings.Contains(d, "invalid project name"),
+		strings.Contains(d, "invalid process name"),
+		strings.Contains(d, "invalid environment name"),
+		strings.Contains(d, "invalid process expose"):
+		return "manifest_invalid", []Hint{
+			{Action: "export", Message: "v1 launchpad.yaml: version, project, processes, environments. Unknown keys are rejected.", Command: "launchpad export"},
+		}
 	case strings.Contains(d, "unsupported manifest version"):
 		return "manifest_version", []Hint{
 			{Action: "set_version", Message: "launchpad.yaml v1 uses version: 1.", Command: "launchpad export"},

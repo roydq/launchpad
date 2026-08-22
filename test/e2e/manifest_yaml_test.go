@@ -95,8 +95,14 @@ func TestCLIManifestExportApply(t *testing.T) {
 	if !strings.Contains(string(applyOut), "image") {
 		t.Fatalf("expected image staged:\n%s", applyOut)
 	}
-	if strings.Contains(string(applyOut), "job") && strings.Contains(string(applyOut), "succeeded") {
-		t.Fatalf("apply must not deploy:\n%s", applyOut)
+	dstClient := apiclient.New(apiURL, tok.Token)
+	dstClient.Environment = "dev"
+	rels, err := dstClient.ListReleases(ctx, dst)
+	if err != nil {
+		t.Fatalf("list dest releases after apply: %v", err)
+	}
+	if len(rels) != 0 {
+		t.Fatalf("apply must not create a release; got %d", len(rels))
 	}
 
 	diff := exec.Command(cli, "diff")
@@ -126,8 +132,18 @@ func TestCLIManifestExportApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("export dst: %v\n%s", err, out)
 	}
-	if !strings.Contains(string(out), "image:") {
-		t.Fatalf("dst export missing image:\n%s", out)
+	got := string(out)
+	for _, line := range strings.Split(body, "\n") {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "image:") && !strings.Contains(got, trim) {
+			t.Fatalf("dst export missing %q:\n%s", trim, got)
+		}
+	}
+	if strings.Contains(body, "8080") && !strings.Contains(got, "8080") {
+		t.Fatalf("dst export missing PORT from src:\n%s", got)
+	}
+	if !strings.Contains(got, "stub") {
+		t.Fatalf("dst export missing stub target:\n%s", got)
 	}
 }
 

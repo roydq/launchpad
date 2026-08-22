@@ -109,13 +109,11 @@ func (s *ManifestService) exportEnv(ctx context.Context, project *domain.Project
 		Cluster:   cluster,
 		Ephemeral: env.Ephemeral,
 	}
-	rel, err := s.releases.GetLatestReleaseForEnvironment(ctx, project.Name, env.Name)
+	img, err := s.imageForEnv(ctx, project.Name, env.Name)
 	if err != nil {
 		return block, err
 	}
-	if rel != nil {
-		block.Image = rel.ArtifactRef
-	}
+	block.Image = img
 	sharedVals, sharedSens, err := s.store.ListSharedConfigVarsWithSensitivityTx(ctx, nil, project.ID, env.ID)
 	if err != nil {
 		return block, err
@@ -304,13 +302,11 @@ func (s *ManifestService) Apply(ctx context.Context, projectName, selectedEnv st
 			effImage = overlayImage(open.Changes)
 		}
 		if effImage == "" {
-			rel, err := s.releases.GetLatestReleaseForEnvironment(ctx, projectName, selectedEnv)
+			liveImg, err := s.imageForEnv(ctx, projectName, selectedEnv)
 			if err != nil {
 				return nil, err
 			}
-			if rel != nil {
-				effImage = rel.ArtifactRef
-			}
+			effImage = liveImg
 		}
 		if block.Image != effImage {
 			changes = append(changes, StageChangeInput{Type: "image", Image: block.Image})
@@ -538,6 +534,29 @@ func extensionsEqual(a, b map[string]json.RawMessage) bool {
 	ab, _ := json.Marshal(a)
 	bb, _ := json.Marshal(b)
 	return bytes.Equal(ab, bb)
+}
+
+// imageForEnv matches inspect: running deploy in env, else any deploy in env, else empty.
+func (s *ManifestService) imageForEnv(ctx context.Context, projectName, envName string) (string, error) {
+	rels, err := s.releases.ListReleases(ctx, projectName, envName)
+	if err != nil {
+		return "", err
+	}
+	for i := range rels {
+		for _, d := range rels[i].Deployments {
+			if d.Environment == envName && d.Status == string(domain.DeploymentRunning) {
+				return rels[i].Release.ArtifactRef, nil
+			}
+		}
+	}
+	for i := range rels {
+		for _, d := range rels[i].Deployments {
+			if d.Environment == envName {
+				return rels[i].Release.ArtifactRef, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func parseTargetConfig(raw json.RawMessage) (namespace, cluster string) {

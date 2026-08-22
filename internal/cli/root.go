@@ -1005,6 +1005,12 @@ func NewRoot(cfg Config) *cobra.Command {
 	applyCmd := &cobra.Command{
 		Use:   "apply",
 		Short: "Apply launchpad.yaml (creates project/env if needed; stages, does not deploy)",
+		Long: `Apply a v1 launchpad.yaml document.
+
+Creates the project (requires environments.dev) and the selected environment if missing.
+Process upserts are service-scoped (they affect the next deploy in every environment).
+Config and image apply only to the selected environment (ambient --env / LAUNCHPAD_ENV).
+Apply never deploys; run launchpad diff && launchpad deploy --wait.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path, _ := cmd.Flags().GetString("file")
 			if path == "" {

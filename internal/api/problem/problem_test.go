@@ -105,6 +105,26 @@ func TestHintsForCatalog(t *testing.T) {
 			wantCode: "promote_no_running",
 			wantCmd:  "launchpad promote --from <env> --release <n>",
 		},
+		{
+			err:      fmt.Errorf("%w: unknown manifest field kind", launchpad.ErrBadRequest),
+			wantCode: "manifest_invalid",
+			wantCmd:  "launchpad export",
+		},
+		{
+			err:      fmt.Errorf("%w: unsupported manifest version 2", launchpad.ErrBadRequest),
+			wantCode: "manifest_version",
+			wantCmd:  "launchpad export",
+		},
+		{
+			err:      fmt.Errorf("%w: manifest must not contain a secret value", launchpad.ErrBadRequest),
+			wantCode: "manifest_secret_value",
+			wantCmd:  "launchpad config set --secret KEY=value",
+		},
+		{
+			err:      fmt.Errorf("%w: manifest field is deferred: services", launchpad.ErrBadRequest),
+			wantCode: "manifest_deferred",
+			wantCmd:  "launchpad inspect",
+		},
 	}
 	for _, tc := range cases {
 		code, hints := HintsFor(tc.err)

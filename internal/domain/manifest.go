@@ -200,6 +200,9 @@ func ValidateManifest(m *Manifest) error {
 	if m == nil {
 		return fmt.Errorf("%w: empty manifest", launchpad.ErrBadRequest)
 	}
+	if strings.TrimSpace(m.Project) == "" {
+		return fmt.Errorf("%w: invalid project name", launchpad.ErrBadRequest)
+	}
 	if m.Version != ManifestVersionV1 {
 		return fmt.Errorf("%w: unsupported manifest version %d", launchpad.ErrBadRequest, m.Version)
 	}

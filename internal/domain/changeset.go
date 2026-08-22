@@ -71,7 +71,7 @@ type ProcessSetPayload struct {
 	Quantity         *int                       `json:"quantity,omitempty"`
 	Expose           *string                    `json:"expose,omitempty"`
 	Health           *ProcessHealth             `json:"health,omitempty"`
-	TargetExtensions map[string]json.RawMessage `json:"target_extensions,omitempty"`
+	TargetExtensions map[string]json.RawMessage `json:"target_extensions"`
 }
 
 // ProcessUnsetPayload removes a process definition.
