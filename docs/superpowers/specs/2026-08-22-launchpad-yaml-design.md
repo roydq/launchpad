@@ -133,10 +133,11 @@ No new entities. Manifest is an **import/export document** over existing Project
 3. Creating a project via apply **requires** `environments.dev` in the document (bootstrap).
 4. Secret values in the document are a **400**; secret keys may be listed without values.
 5. Apply is **upsert** of declared fields; it does not prune undeclared processes or config keys.
-6. Apply does not push a release.
+6. Apply does not push a release. Live process/config tables and releases update on the user's later deploy (changeset push).
 7. File is not stored or reconciled by the worker.
+8. Export reads live tables only (no pending overlay). Apply creates only the selected environment.
 
-DOMAIN updates in this PR: phase 6 v1 description (already noted as next); CLI table row for `apply` / `export`; open question 5 marked shipped-as-designed for v1.
+DOMAIN updates in this PR: phase 6 v1; CLI `export`/`apply`; `/manifest` routes; Q5 = import **stages** declared state, live/release update on deploy, file is not reconciled.
 
 ---
 
