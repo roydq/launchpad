@@ -82,3 +82,5 @@ If severity is **P0** and the user pre-authorized “queue P0s from persona,” 
 | 2026-07-20 | adm-runtime | process set --target-ext CLI sugar | P3 | A | API map works via stage; CLI sugar later |
 | 2026-07-20 | adm-runtime | Man page generation (go generate) | P3 | C | Completions shipped; man optional |
 | 2026-07-20 | adm-runtime | Kind e2e for probes/resources/immutable secrets | P2 | B | Stub CI green; kind optional |
+| 2026-08-22 | adm-yaml | `process.set` rows make `GET /preview` FoldChanges 400 | P2 | A | Diff after apply is fine when only image/config staged; process.set still a preview hole |
+| 2026-08-22 | adm-yaml | `launchpad apply --project` retarget without editing yaml | P3 | A | e2e rewrites `project:`; no CLI flag in v1 |

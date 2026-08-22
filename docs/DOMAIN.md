@@ -709,6 +709,8 @@ DELETE /v1/projects/{project}/changeset/changes/last
 DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
 GET    /v1/projects/{project}/preview   # pending vs baseline; ?from_release=&to_release=
+GET    /v1/projects/{project}/manifest  # live export; query environment= filters; ignores env header
+POST   /v1/projects/{project}/manifest/apply  # stage only; does not deploy
 GET    /v1/jobs/{id}
 POST   /v1/tokens
 GET    /v1/audit
@@ -762,6 +764,7 @@ GET    /healthz
 | `launchpad process apply --procfile` | Import Procfile into staged process set |
 | `launchpad target capabilities` | Discover health + extension schema for ambient env’s target |
 | `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |
+| `launchpad export` / `launchpad apply` | `launchpad.yaml` v1: export live state; apply stages (never deploys; secrets as keys only) |
 
 ### Planned (deltas from shipped)
 
@@ -811,7 +814,7 @@ On `POST /v1/projects`:
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy — **parked** until a project needs a second independently versioned artifact ([queue disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md)) |
 | **4** | Planned | Bindings and ref resolution | Service linking — **parked** with phase 3 (not an independent program) |
 | **5** | **Shipped** (primary-service promote) | Promotion API + CLI | staging → production flow |
-| **6** | Planned (v1 next) | `launchpad.yaml` import/export of the **shipped** model | CI, agent, and tool integration — **does not wait on 3/4**; v1 is single primary service, no GitOps reconcile. MCP follows the yaml spec. |
+| **6** | **Shipped (v1)** | `launchpad.yaml` import/export of the **shipped** model | CI, agent, and tool integration — single primary service, no GitOps reconcile. MCP follows. |
 | **Runtime depth** | **Shipped** | Process commands + Procfile; portable health; immutable config materialization; target extensions + capabilities | Multi-process images, real deploy success, multi-backend power without domain pollution — [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
 Each phase updates API, store, worker, CLI, and target interface together.
@@ -824,7 +827,7 @@ Each phase updates API, store, worker, CLI, and target interface together.
 2. **Ephemeral environment TTL.** Default lifetime for `pr-*` environments? Recommendation: 7 days, configurable per project.
 3. **Atomic rollback depth.** On atomic ReleaseSet failure, rollback only services deployed in this set, or all project services in the environment? Recommendation: only services in the set.
 4. **Service discovery for platform refs.** Should `platform.*` include service mesh metadata? **Defer to target extensions** (runtime-target-depth slice 4).
-5. **`launchpad.yaml` authority.** Import sets desired state; runtime mutations via API/CLI. File is not continuously reconciled (not GitOps). Phase 6 **v1** (next QUEUE item) round-trips the shipped single-service model, including process commands / health / extensions. Multi-service fields wait on phase 3.
+5. **`launchpad.yaml` authority.** **Shipped (v1).** Import **stages** declared state (changeset); live tables and releases update on the user's later `deploy`. File is not continuously reconciled (not GitOps). GET `/manifest` ignores `X-Launchpad-Environment` (query `environment` only). Multi-service fields wait on phase 3.
 6. **Release status under multi-env.** Refine when multi-env status model needs it; deployments remain env-specific outcomes.
 7. **Rollback config policy.** Default above is re-resolve config + copy process topology/artifact; revisit if users need bit-identical config rollback.
 8. **Process command / health / config materialization / target extensions.** **Shipped** — see runtime-target-depth design and reading guide.

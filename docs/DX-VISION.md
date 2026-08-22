@@ -60,7 +60,7 @@ North star: **the mise of runtime application management** — zero ceremony for
 | **3** | Multi-service + ReleaseSet | Parked — do not half-build; start when a project needs a second independently versioned artifact |
 | **4** | Bindings | Parked with phase 3 (not independent) |
 | **5** | Promote | **Shipped** (primary service) |
-| **6** | `launchpad.yaml` | **Next (v1)** — shipped model only; MCP after spec |
+| **6** | `launchpad.yaml` | **Shipped (v1)** — current model; MCP next |
 
 Do not half-build deferred phases. Each gets a spec.
 
@@ -85,7 +85,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Process commands + Procfile | **Shipped** (ADM #45) — [runtime-target-depth](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 | Portable health / deploy readiness | **Shipped** (ADM #46) |
 | Target extensions (resources, annotations, …) | **Shipped** (ADM #48) |
-| `launchpad.yaml` v1 (current model) | **Next** — QUEUE `launchpad-yaml` (import/export; not GitOps; not multi-service) |
+| `launchpad.yaml` v1 (current model) | **Shipped** — QUEUE `launchpad-yaml` (`export`/`apply`; not GitOps; not multi-service) |
 | MCP server | **After yaml spec** — QUEUE `mcp-server` (thin OpenAPI/CLI tools) |
 
 ### Track B — Confidence (engineering)
@@ -200,7 +200,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
 5. Secrets S1+S2 — **shipped** (PRs #28, #29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
 6. ~~ADM remaining ready queue~~ (**Shipped** — recipes, shell-prompt, Track B, env-clone, runtime depth, polish)
-7. **Integrations (now):** `launchpad.yaml` v1 of the shipped model, then MCP over OpenAPI/CLI — [queue disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md)
+7. **Integrations:** `launchpad.yaml` v1 **shipped**; MCP over OpenAPI/CLI next — [queue disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md)
 8. Surfaces (docs site → TUI → dashboard) after the project file + MCP exist
 9. OIDC **parked** until a second human user or hosted control-plane spike; generic OIDC first
 10. **Multi-service + bindings parked** until a project needs a second independently versioned artifact
@@ -235,8 +235,8 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 
 | Work | Spec / queue |
 |------|----------------|
-| **Next** | QUEUE `launchpad-yaml` — **designing** on `feat/launchpad-yaml` — [spec](superpowers/specs/2026-08-22-launchpad-yaml-design.md) |
-| Then | QUEUE `mcp-server` — thin MCP tools after the yaml spec exists |
+| **This PR** | QUEUE `launchpad-yaml` on `feat/launchpad-yaml` — [spec](superpowers/specs/2026-08-22-launchpad-yaml-design.md) |
+| Then | QUEUE `mcp-server` — thin MCP tools over OpenAPI + apply |
 | Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
