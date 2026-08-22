@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft (ADM self-approve pending spec review) |
+| **Status** | Draft (revised after adm-spec-review fail; pending re-review) |
 | **Date** | 2026-08-22 |
 | **Domain spec** | `docs/DOMAIN.md` (phase 6 v1) |
 | **Scope** | Import/export of the **shipped** single-service model as `launchpad.yaml`; stage via existing changeset; no GitOps; no multi-service |
@@ -37,11 +37,11 @@ launchpad apply -f launchpad.yaml
 
 **Success criteria:**
 
-1. `launchpad export` writes a v1 document that round-trips the shipped model for the current project: processes (command, quantity, expose, health, target_extensions), each environment's target type + namespace/cluster, plain shared/service config, secret **keys** (no values), and last-deployed image per env (when any).
-2. `launchpad apply -f launchpad.yaml` creates the project if missing (**requires `environments.dev`**), creates missing environments, and **stages** process/config/image diffs for the **selected environment** only. It does **not** deploy, prune undeclared keys/processes, patch an existing env's target, or write secret values.
+1. `launchpad export` writes a v1 document of **live** control-plane state (not the open changeset): processes (command, quantity, expose, health, target_extensions), each environment's target type + namespace/cluster, plain shared/service config, secret **keys** (no values), and last-deployed image per env (omit image if that env has never had a release deploy).
+2. `launchpad apply -f launchpad.yaml` creates the project if missing (**requires `environments.dev`**), creates the **selected** environment if missing, and **stages** process/config/image diffs for the **selected environment** only. It does **not** deploy, prune undeclared keys/processes, patch an existing env's target, create non-selected envs, or write secret values.
 3. `GET /v1/projects/{project}/manifest` and `POST /v1/projects/{project}/manifest/apply` are the API; CLI is YAML over those endpoints.
-4. Applying a document that contains a secret **value**, `services:`, `bindings:`, or `version != 1` fails closed with problem+json.
-5. Re-export after apply (before deploy) matches the declared fields (round-trip). e2e-stub covers export → apply-to-new-project → diff → deploy --wait.
+4. Applying a document that contains a secret **value**, `services:`, `bindings:`, or `version != 1` fails closed with problem+json (`manifest_secret_value` / `manifest_deferred` / `manifest_version` as specified below).
+5. After apply, `launchpad diff` (pending vs live) is the checkable “did apply do something?” assertion — **not** re-export. After a subsequent `deploy`, export of live state matches the declared process/config/image/target fields that apply staged (modulo secret values still omitted). e2e-stub follows the recipe in Test strategy.
 6. OpenAPI lists the new routes; `make openapi-check` passes.
 
 ---
@@ -182,52 +182,84 @@ environments:
           - DATABASE_URL
 ```
 
+### Config value types (YAML and JSON)
+
+Config maps are `map[string]string` on the wire. CLI YAML decode:
+
+- string / number / bool scalars → stringify (`8080` and `"8080"` both become `"8080"`; `true` becomes `"true"`).
+- `null` → 400 `manifest_invalid` (unset is `launchpad config unset`, not apply).
+- sequence or mapping → 400 `manifest_invalid`, except a mapping with `secret: true` (with or without `value`) → 400 `manifest_secret_value`.
+- A string value containing `${{` → 400 `manifest_deferred` (bindings are not in v1).
+
+### Secret keys
+
+`config.secret_keys.{shared,service}` is a list of key **names**. Never values.
+
+**Empty placeholder** means: the live row exists, `sensitivity=secret`, and the stored value is the empty string (env-clone placeholder).
+
+| Live state for that key | `secret_keys` lists the name | Key also has a value in `config.shared`/`service` |
+|-------------------------|------------------------------|-----------------------------------------------------|
+| missing, or empty placeholder | add to `needs_value[]`; do not write a value | 400 `manifest_secret_value` |
+| secret with a value | no-op | 400 `manifest_secret_value` |
+| plain | warning `secret_key_is_plain`; do not change sensitivity or value | 400 `manifest_secret_value` |
+
+A **plain** yaml value for a key whose live sensitivity is `secret` → 400 `manifest_secret_value` (would overwrite/demote a secret from a file).
+
 ### Field rules
 
 | Field | Export | Apply |
 |-------|--------|-------|
 | `version` | always `1` | required; other values → 400 `manifest_version` |
-| `project` | project name | required; must match URL |
-| `processes` | all live processes | omitted → do not touch processes; each **declared** name is a full upsert (command, quantity, expose, health, extensions). Omitted `command` → empty (image default). Omitted `quantity` → `1`. Omitted `expose` → `http` if name is `web`, else `none`. Omitted health → no probe. Omitted extensions → empty map. |
-| `environments` | all envs, or one if `?environment=` | required; must contain the **selected** env |
-| `environments.*.target` | `target_type` | required when **creating** that env; if env exists and differs → **warning**, no mutation |
-| `namespace` / `cluster` | from `target_config` | used only on create |
-| `ephemeral` | live flag | used only on create |
-| `image` | artifact of latest meaningful release in that env (same rule as inspect); omit if never deployed | omitted → do not stage image; present and different from pending image or last release → stage `image` |
-| `config.shared` / `config.service` | plain keys with values; secret keys **absent** from these maps | upsert plain values when different from live; **reject** if a listed value's live sensitivity is `secret` |
-| `config.secret_keys` | names of secret keys per layer | do not write values; if live key missing or empty placeholder → add name to `needs_value[]`; if live secret already set → no-op |
+| `project` | project name | required; must match URL `{project}` |
+| `processes` | all **live** processes | omitted → do not touch processes; each **declared** name is a full upsert (command, quantity, expose, health, extensions). Omitted `command` → empty (image default). Omitted `quantity` → `1`. Omitted `expose` → `http` if name is `web`, else `none`. Omitted health → no probe. Omitted extensions → empty map. |
+| `environments` | all live envs, or exactly one if `?environment=` is set | required; must contain the **selected** env. Extra env blocks are **ignored** on apply (not created). |
+| `environments.*.target` | `target_type` | required when **creating the selected env**; if selected env exists and differs → warning `target_mismatch`, no mutation |
+| `namespace` / `cluster` | from `target_config` | used only when creating the selected env |
+| `ephemeral` | live flag | used only when creating the selected env |
+| `image` | artifact of latest meaningful release in that env (same rule as inspect); **omit** if never deployed | omitted → do not stage image; present and different from pending image or last release → stage `image` |
+| `config.shared` / `config.service` | plain keys with string values; secret keys **absent** from these maps | upsert plain values when different from live (see types + secret rules) |
+| `config.secret_keys` | names of secret keys per layer (including empty placeholders) | see Secret keys; never write values |
+| `config.workspace` | never | 400 `manifest_deferred` |
 
 ### Fail closed (400)
 
-- Unknown **top-level** keys (`services`, `bindings`, `kind`, …).
-- `version` ≠ 1.
+Precedence for top-level keys:
+
+1. `services` or `bindings` → `manifest_deferred` (not `manifest_invalid`).
+2. `primary_service` or `service` not equal to `project` → `manifest_deferred`.
+3. Any other unknown top-level key (`kind`, …) → `manifest_invalid`.
+4. `version` ≠ 1 → `manifest_version`.
+
+Also 400:
+
 - Invalid project / env / process names (existing DNS-label rules).
-- Secret **value** anywhere: a key listed under `config.shared`/`service` **and** `secret_keys` for that layer; or a non-string config value object with `secret: true` and a value (not supported — use `secret_keys` only).
-- `primary_service` or `service` field not equal to `project` (multi-service leak).
-- Selected apply environment missing from `environments`.
-- Create-project path without `environments.dev`.
-- Empty document / missing `project`.
+- Secret **value** in the document (see Secret keys) → `manifest_secret_value`.
+- Selected apply environment missing from `environments` → `manifest_env`.
+- Create-project path without `environments.dev` → `manifest_env`.
+- Empty document / missing `project` → `manifest_invalid`.
 
 ### Selected environment (apply)
 
 1. Request `environment` field if set, else `X-Launchpad-Environment`, else `dev`.
 2. That name must exist in `document.environments`.
-3. Process upserts are **service-scoped** (they affect the next deploy in every env). Config and image apply only to the selected env. Document this in CLI help.
+3. **Create** only that selected env if it is missing. Do not create other keys under `environments`.
+4. Process upserts are **service-scoped** (they affect the next deploy in every env). Config and image apply only to the selected env. Document this in CLI help.
 
 ### Create vs update
 
 | Situation | Behavior |
 |-----------|----------|
 | Project missing | `CreateProject` using `environments.dev` target/namespace/cluster; then continue apply |
-| Env missing | `CreateEnvironment` from that env's target block |
-| Env exists, target differs | warning `target_mismatch`; continue |
+| **Selected** env missing | `CreateEnvironment` from that env's target block; `created_environment=true` |
+| Non-selected env missing | ignore (do not create); `created_environment` is only about the selected env |
+| Selected env exists, target differs | warning `target_mismatch`; continue; `created_environment=false` |
 | Declared process vs live | `process.set` when any portable field differs |
 | Live process not in file | warning `undeclared_process`; **do not** unset |
 | Plain config differs | `config` change with `layer` |
 | Live config key not in file | ignore (no prune) |
-| Nothing to stage | `staged: []`, changeset unchanged/empty; still 200 |
+| Nothing to stage | do **not** call `StageChanges`; HTTP 200; `staged: []`; `changeset` is the existing open changeset `{id, change_count}` or `null` if none |
 
-Apply never calls push.
+Apply never calls push. Live process/config rows and releases change only on a later user `deploy` (changeset push), matching DOMAIN.
 
 ---
 
@@ -235,10 +267,10 @@ Apply never calls push.
 
 | Method | Path | Scope | Purpose |
 |--------|------|-------|---------|
-| `GET` | `/v1/projects/{project}/manifest` | `project:read` | Export live document. Query `environment` optional (filters `environments` map). |
+| `GET` | `/v1/projects/{project}/manifest` | `project:read` | Export **live** document. Query `environment` optional (filters `environments` map). **Does not** use `X-Launchpad-Environment` (whole-project export is the default). |
 | `POST` | `/v1/projects/{project}/manifest/apply` | `project:write` | Create-if-missing + stage. Body below. Ambient env header unless overridden. |
 
-`GET` 404 if project does not exist.
+`GET` 404 if the project does not exist. `GET ?environment=NAME` 404 if that environment does not exist (same as `GET …/environments/{name}`).
 
 ### POST body
 
@@ -270,20 +302,22 @@ Apply never calls push.
 }
 ```
 
-`changeset` is null when nothing was staged.
+`changeset` is the **open** changeset after this request: `{id, change_count}` if one exists (including a pre-existing pin we did not add to), or `null` if there is no open changeset. A no-op apply that added no rows does not create an empty changeset.
+
+`created_environment` is true only when this request created the **selected** env.
 
 ### Errors (problem+json)
 
 | HTTP | code | When |
 |------|------|------|
 | 400 | `manifest_version` | version ≠ 1 |
-| 400 | `manifest_invalid` | schema / unknown keys / name rules |
-| 400 | `manifest_secret_value` | secret value in document |
-| 400 | `manifest_deferred` | `services` / bindings / non-primary service |
+| 400 | `manifest_invalid` | schema / unknown keys (except deferred keys) / name rules / bad config types |
+| 400 | `manifest_secret_value` | secret value in document, dual-list key, or plain value over a live secret |
+| 400 | `manifest_deferred` | top-level `services` / `bindings`; non-primary `service`; `config.workspace`; `${{` in a config value |
 | 400 | `manifest_env` | selected env not in document; or create without `dev` |
 | 400 | `manifest_project_mismatch` | URL name ≠ `document.project` |
 | 409 | `changeset_env_mismatch` | existing open changeset pinned to another env (reuse existing hint) |
-| 404 | `not_found` | GET missing project |
+| 404 | `not_found` | GET missing project, or GET `?environment=` for an env that does not exist |
 
 Hints: secret value → remove values, list keys under `secret_keys`; deferred → single primary service only; env → `launchpad env list` / add the env block.
 
@@ -328,26 +362,35 @@ Default file: **cwd only** (no walk-up).
 `ManifestService` (new) depends on `ProjectService`, `ConfigService`, `ChangesetService`, `ReleaseService`, store.
 
 - `Export(ctx, project, envFilter string) (*domain.Manifest, error)`
-  - List processes → manifest processes (including health + extensions).
-  - List environments (or one) → target, namespace, cluster, ephemeral.
-  - Typed config per env, per layer: plains into maps; secrets into `secret_keys`.
-  - Image: latest meaningful release for that env (running deploy, else any deploy in env) — same as inspect.
+  - List **live** processes → manifest processes (including health + extensions). Does **not** overlay the open changeset.
+  - List environments (or one; 404 if filter unknown) → target, namespace, cluster, ephemeral.
+  - Typed config per env, per layer: plains into maps; secrets (including empty placeholders) into `secret_keys`.
+  - Image: latest meaningful release for that env (running deploy, else any deploy in env) — same as inspect; omit if none.
 - `Apply(ctx, projectName, selectedEnv string, doc domain.Manifest) (*ApplyReport, error)`
   - `ValidateManifest(doc)` first.
-  - Create project / env as specified.
-  - Diff and `StageChanges` in one call (one pin).
+  - Create project if missing (requires `environments.dev`); create **selected** env if missing.
+  - Diff live (+ pending image on the open changeset if any) vs declared.
+  - If the diff is empty: return 200 with `staged: []` and **do not** call `StageChanges`.
+  - If the diff is non-empty: `StageChanges` once (one pin).
 
-Do **not** bypass changeset staging (no direct store writes for process/config/image except CreateProject / CreateEnvironment).
+Do **not** bypass changeset staging (no direct store writes for process/config/image except CreateProject / CreateEnvironment). Do **not** push.
 
 ---
 
 ## Test strategy
 
-- **Unit (domain):** validate version, unknown keys, secret value, deferred keys, process defaults, name rules.
-- **Unit (service):** in-memory store — export shape (redacted secrets); apply creates project; apply stages process/config/image diffs; apply no-op when in sync; apply rejects secret values; apply does not prune extra process; apply missing env creates it; apply without `dev` cannot create project; changeset pin conflict.
-- **API:** OpenAPI contract includes the two routes; handler tests optional if service tests cover apply/export (prefer 1–2 httptest cases if cheap; otherwise service + e2e is enough).
-- **CLI:** parse `-f` / `--stdout` / default filename; YAML marshal round-trip of a fixture (no API).
-- **e2e-stub:** CLI export after `launchpad new` + config/process; apply `-f` into a **new** project name; `diff` non-empty; `deploy --wait` succeeds; secret key listed without value in file → `needs_value` and no plaintext in the yaml file.
+- **Unit (domain):** validate version, unknown keys vs deferred keys (`services` → deferred), secret value, process defaults, name rules, `${{` in config, YAML-equivalent stringify is CLI-side (domain sees strings).
+- **Unit (service):** in-memory store — export omits secret values and uses `secret_keys`; apply creates project; apply stages process/config/image diffs; apply no-op when in sync does not 400; apply rejects secret values; apply does not prune extra process; apply creates **selected** missing env only; apply without `dev` cannot create project; pin conflict; GET-equivalent export 404 via service when env filter unknown.
+- **API:** OpenAPI contract includes the two routes.
+- **CLI:** parse `-f` / `--stdout` / default filename; YAML scalar stringify (`PORT: 8080`); refuse overwrite without `--force`; unknown-key rejection.
+- **e2e-stub (checkable recipe):**
+  1. `launchpad new web-stub src && launchpad deploy --wait` (source now has a last-deployed image).
+  2. `launchpad export -f /tmp/m.yaml` (file must contain `image:` and must not contain secret plaintext).
+  3. Rewrite `project:` in the yaml to a new name `dst` (tests are allowed to edit the fixture; no CLI retarget flag).
+  4. `launchpad apply -f /tmp/m.yaml` against `dst` → `created_project=true`, `staged` includes `image`, `diff` non-empty, **no** deploy job created by apply.
+  5. `launchpad deploy --wait` on `dst` succeeds.
+  6. Export of `dst` after deploy matches src's declared live processes, plain config, image, and target (secret values still omitted).
+  7. **Separate** case (no deploy): apply a yaml that lists `secret_keys.service: [DATABASE_URL]` with no value → `needs_value` contains `DATABASE_URL`; file and CLI output contain no secret material.
 
 ---
 
@@ -355,7 +398,7 @@ Do **not** bypass changeset staging (no direct store writes for process/config/i
 
 | Doc | Change |
 |-----|--------|
-| `docs/DOMAIN.md` | Phase 6 v1 shipped-as-this-PR; CLI table; open question 5 |
+| `docs/DOMAIN.md` | Phase 6 v1; CLI `export`/`apply`; shipped `/manifest` paths; Q5: import **stages** declared state; live/release update on deploy; file is not reconciled |
 | `docs/openapi.yaml` | Two routes + Manifest / ApplyReport schemas |
 | `docs/DX-VISION.md` | Active/next; Track A yaml status |
 | `docs/DESIGN.md` | Phase 6 next → this PR |
@@ -389,9 +432,15 @@ Do **not** bypass changeset staging (no direct store writes for process/config/i
 
 ## Open questions
 
-None blocking. Resolved in this spec:
+None blocking. Resolved in this spec (including adm-spec-review 2026-08-22):
 
+- Export is **live tables**, not a pending overlay. Round-trip of declared fields is after **deploy**, not after apply. After apply, `diff` is the assertion.
 - Apply does not prune, deploy, or patch existing env targets.
-- Secret values never in the file; keys only.
+- Apply creates only the **selected** env; extra env blocks are ignored.
+- Secret values never in the file; keys only; empty placeholder = secret + empty live value.
 - Creating a project via apply requires `environments.dev`.
 - Processes are service-scoped; config/image are env-scoped.
+- GET `/manifest` ignores the env header; `?environment=` 404s if missing.
+- No-op apply skips `StageChanges`.
+- `services`/`bindings` → `manifest_deferred`.
+- YAML config scalars stringify; maps/lists invalid.

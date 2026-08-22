@@ -39,7 +39,7 @@
 - [ ] `ManifestService` with store + Project/Config/Changeset/Release services
 - [ ] `Export(ctx, project, envFilter) (*domain.Manifest, error)`
 - [ ] `Apply(ctx, projectName, selectedEnv, doc) (*ApplyReport, error)` per spec (create project/env, warnings, stage diffs, no prune, no push)
-- [ ] Tests with in-memory store + secrets box: export redacts secrets to `secret_keys`; apply new project; no-op; extra process warning; secret value rejected; create without `dev` rejected; pin conflict
+- [ ] Tests with in-memory store + secrets box: export redacts secrets to `secret_keys`; apply new project; stages process/config/image diffs; no-op does not 400; extra process warning (no prune); secret value rejected; creates **selected** missing env only; create without `dev` rejected; pin conflict
 - [ ] Verify: `mise exec -- go test ./internal/service/... ./internal/domain/...`
 - [ ] Commit: `feat(service): export and apply launchpad.yaml manifests`
 
@@ -73,8 +73,8 @@
 **Files:**
 - Create: `test/e2e/manifest_yaml_test.go`
 
-- [ ] CLI export after recipe/new-style setup (or create + stage); yaml has no secret plaintext
-- [ ] Apply `-f` into a new project name; deploy `--wait` succeeds
+- [ ] Follow spec e2e recipe: deploy source first so export includes `image:`; rewrite `project:` to dest; apply; assert no job from apply; dest `diff` non-empty; dest `deploy --wait` succeeds
+- [ ] Separate: `secret_keys` → `needs_value`; yaml has no secret plaintext (no deploy in this case)
 - [ ] Verify with full e2e at Task 6 (this task adds the test file; `mise exec -- go test -count=1 ./internal/... ./pkg/...` still green)
 - [ ] Commit: `test(e2e): launchpad.yaml export and apply on stub`
 
