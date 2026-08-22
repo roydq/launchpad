@@ -12,7 +12,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | launchpad-yaml | `launchpad.yaml` v1 (current model) | A / domain-6 | implementing | Spec: `docs/superpowers/specs/2026-08-22-launchpad-yaml-design.md` (Approved self-approve — ADM). DoD: spec + apply/export + e2e-stub; secrets never in the file; not GitOps. | `feat/launchpad-yaml` |
+| 1 | launchpad-yaml | `launchpad.yaml` v1 (current model) | A / domain-6 | pr-open | Spec: `docs/superpowers/specs/2026-08-22-launchpad-yaml-design.md` (Approved self-approve — ADM). DoD: spec + apply/export + e2e-stub; secrets never in the file; not GitOps. | [PR #59](https://github.com/roydq/launchpad/pull/59) |
 | 2 | mcp-server | Launchpad MCP server | A/C | ready | **After yaml spec exists** (same integrations program). Thin tools over existing OpenAPI/CLI; token auth; no new domain entities. Prefer an `apply` manifest tool once yaml v1 is specified. DoD: spec with tool list + auth story; no DOMAIN fork. | — |
 
 ## Parked (not ADM-ready)
