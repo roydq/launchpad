@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft (revised after adm-spec-review fail; pending re-review) |
+| **Status** | Approved (self-approve — ADM) |
 | **Date** | 2026-08-22 |
 | **Domain spec** | `docs/DOMAIN.md` (phase 6 v1) |
 | **Scope** | Import/export of the **shipped** single-service model as `launchpad.yaml`; stage via existing changeset; no GitOps; no multi-service |
@@ -38,10 +38,10 @@ launchpad apply -f launchpad.yaml
 **Success criteria:**
 
 1. `launchpad export` writes a v1 document of **live** control-plane state (not the open changeset): processes (command, quantity, expose, health, target_extensions), each environment's target type + namespace/cluster, plain shared/service config, secret **keys** (no values), and last-deployed image per env (omit image if that env has never had a release deploy).
-2. `launchpad apply -f launchpad.yaml` creates the project if missing (**requires `environments.dev`**), creates the **selected** environment if missing, and **stages** process/config/image diffs for the **selected environment** only. It does **not** deploy, prune undeclared keys/processes, patch an existing env's target, create non-selected envs, or write secret values.
+2. `launchpad apply -f launchpad.yaml` creates the project if missing (**requires `environments.dev`**), creates the **selected** environment if missing, **upserts processes** (service-scoped — they affect every env's next deploy), and stages **config/image for the selected env only**. It does **not** deploy, prune undeclared keys/processes, patch an existing env's target, create non-selected envs, or write secret values.
 3. `GET /v1/projects/{project}/manifest` and `POST /v1/projects/{project}/manifest/apply` are the API; CLI is YAML over those endpoints.
 4. Applying a document that contains a secret **value**, `services:`, `bindings:`, or `version != 1` fails closed with problem+json (`manifest_secret_value` / `manifest_deferred` / `manifest_version` as specified below).
-5. After apply, `launchpad diff` (pending vs live) is the checkable “did apply do something?” assertion — **not** re-export. After a subsequent `deploy`, export of live state matches the declared process/config/image/target fields that apply staged (modulo secret values still omitted). e2e-stub follows the recipe in Test strategy.
+5. After apply, `launchpad diff` (pending vs last release — the shipped CLI baseline) is the checkable “did apply do something?” assertion — **not** re-export. After a subsequent `deploy`, export of live state matches the declared process/config/image/target fields that apply staged (modulo secret values still omitted). e2e-stub follows the recipe in Test strategy.
 6. OpenAPI lists the new routes; `make openapi-check` passes.
 
 ---
@@ -250,7 +250,7 @@ Also 400:
 
 | Situation | Behavior |
 |-----------|----------|
-| Project missing | `CreateProject` using `environments.dev` target/namespace/cluster; then continue apply |
+| Project missing | `CreateProject` using `environments.dev` target/namespace/cluster (`ephemeral` is ignored on bootstrap `dev`; warning `ephemeral_ignored_on_bootstrap` if set). Then continue apply. |
 | **Selected** env missing | `CreateEnvironment` from that env's target block; `created_environment=true` |
 | Non-selected env missing | ignore (do not create); `created_environment` is only about the selected env |
 | Selected env exists, target differs | warning `target_mismatch`; continue; `created_environment=false` |
@@ -370,7 +370,7 @@ Default file: **cwd only** (no walk-up).
 - `Apply(ctx, projectName, selectedEnv string, doc domain.Manifest) (*ApplyReport, error)`
   - `ValidateManifest(doc)` first.
   - Create project if missing (requires `environments.dev`); create **selected** env if missing.
-  - Diff live (+ pending image on the open changeset if any) vs declared.
+  - Diff declared vs **effective next** (live tables overlaid with the open changeset if it is pinned to the selected env): processes, config, and image use that same basis.
   - If the diff is empty: return 200 with `staged: []` and **do not** call `StageChanges`.
   - If the diff is non-empty: `StageChanges` once (one pin).
 
@@ -381,7 +381,7 @@ Do **not** bypass changeset staging (no direct store writes for process/config/i
 ## Test strategy
 
 - **Unit (domain):** validate version, unknown keys vs deferred keys (`services` → deferred), secret value, process defaults, name rules, `${{` in config, YAML-equivalent stringify is CLI-side (domain sees strings).
-- **Unit (service):** in-memory store — export omits secret values and uses `secret_keys`; apply creates project; apply stages process/config/image diffs; apply no-op when in sync does not 400; apply rejects secret values; apply does not prune extra process; apply creates **selected** missing env only; apply without `dev` cannot create project; pin conflict; GET-equivalent export 404 via service when env filter unknown.
+- **Unit (service):** in-memory store — export omits secret values and uses `secret_keys`; export after staging (before push) still matches **live** not pending; apply creates project; apply stages process/config/image diffs; apply no-op when in sync does not 400; apply rejects secret values; apply does not prune extra process; apply creates **selected** missing env only; apply without `dev` cannot create project; pin conflict; env filter unknown → not found. Error strings include phrases that map to `manifest_*` problem codes.
 - **API:** OpenAPI contract includes the two routes.
 - **CLI:** parse `-f` / `--stdout` / default filename; YAML scalar stringify (`PORT: 8080`); refuse overwrite without `--force`; unknown-key rejection.
 - **e2e-stub (checkable recipe):**
@@ -399,7 +399,7 @@ Do **not** bypass changeset staging (no direct store writes for process/config/i
 
 | Doc | Change |
 |-----|--------|
-| `docs/DOMAIN.md` | Phase 6 v1; CLI `export`/`apply`; shipped `/manifest` paths; Q5: import **stages** declared state; live/release update on deploy; file is not reconciled |
+| `docs/DOMAIN.md` | Phase 6 v1; CLI `export`/`apply`; shipped `/manifest` paths; Q5: import **stages** declared state; live/release update on deploy; file is not reconciled. Note: GET `/manifest` ignores `X-Launchpad-Environment` (query `environment` only). |
 | `docs/openapi.yaml` | Two routes + Manifest / ApplyReport schemas |
 | `docs/DX-VISION.md` | Active/next; Track A yaml status |
 | `docs/DESIGN.md` | Phase 6 next → this PR |
@@ -427,7 +427,7 @@ Do **not** bypass changeset staging (no direct store writes for process/config/i
 | 7. Test strategy | Unit + e2e-stub |
 | 8. DoD / acceptance | Success criteria 1–6 |
 
-**Status:** Draft until `adm-spec-review` passes; then `Approved (self-approve — ADM)`.
+**Status:** Approved (self-approve — ADM) after `adm-spec-review-2` pass=true (warnings folded in as implementer rules).
 
 ---
 

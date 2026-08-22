@@ -1,6 +1,6 @@
 # launchpad.yaml v1 Implementation Plan
 
-> **Status: Not Started** — branch `feat/launchpad-yaml`
+> **Status: In Progress** — branch `feat/launchpad-yaml`
 
 > **For agentic workers:** Read `docs/FEATURE-DEVELOPMENT.md` and `docs/superpowers/specs/2026-08-22-launchpad-yaml-design.md`. Use `/launchpad-dev` for verification (`mise exec --`). Commit after each task with the message specified below. Worktree: `.worktrees/feat-launchpad-yaml`. Do not edit other agents' branches or `main`.
 
