@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/pkg/apiclient"
 	"github.com/spf13/cobra"
 )
@@ -950,6 +951,108 @@ func NewRoot(cfg Config) *cobra.Command {
 	})
 	root.AddCommand(targetCmd)
 
+	exportCmd := &cobra.Command{
+		Use:   "export",
+		Short: "Write live project state to launchpad.yaml",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, err := requireProject(cfg)
+			if err != nil {
+				return err
+			}
+			envFilter, _ := cmd.Flags().GetString("env")
+			stdout, _ := cmd.Flags().GetBool("stdout")
+			force, _ := cmd.Flags().GetBool("force")
+			outPath, _ := cmd.Flags().GetString("file")
+			docMap, err := client.GetManifest(cmd.Context(), project, envFilter)
+			if err != nil {
+				return err
+			}
+			b, err := json.Marshal(docMap)
+			if err != nil {
+				return err
+			}
+			var doc domain.Manifest
+			if err := json.Unmarshal(b, &doc); err != nil {
+				return err
+			}
+			yamlBytes, err := encodeManifestYAML(&doc)
+			if err != nil {
+				return err
+			}
+			if stdout || outPath == "-" {
+				fmt.Print(string(yamlBytes))
+				return nil
+			}
+			if outPath == "" {
+				outPath = "launchpad.yaml"
+			}
+			if _, err := os.Stat(outPath); err == nil && !force {
+				return fmt.Errorf("%s exists (use --force to overwrite)", outPath)
+			}
+			if err := os.WriteFile(outPath, yamlBytes, 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("wrote %s\n", outPath)
+			return nil
+		},
+	}
+	exportCmd.Flags().StringP("file", "f", "", "output path (default launchpad.yaml; - for stdout)")
+	exportCmd.Flags().String("env", "", "export only this environment")
+	exportCmd.Flags().Bool("stdout", false, "print YAML to stdout")
+	exportCmd.Flags().Bool("force", false, "overwrite existing file")
+	root.AddCommand(exportCmd)
+
+	applyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Apply launchpad.yaml (creates project/env if needed; stages, does not deploy)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, _ := cmd.Flags().GetString("file")
+			if path == "" {
+				cwd, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				p, err := defaultApplyPath(cwd)
+				if err != nil {
+					return fmt.Errorf("launchpad.yaml not found (use -f)")
+				}
+				path = p
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			doc, err := decodeManifestYAML(data)
+			if err != nil {
+				return err
+			}
+			envName, _ := cmd.Flags().GetString("env")
+			if envName != "" {
+				client.Environment = envName
+			} else {
+				envName = effectiveEnv(cfg)
+			}
+			use, _ := cmd.Flags().GetBool("use")
+			rep, err := client.ApplyManifest(cmd.Context(), doc.Project, envName, doc)
+			if err != nil {
+				return err
+			}
+			if rep.CreatedProject || use {
+				_ = saveActiveContext(doc.Project, envName)
+				cwd, _ := os.Getwd()
+				if cwd != "" {
+					_ = saveProjectLocalConfig(cwd, localConfig{Project: doc.Project})
+				}
+				fmt.Printf("context: %s @ %s\n", doc.Project, envName)
+			}
+			printApplyReport(rep)
+			return nil
+		},
+	}
+	applyCmd.Flags().StringP("file", "f", "", "manifest path (default ./launchpad.yaml)")
+	applyCmd.Flags().String("env", "", "selected environment (default ambient)")
+	applyCmd.Flags().Bool("use", false, "write project context even if the project already existed")
+	root.AddCommand(applyCmd)
 
 	root.AddCommand(&cobra.Command{
 		Use:   "completion [bash|zsh|fish|powershell]",
