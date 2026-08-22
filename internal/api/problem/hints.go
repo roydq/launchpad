@@ -76,6 +76,30 @@ func matchSpecificPhrases(detail string) (code string, hints []Hint) {
 		return "config_layer_invalid", []Hint{
 			{Action: "use_layer", Message: "Use layer shared, service, or resolved.", Command: "launchpad config get --layer shared"},
 		}
+	case strings.Contains(d, "unsupported manifest version"):
+		return "manifest_version", []Hint{
+			{Action: "set_version", Message: "launchpad.yaml v1 uses version: 1.", Command: "launchpad export"},
+		}
+	case strings.Contains(d, "manifest must not contain a secret value"):
+		return "manifest_secret_value", []Hint{
+			{Action: "secret_keys", Message: "List secret names under config.secret_keys; never put values in the file.", Command: "launchpad config set --secret KEY=value"},
+		}
+	case strings.Contains(d, "manifest field is deferred"):
+		return "manifest_deferred", []Hint{
+			{Action: "single_service", Message: "v1 manifests describe one primary service; multi-service and bindings are deferred.", Command: "launchpad inspect"},
+		}
+	case strings.Contains(d, "selected environment") && strings.Contains(d, "manifest"):
+		return "manifest_env", []Hint{
+			{Action: "add_env", Message: "The selected environment must exist in the document.", Command: "launchpad env list"},
+		}
+	case strings.Contains(d, "creating a project requires environments.dev"):
+		return "manifest_env", []Hint{
+			{Action: "add_dev", Message: "Creating a project via apply requires environments.dev (bootstrap).", Command: "launchpad apply -f launchpad.yaml --env dev"},
+		}
+	case strings.Contains(d, "project name does not match"):
+		return "manifest_project_mismatch", []Hint{
+			{Action: "rename", Message: "document.project must equal the URL project name.", Command: "launchpad apply -f launchpad.yaml"},
+		}
 	default:
 		return "", nil
 	}

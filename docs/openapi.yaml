@@ -465,6 +465,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Preview"
+  /v1/projects/{project}/manifest:
+    get:
+      tags: [projects]
+      summary: Export live project manifest (launchpad.yaml v1 as JSON)
+      description: |
+        Returns live control-plane state, not the open changeset.
+        Does not use X-Launchpad-Environment; filter with query `environment`.
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - name: environment
+          in: query
+          schema: { type: string }
+          description: If set, environments map contains only this env (404 if missing)
+      responses:
+        "200":
+          description: Manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Manifest"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/projects/{project}/manifest/apply:
+    post:
+      tags: [projects]
+      summary: Apply a v1 manifest (create-if-missing, stage only)
+      parameters:
+        - $ref: "#/components/parameters/ProjectName"
+        - $ref: "#/components/parameters/Environment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document]
+              properties:
+                document:
+                  $ref: "#/components/schemas/Manifest"
+                environment:
+                  type: string
+                  description: Selected env; default is X-Launchpad-Environment or dev
+      responses:
+        "200":
+          description: Apply report (never deploys)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyReport"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     bearerAuth:
@@ -544,6 +599,43 @@ components:
           properties:
             type: { type: string }
             namespace: { type: string }
+    Manifest:
+      type: object
+      required: [version, project]
+      properties:
+        version: { type: integer, enum: [1] }
+        project: { type: string }
+        processes:
+          type: object
+          additionalProperties: true
+        environments:
+          type: object
+          additionalProperties: true
+    ApplyReport:
+      type: object
+      properties:
+        project: { type: string }
+        environment: { type: string }
+        created_project: { type: boolean }
+        created_environment: { type: boolean }
+        staged:
+          type: array
+          items: { type: string }
+        unchanged:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        needs_value:
+          type: array
+          items: { type: string }
+        changeset:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            change_count: { type: integer }
     CreateRelease:
       type: object
       properties:

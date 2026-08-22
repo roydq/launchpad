@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/launchpad/launchpad/internal/api/problem"
 	"github.com/launchpad/launchpad/internal/auth"
+	"github.com/launchpad/launchpad/internal/domain"
 	"github.com/launchpad/launchpad/internal/service"
 	"github.com/launchpad/launchpad/internal/store"
 	"github.com/launchpad/launchpad/pkg/launchpad"
@@ -22,6 +23,7 @@ type Server struct {
 	config     *service.ConfigService
 	releases   *service.ReleaseService
 	changesets *service.ChangesetService
+	manifests  *service.ManifestService
 	runtime    *service.RuntimeService
 	tokens     *auth.Service
 	jobs       *store.Store
@@ -32,6 +34,7 @@ func NewServer(
 	config *service.ConfigService,
 	releases *service.ReleaseService,
 	changesets *service.ChangesetService,
+	manifests *service.ManifestService,
 	runtime *service.RuntimeService,
 	tokens *auth.Service,
 	jobs *store.Store,
@@ -41,6 +44,7 @@ func NewServer(
 		config:     config,
 		releases:   releases,
 		changesets: changesets,
+		manifests:  manifests,
 		runtime:    runtime,
 		tokens:     tokens,
 		jobs:       jobs,
@@ -88,6 +92,9 @@ func (s *Server) Routes() chi.Router {
 		r.With(auth.RequireScope("project:write")).Delete("/projects/{project}/changeset", s.discardChangeset)
 		r.With(auth.RequireScope("deploy")).Post("/projects/{project}/changeset/push", s.pushChangeset)
 		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/preview", s.preview)
+
+		r.With(auth.RequireScope("project:read")).Get("/projects/{project}/manifest", s.getManifest)
+		r.With(auth.RequireScope("project:write")).Post("/projects/{project}/manifest/apply", s.applyManifest)
 	})
 	return r
 }
@@ -518,6 +525,56 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		out["principal_kind"] = string(principal.Kind)
 	}
 	writeJSON(w, http.StatusCreated, out)
+}
+
+func (s *Server) getManifest(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	filter := r.URL.Query().Get("environment")
+	doc, err := s.manifests.Export(r.Context(), project, filter)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
+func (s *Server) applyManifest(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	var raw map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		problem.BadRequest(w, "invalid json")
+		return
+	}
+	docRaw, _ := raw["document"].(map[string]any)
+	if docRaw == nil {
+		problem.BadRequest(w, "document is required")
+		return
+	}
+	if err := domain.ValidateManifestMap(docRaw); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	domain.StringifyConfigMaps(docRaw)
+	b, err := json.Marshal(docRaw)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var doc domain.Manifest
+	if err := json.Unmarshal(b, &doc); err != nil {
+		problem.BadRequest(w, "invalid document")
+		return
+	}
+	env := environmentFromRequest(r)
+	if e, ok := raw["environment"].(string); ok && e != "" {
+		env = e
+	}
+	report, err := s.manifests.Apply(r.Context(), project, env, doc)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
