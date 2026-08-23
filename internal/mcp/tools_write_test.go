@@ -202,6 +202,10 @@ func TestDeployWaitOmitDefaultTrue(t *testing.T) {
 	if wait["status"] != "succeeded" {
 		t.Fatalf("wait %v", out)
 	}
+	job, _ := out["job"].(map[string]any)
+	if job["id"] != "j1" || job["status"] != "succeeded" {
+		t.Fatalf("final job %v", out["job"])
+	}
 	if jobGets.Load() < 2 {
 		t.Fatalf("expected poll, gets=%d", jobGets.Load())
 	}
@@ -348,6 +352,10 @@ func TestSecretConfigNotEchoedInChangesetTools(t *testing.T) {
 		}},
 	}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/config") {
+			_ = json.NewEncoder(w).Encode(map[string]string{"PORT": "8080"})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(secretCS)
 	}))
 	t.Cleanup(ts.Close)
