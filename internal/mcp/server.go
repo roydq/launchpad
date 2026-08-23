@@ -18,9 +18,10 @@ func NewServer(cfg Config) *mcpsdk.Server {
 	r := &runtime{cfg: cfg}
 	s := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "launchpad", Version: "v0.1.0"}, &mcpsdk.ServerOptions{
 		Instructions: instructions,
-		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
 	r.registerReadTools(s)
+	r.registerWriteTools(s)
 	return s
 }
 
@@ -40,8 +41,4 @@ func (r *runtime) registerReadTools(s *mcpsdk.Server) {
 	mcpsdk.AddTool(s, &mcpsdk.Tool{Name: "get_logs", Description: "Get process logs (default web)"}, r.getLogs)
 	mcpsdk.AddTool(s, &mcpsdk.Tool{Name: "inspect", Description: "Snapshot project, pending count, last deploy, processes"}, r.inspect)
 	mcpsdk.AddTool(s, &mcpsdk.Tool{Name: "target_capabilities", Description: "Target health and extension schema"}, r.targetCapabilities)
-}
-
-func (r *runtime) registerWriteTools(s *mcpsdk.Server) {
-	// Registered in tools_write.go; stubbed until that file exists.
 }
