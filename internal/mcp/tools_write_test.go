@@ -218,6 +218,32 @@ func TestDeployWaitFalseSkipsPoll(t *testing.T) {
 	}
 }
 
+func TestDeployWaitGetJobErrorIncludesJobID(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/changeset/push"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deployment": map[string]any{"id": "d1", "status": "pending", "release": map[string]any{"version": 1}},
+				"job":        map[string]any{"id": "j1", "type": "deploy", "status": "pending"},
+			})
+		case strings.Contains(r.URL.Path, "/changeset"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "cs", "changes": []any{map[string]any{"id": "1"}}})
+		case r.URL.Path == "/v1/jobs/j1":
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"title": "error", "code": "internal"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	res := callTool(t, cs, "deploy", map[string]any{"image": "img:v1"})
+	text := toolErrorText(t, res)
+	if !strings.Contains(text, "j1") {
+		t.Fatalf("wait error missing job_id: %s", text)
+	}
+}
+
 func TestDeployJobFailed(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

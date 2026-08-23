@@ -114,8 +114,8 @@ func TestMCPApplyDeployInspect(t *testing.T) {
 
 	prev := mcpCall(t, cs, "preview", map[string]any{"project": name})
 	prevOut := mcpJSON(t, prev)
-	if prevOut["summary"] == nil && prevOut["diff"] == nil {
-		t.Fatalf("preview empty: %v", prevOut)
+	if pending, _ := prevOut["has_pending"].(bool); !pending {
+		t.Fatalf("preview should show pending after apply: %v", prevOut)
 	}
 
 	rels, err := client.ListReleases(ctx, name)
@@ -204,6 +204,9 @@ func TestMCPApplySecretNeedsValue(t *testing.T) {
 
 	name := uniqueProjectName()
 	yaml := "version: 1\nproject: " + name + "\nenvironments:\n  dev:\n    target: stub\n    namespace: default\n    image: " + image + "\n    config:\n      secret_keys:\n        service:\n          - DATABASE_URL\n"
+	if strings.Contains(yaml, "postgres://") {
+		t.Fatal("fixture must not plant a secret value (apply rejects secret values)")
+	}
 	res := mcpCall(t, cs, "apply_manifest", map[string]any{"yaml": yaml})
 	out := mcpJSON(t, res)
 	needs, _ := out["needs_value"].([]any)

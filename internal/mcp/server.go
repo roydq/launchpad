@@ -7,7 +7,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const instructions = `Launchpad control plane for one primary service. apply_manifest stages desired state and does not deploy. Call preview then deploy (wait defaults true when omitted). Secret values are omitted by the API. Ambient default environment is dev. get_manifest without an environment argument returns all environments — do not pass environment=dev unless you intend to filter.`
+const instructions = `Launchpad control plane for one primary service. apply_manifest stages desired state and does not deploy. Call preview then deploy (wait defaults true when omitted). Config, preview, and release reads redact secret values; MCP also redacts changeset payloads (GET /changeset is plaintext on the API). Ambient default environment is dev. get_manifest without an environment argument returns all environments — do not pass environment=dev unless you intend to filter.`
 
 type runtime struct {
 	cfg Config

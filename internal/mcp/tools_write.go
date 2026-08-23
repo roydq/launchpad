@@ -465,11 +465,13 @@ func (r *runtime) afterEnqueue(ctx context.Context, cl *apiclient.Client, result
 	if !waitEnabled(wait) {
 		return nil, deployResultOut(result, nil, false), nil
 	}
-	jobID := ""
+	seed := &apiclient.Job{}
 	if result != nil {
-		jobID = result.Job.ID
+		seed.ID = result.Job.ID
+		seed.Type = result.Job.Type
+		seed.Status = result.Job.Status
 	}
-	job, err := waitForJob(ctx, cl, jobID, timeoutSec)
+	job, err := waitForJob(ctx, cl, seed, timeoutSec)
 	if err != nil {
 		return nil, nil, err
 	}

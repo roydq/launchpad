@@ -14,22 +14,36 @@ func waitEnabled(wait *bool) bool {
 	return *wait
 }
 
-func waitForJob(ctx context.Context, cl *apiclient.Client, jobID string, timeoutSec int) (*apiclient.Job, error) {
-	if jobID == "" {
+func waitJobErr(detail string, job *apiclient.Job, cause error) error {
+	extra := map[string]any{}
+	if job != nil && job.ID != "" {
+		extra["job_id"] = job.ID
+		if job.Status != "" {
+			extra["last_status"] = job.Status
+		}
+	}
+	if cause != nil {
+		extra["cause"] = cause.Error()
+	}
+	return errJSON(detail, extra)
+}
+
+func waitForJob(ctx context.Context, cl *apiclient.Client, last *apiclient.Job, timeoutSec int) (*apiclient.Job, error) {
+	if last == nil || last.ID == "" {
 		return nil, errJSON("no job id to wait on", nil)
 	}
 	if timeoutSec <= 0 {
 		timeoutSec = 300
 	}
 	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
-	var last *apiclient.Job
+	jobID := last.ID
 	for {
 		if err := ctx.Err(); err != nil {
-			return last, wrapErr(err)
+			return last, waitJobErr("wait canceled", last, err)
 		}
 		job, err := cl.GetJob(ctx, jobID)
 		if err != nil {
-			return last, wrapErr(err)
+			return last, waitJobErr("get job failed", last, err)
 		}
 		last = job
 		switch job.Status {
@@ -37,9 +51,10 @@ func waitForJob(ctx context.Context, cl *apiclient.Client, jobID string, timeout
 			return job, nil
 		case "failed", "dead":
 			return job, errJSON("deploy failed", map[string]any{
-				"job_id":     job.ID,
-				"status":     job.Status,
-				"last_error": job.LastError,
+				"job_id":      job.ID,
+				"status":      job.Status,
+				"last_status": job.Status,
+				"last_error":  job.LastError,
 			})
 		}
 		if !time.Now().Before(deadline) {
@@ -50,7 +65,7 @@ func waitForJob(ctx context.Context, cl *apiclient.Client, jobID string, timeout
 		}
 		select {
 		case <-ctx.Done():
-			return job, wrapErr(ctx.Err())
+			return job, waitJobErr("wait canceled", job, ctx.Err())
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
