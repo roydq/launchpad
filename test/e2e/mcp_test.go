@@ -144,6 +144,10 @@ func TestMCPApplyDeployInspect(t *testing.T) {
 	if ld["version"].(float64) < 1 {
 		t.Fatalf("version %v", ld)
 	}
+	relsOut := mcpJSON(t, mcpCall(t, cs, "list_releases", map[string]any{"project": name}))
+	if rels, _ := relsOut["releases"].([]any); len(rels) == 0 {
+		t.Fatalf("list_releases empty after deploy: %v", relsOut)
+	}
 
 	mcpCall(t, cs, "create_environment", map[string]any{"project": name, "name": "staging", "target": "stub"})
 	man := mcpJSON(t, mcpCall(t, cs, "get_manifest", map[string]any{"project": name}))
@@ -153,6 +157,38 @@ func TestMCPApplyDeployInspect(t *testing.T) {
 	}
 	if _, ok := envs["staging"]; !ok {
 		t.Fatalf("unfiltered get_manifest should include staging: %v", man)
+	}
+}
+
+func TestMCPSecretNotLeaked(t *testing.T) {
+	requireE2E(t)
+	if envOr("LAUNCHPAD_E2E_TARGET", "stub") != "stub" {
+		t.Skip("MCP e2e is stub-tier")
+	}
+	ctx := context.Background()
+	apiURL, bootstrap, _, _, _, _ := e2eConfig(t)
+	client := newAuthedClient(t, ctx, apiURL, bootstrap)
+	cs := mcpSession(t, apiURL, client.Token)
+
+	name := uniqueProjectName()
+	mcpCall(t, cs, "create_project", map[string]any{"name": name, "target": "stub"})
+	planted := "postgres://hidden-secret"
+	stage := mcpCall(t, cs, "stage_config", map[string]any{
+		"project": name,
+		"secret":  true,
+		"set":     map[string]any{"DATABASE_URL": planted},
+	})
+	csOut := mcpCall(t, cs, "get_changeset", map[string]any{"project": name})
+	cfg := mcpCall(t, cs, "get_config", map[string]any{"project": name})
+	man := mcpCall(t, cs, "get_manifest", map[string]any{"project": name})
+	parts := []string{mcpText(t, stage), mcpText(t, csOut), mcpText(t, cfg), mcpText(t, man)}
+	for _, res := range []*mcpsdk.CallToolResult{stage, csOut, cfg, man} {
+		b, _ := json.Marshal(mcpJSON(t, res))
+		parts = append(parts, string(b))
+	}
+	blob := strings.Join(parts, "\n")
+	if strings.Contains(blob, planted) {
+		t.Fatalf("secret material leaked: %s", blob)
 	}
 }
 
@@ -167,10 +203,8 @@ func TestMCPApplySecretNeedsValue(t *testing.T) {
 	cs := mcpSession(t, apiURL, client.Token)
 
 	name := uniqueProjectName()
-	planted := "postgres://hidden-secret"
 	yaml := "version: 1\nproject: " + name + "\nenvironments:\n  dev:\n    target: stub\n    namespace: default\n    image: " + image + "\n    config:\n      secret_keys:\n        service:\n          - DATABASE_URL\n"
 	res := mcpCall(t, cs, "apply_manifest", map[string]any{"yaml": yaml})
-	text := mcpText(t, res)
 	out := mcpJSON(t, res)
 	needs, _ := out["needs_value"].([]any)
 	found := false
@@ -180,10 +214,7 @@ func TestMCPApplySecretNeedsValue(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("needs_value %v text %s", out["needs_value"], text)
-	}
-	if strings.Contains(text, planted) || strings.Contains(text, "postgres://") {
-		t.Fatalf("secret material in output: %s", text)
+		t.Fatalf("needs_value %v", out["needs_value"])
 	}
 }
 

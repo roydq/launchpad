@@ -3,44 +3,13 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-type recordedReq struct {
-	Method string
-	Path   string
-	Query  string
-	Auth   string
-	Env    string
-	Body   []byte
-}
-
-type fakeAPI struct {
-	mu       sync.Mutex
-	reqs     []recordedReq
-	handler  http.Handler
-	jobState string
-}
-
-func newFakeAPI(t *testing.T, routes map[string]http.HandlerFunc) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	for pattern, h := range routes {
-		mux.HandleFunc(pattern, h)
-	}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		r.Body = io.NopCloser(strings.NewReader(string(body)))
-		mux.ServeHTTP(w, r)
-	}))
-}
 
 func connectMCP(t *testing.T, cfg Config) *mcpsdk.ClientSession {
 	t.Helper()
@@ -342,6 +311,34 @@ func TestInspectJSONShape(t *testing.T) {
 	}
 	if ld["version"].(float64) != 3 || ld["artifact_ref"] != "img:v3" {
 		t.Fatalf("last_deploy %v", ld)
+	}
+}
+
+func TestInspectLastDeployNull(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/projects/p") && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "p", "status": "ready"})
+		case strings.HasSuffix(r.URL.Path, "/changeset"):
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"title": "Not Found", "code": "not_found"})
+		case strings.HasSuffix(r.URL.Path, "/releases"):
+			_ = json.NewEncoder(w).Encode([]any{})
+		case strings.HasSuffix(r.URL.Path, "/processes"):
+			_ = json.NewEncoder(w).Encode([]any{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	res := callTool(t, cs, "inspect", nil)
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	out := toolJSON(t, res)
+	if out["last_deploy"] != nil {
+		t.Fatalf("last_deploy want null, got %v", out["last_deploy"])
 	}
 }
 

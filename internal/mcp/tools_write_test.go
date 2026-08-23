@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestExactToolSet(t *testing.T) {
@@ -115,6 +117,33 @@ func TestDeploySensitiveEnvRequiresConfirm(t *testing.T) {
 	text := toolErrorText(t, res)
 	if !strings.Contains(text, "sensitive environment") {
 		t.Fatalf("%s", text)
+	}
+}
+
+func TestDeploySensitiveEnvConfirmReachesBackend(t *testing.T) {
+	var hitPush bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/changeset/push"):
+			hitPush = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deployment": map[string]any{"id": "d1", "status": "pending", "release": map[string]any{"version": 1}},
+				"job":        map[string]any{"id": "j1", "status": "pending"},
+			})
+		case strings.Contains(r.URL.Path, "/changeset"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "cs", "changes": []any{map[string]any{"id": "1"}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p", Environment: "production"})
+	res := callTool(t, cs, "deploy", map[string]any{"image": "img:v1", "confirm": true, "wait": false})
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	if !hitPush {
+		t.Fatal("confirm=true must reach push")
 	}
 }
 
@@ -253,6 +282,115 @@ func TestStageConfigOmitsSensitivityWhenNotSecret(t *testing.T) {
 	}
 	if strings.Contains(string(body), "sensitivity") {
 		t.Fatalf("should omit sensitivity: %s", body)
+	}
+}
+
+func TestSecretConfigNotEchoedInChangesetTools(t *testing.T) {
+	planted := "super-secret-db-url"
+	secretCS := map[string]any{
+		"id": "cs",
+		"changes": []any{map[string]any{
+			"id":   "1",
+			"type": "config",
+			"payload": map[string]any{
+				"key":          "DATABASE_URL",
+				"value":        planted,
+				"sensitivity":  "secret",
+			},
+		}},
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(secretCS)
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	stage := callTool(t, cs, "stage_config", map[string]any{
+		"set":    map[string]any{"DATABASE_URL": planted},
+		"secret": true,
+	})
+	if stage.IsError {
+		t.Fatalf("stage: %s", toolErrorText(t, stage))
+	}
+	got := callTool(t, cs, "get_changeset", nil)
+	if got.IsError {
+		t.Fatalf("get_changeset: %s", toolErrorText(t, got))
+	}
+	body := mcpDump(t, stage) + mcpDump(t, got)
+	if strings.Contains(body, planted) {
+		t.Fatalf("planted secret leaked: %s", body)
+	}
+	out := toolJSON(t, got)
+	changes, _ := out["changes"].([]any)
+	if len(changes) != 1 {
+		t.Fatalf("changes %v", out)
+	}
+	ch := changes[0].(map[string]any)
+	payload := ch["payload"].(map[string]any)
+	if payload["value"] != "***" {
+		t.Fatalf("payload %v", payload)
+	}
+}
+
+func mcpDump(t *testing.T, res *mcpsdk.CallToolResult) string {
+	t.Helper()
+	b, _ := json.Marshal(toolJSON(t, res))
+	return string(b)
+}
+
+func TestEnvironmentTargetConfigIsObject(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":            "e1",
+			"name":          "dev",
+			"target_type":   "stub",
+			"target_config": map[string]any{"namespace": "default", "cluster": ""},
+			"ephemeral":     false,
+		})
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	res := callTool(t, cs, "get_environment", map[string]any{"name": "dev"})
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	out := toolJSON(t, res)
+	tc, ok := out["target_config"].(map[string]any)
+	if !ok {
+		t.Fatalf("target_config want object, got %T %v", out["target_config"], out["target_config"])
+	}
+	if tc["namespace"] != "default" {
+		t.Fatalf("target_config %v", tc)
+	}
+}
+
+func TestStageConfigPayloadIsObject(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "cs",
+			"changes": []any{map[string]any{
+				"id":   "1",
+				"type": "config",
+				"payload": map[string]any{
+					"key":   "PORT",
+					"value": "8080",
+				},
+			}},
+		})
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	res := callTool(t, cs, "stage_config", map[string]any{"set": map[string]any{"PORT": "8080"}})
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	out := toolJSON(t, res)
+	changes, _ := out["changes"].([]any)
+	payload, ok := changes[0].(map[string]any)["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload want object: %v", out)
+	}
+	if payload["key"] != "PORT" {
+		t.Fatalf("payload %v", payload)
 	}
 }
 

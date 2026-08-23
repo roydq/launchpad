@@ -32,7 +32,7 @@ func jsonResult(v any, err error) (*mcpsdk.CallToolResult, any, error) {
 	if jerr != nil {
 		return nil, nil, wrapErr(jerr)
 	}
-	return nil, out, nil
+	return nil, redactSecrets(out), nil
 }
 
 func errMissingToken() error {
