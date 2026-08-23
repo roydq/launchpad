@@ -57,6 +57,12 @@ func waitForJob(ctx context.Context, cl *apiclient.Client, last *apiclient.Job, 
 		if err := ctx.Err(); err != nil {
 			return last, waitJobErr("wait canceled", last, err)
 		}
+		if !time.Now().Before(deadline) {
+			return last, errJSON("timed out waiting for job", map[string]any{
+				"job_id":      last.ID,
+				"last_status": last.Status,
+			})
+		}
 		job, err := cl.GetJob(ctx, jobID)
 		if err != nil {
 			return last, waitJobErr("get job failed", last, err)
@@ -71,12 +77,6 @@ func waitForJob(ctx context.Context, cl *apiclient.Client, last *apiclient.Job, 
 				"status":      job.Status,
 				"last_status": job.Status,
 				"last_error":  job.LastError,
-			})
-		}
-		if !time.Now().Before(deadline) {
-			return job, errJSON("timed out waiting for job", map[string]any{
-				"job_id":      job.ID,
-				"last_status": job.Status,
 			})
 		}
 		select {

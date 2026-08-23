@@ -92,6 +92,25 @@ func TestApplyManifestXorAndNoPush(t *testing.T) {
 	}
 }
 
+func TestApplyManifestUsesDocumentProjectNotConfig(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{"project": "from-yaml", "environment": "dev", "staged": []string{"image"}})
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "configured"})
+	res := callTool(t, cs, "apply_manifest", map[string]any{
+		"yaml": "version: 1\nproject: from-yaml\n",
+	})
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	if gotPath != "/v1/projects/from-yaml/manifest/apply" {
+		t.Fatalf("path %s want document.project", gotPath)
+	}
+}
+
 func TestCreateProjectNoContext(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1/projects" {

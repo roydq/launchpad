@@ -152,15 +152,16 @@ func (r *runtime) applyManifest(ctx context.Context, _ *mcpsdk.CallToolRequest, 
 	if m, ok := document.(map[string]any); ok {
 		docProject, _ = m["project"].(string)
 	}
-	project, err := r.cfg.ResolveProject(in.Project)
-	if err != nil {
-		if docProject == "" {
-			return nil, nil, err
-		}
-		project = docProject
-	}
 	if in.Project != "" && docProject != "" && in.Project != docProject {
 		return nil, nil, errJSON("project does not match document.project", nil)
+	}
+	project := docProject
+	if project == "" {
+		var err error
+		project, err = r.cfg.ResolveProject(in.Project)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	env := in.Environment
 	if env == "" {
@@ -371,8 +372,13 @@ func (r *runtime) deploy(ctx context.Context, _ *mcpsdk.CallToolRequest, in depl
 	if in.Image != "" {
 		changes = append(changes, map[string]any{"type": "image", "image": in.Image})
 	}
-	for k, v := range in.Set {
-		changes = append(changes, map[string]any{"type": "config", "key": k, "value": v})
+	setKeys := make([]string, 0, len(in.Set))
+	for k := range in.Set {
+		setKeys = append(setKeys, k)
+	}
+	sort.Strings(setKeys)
+	for _, k := range setKeys {
+		changes = append(changes, map[string]any{"type": "config", "key": k, "value": in.Set[k]})
 	}
 	if in.ScaleProcess != "" && in.ScaleQuantity != nil {
 		changes = append(changes, map[string]any{"type": "scale", "process": in.ScaleProcess, "quantity": *in.ScaleQuantity})
