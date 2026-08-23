@@ -12,7 +12,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | mcp-server | Launchpad MCP server | A/C | designing | Spec: `docs/superpowers/specs/2026-08-23-mcp-server-design.md`. Thin tools over OpenAPI/CLI including apply; token auth; no new entities. DoD: spec success 1–8; L0; L1 e2e-stub. | `feat/mcp-server` |
+| 1 | mcp-server | Launchpad MCP server | A/C | implementing | Spec: `docs/superpowers/specs/2026-08-23-mcp-server-design.md` (Approved self-approve — ADM). Thin tools over OpenAPI/CLI including apply; token auth; no new entities. DoD: spec success 1–8; L0; L1 e2e-stub. | `feat/mcp-server` |
 
 ## Parked (not ADM-ready)
 

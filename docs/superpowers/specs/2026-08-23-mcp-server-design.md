@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft |
+| **Status** | Approved (self-approve — ADM) |
 | **Date** | 2026-08-23 |
 | **Domain spec** | `docs/DOMAIN.md` (phase 6 integrations; no new entities) |
 | **Scope** | stdio MCP tools over existing OpenAPI + `apiclient`, including `apply_manifest`; token auth; no new domain entities |
@@ -145,7 +145,7 @@ DOMAIN updates in this PR: phase 6 “MCP follows” → shipped client; CLI tab
 | Env default | Tool `environment` arg, else `LAUNCHPAD_ENV` / config layers, else `dev`. Sent as `X-Launchpad-Environment` on project-scoped mutating/read tools **except** `get_manifest` (see Tools). |
 | Bootstrap token | Accepted if the operator puts it in `LAUNCHPAD_TOKEN` (API already allows it). Docs tell agents to mint a workspace token via CLI/`POST /v1/tokens` **outside** MCP. |
 | Token minting | **Not a tool.** |
-| Missing token | `healthz` still runs. All other tools: `isError`, detail `LAUNCHPAD_TOKEN is not set`. |
+| Missing token | `healthz` still runs. All other tools: `isError` JSON `{"detail":"LAUNCHPAD_TOKEN is not set","hints":[{"action":"set_token","message":"Export a workspace token (same env var as the CLI).","command":"export LAUNCHPAD_TOKEN=lp_..."}]}`. |
 | 401/403 | Pass through as tool errors with problem+json fields. |
 
 Host example (Grok project or user config):
@@ -193,7 +193,7 @@ CLI `Config` may be copied into `mcp.Config` (strings only) so `internal/mcp` do
 
 **Logging:** `log/slog` to **stderr**. Never write non-protocol bytes to stdout.
 
-**MCP instructions** (server instructions string, ~3 sentences): Launchpad control plane for one primary service. `apply_manifest` stages desired state and does not deploy. Call `preview` (or inspect pending) then `deploy` with wait (default true). Secret values are omitted by the API. Default environment is `dev`.
+**MCP instructions** (server instructions string): Launchpad control plane for one primary service. `apply_manifest` stages desired state and does not deploy. Call `preview` then `deploy` (wait defaults true when omitted). Secret values are omitted by the API. Ambient default environment is `dev`. `get_manifest` without an `environment` argument returns **all** environments — do not pass `environment=dev` unless you intend to filter.
 
 **SDK:** `github.com/modelcontextprotocol/go-sdk v1.7.0` — `mcp.AddTool` with typed input structs (`json` + `jsonschema` tags). Do not use `mark3labs/mcp-go`.
 
@@ -269,10 +269,10 @@ Passthrough tools return the apiclient JSON for that method (`CreateProject` →
 |------|-----------|---------------------|--------|-------|
 | `create_project` | `CreateProject` | `name` required; `target` default `stub`; `namespace` default `default` | project object | Bootstraps `dev` + primary service + `web` |
 | `create_environment` | `CreateEnvironment` | `name` required; `target` default `stub`; `namespace` default `default`; `ephemeral` default false | environment object | |
-| `clone_environment` | `CloneEnvironment` | `from` + `name` required; optional `target`, `namespace`, `ephemeral` | clone result | Secrets → `needs_value` only |
+| `clone_environment` | `CloneEnvironment` | `from` + `name` required; optional `target`, `namespace`, `ephemeral` | clone result | Omit `target`/`namespace` → copy from source (pass empty strings; do **not** default stub/default). `ephemeral` omit = false. Secrets → `needs_value` only |
 | `apply_manifest` | `ApplyManifest` | `document` object **xor** `yaml` string | `ApplyReport` | Stage only. Both/neither → MCP `isError` (not HTTP 400). Yaml parsed to object then POSTed as `document`. Project arg must match document `project` when both present (API also enforces). |
-| `stage_config` | `StageChanges` type `config` | `set` object and/or `unset` string[]; `layer` `service` (default) or `shared`; `secret` bool default false | changeset | At least one set or unset; `secret=true` → `sensitivity=secret` |
-| `stage_process` | `StageChanges` `process.set` or `process.unset` | `name` required; `unset` bool; optional `command`, `quantity`, `expose`, `health` object | changeset | `unset=true` ignores other process fields |
+| `stage_config` | `StageChanges` type `config` | `set` object and/or `unset` string[]; `layer` `service` (default) or `shared`; `secret` bool default false | changeset | At least one set or unset; `secret=true` → `sensitivity=secret`. `secret=false` or omitted → **omit** `sensitivity` (do not send `plain`; DOMAIN sticky secrets stay secret until explicit plain) |
+| `stage_process` | `StageChanges` `process.set` or `process.unset` | `name` required; `unset` bool; optional `command`, `quantity`, `expose`, `health` | changeset | `unset=true` ignores other process fields. `health` is optional `{ "type": "http\|tcp\|exec\|none", "path"?: string, "port"?: int }` (CLI subset; no timings in v1) |
 | `stage_image` | `StageChanges` type `image` | `image` required | changeset | |
 | `stage_scale` | `StageChanges` type `scale` | `process` + `quantity` required | changeset | Quantity staging only; not the deferred scale-job API |
 | `unstage_last` | `UnstageLastChange` | — | unstage result | |
@@ -375,12 +375,12 @@ No flags in v1 (config is env + existing CLI config files). Process runs until s
   1. In-process MCP against `LAUNCHPAD_API_URL` for the apply/deploy recipe.  
   2. `create_project` unique name, target stub (no pre-set project context required).  
   3. `apply_manifest` with a document that sets `image` (and optional plain config).  
-  4. `preview` or `get_changeset` shows pending; **no** succeeded job from apply.  
+  4. `preview` shows pending (required; do not substitute `get_changeset`); **no** succeeded job from apply.  
   5. `deploy` **omitting** `wait` succeeds (default true).  
   6. `inspect` has `last_deploy.version` set; `list_releases` non-empty.  
   7. Separate case: `apply_manifest` with `secret_keys` / secret placeholder → `needs_value`; output must not contain a planted secret string.  
   8. `get_manifest` without `environment` after a second env exists → `environments` contains more than one key (or at least is not forced to `dev` only).  
-  9. **Stdio smoke (required):** `mcp.CommandTransport` with `exec.Command(os.Getenv("LAUNCHPAD_E2E_CLI"), "mcp")` (default `./bin/launchpad`), env `LAUNCHPAD_TOKEN` + `LAUNCHPAD_API_URL`; `initialize` + `healthz` `{ok: true}`. Does not replace the in-process apply/deploy recipe.  
+  9. **Stdio smoke (required):** mint a workspace token (same as `newAuthedClient`); `mcp.CommandTransport` with `exec.Command(cli, "mcp")` where `cli = envOr("LAUNCHPAD_E2E_CLI", "./bin/launchpad")`; env `LAUNCHPAD_TOKEN=<minted>` + `LAUNCHPAD_API_URL` (harness exports bootstrap, not `LAUNCHPAD_TOKEN`). Call `initialize` + token-bearing `list_projects` (not only `healthz`). Does not replace the in-process apply/deploy recipe.  
 - **OpenAPI:** no change; `make openapi-check` still green.  
 - **L0:** `mise exec -- make test && make build && go vet ./...`  
 - **L1:** `make e2e-stub` required (deploy path via MCP).
@@ -422,9 +422,9 @@ Persona: MCP is agent UX. After e2e, run a stub-backed tool path equivalent to S
 | 7. Test strategy | Unit + in-process MCP + e2e-stub + CommandTransport stdio smoke |
 | 8. DoD / acceptance | Success criteria 1–8 |
 
-**Status:** Draft until `adm-spec-review` pass=true, then `Approved (self-approve — ADM)`.
+**Status:** Approved (self-approve — ADM) after `adm-spec-review-2` pass=true.
 
-Gate history: `adm-spec-review` `wf_01a02f62dc5a777089b07e73f906c6e6` **pass=false** (blocker `manifest-env-filter` + 9 warnings). This revision folds the blocker and warnings as implementer rules.
+Gate history: `adm-spec-review` `wf_01a02f62dc5a777089b07e73f906c6e6` **pass=false** (blocker `manifest-env-filter`). Revision folded that blocker. `adm-spec-review-2` `wf_01a02f70f04079f399aad41280263e08` **pass=true** (7 warnings pinned as implementer rules: clone omit=copy-from-source; health `{type,path,port}`; e2e must call `preview`; missing-token JSON+hint; instructions `get_manifest` caveat; `secret=false` omits sensitivity; token-bearing stdio `list_projects`).
 
 ---
 
@@ -450,5 +450,5 @@ None blocking. Resolved in this spec:
 
 ## Approval
 
-- [ ] `adm-spec-review` pass=true (self-approve — ADM)
-- [ ] Design reviewed and approved (ADM self-approve after gate)
+- [x] `adm-spec-review-2` pass=true (self-approve — ADM)
+- [x] Design reviewed and approved (ADM self-approve after gate)

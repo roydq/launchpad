@@ -95,8 +95,8 @@
 **Allowed paths:** `test/e2e/mcp_test.go`
 
 - [ ] `//go:build e2e` package `e2e`. In-process `internal/mcp.NewServer` + `mcp.NewInMemoryTransports()` against `LAUNCHPAD_API_URL` for the apply/deploy recipe.
-- [ ] Recipe from spec Test strategy e2e bullets 1–8 (create without project context, apply image, no job from apply, deploy **omitting wait**, inspect `last_deploy.version`, secret needs_value without plaintext, get_manifest unfiltered when a second env exists).
-- [ ] **Required stdio smoke:** `mcp.CommandTransport{Command: exec.Command(cli, "mcp")}` where `cli = envOr("LAUNCHPAD_E2E_CLI", "./bin/launchpad")`; env `LAUNCHPAD_TOKEN` + `LAUNCHPAD_API_URL`; initialize + `healthz`.
+- [ ] Recipe from spec Test strategy e2e bullets 1–8 (create without project context, apply image, **preview** shows pending, no job from apply, deploy **omitting wait**, inspect `last_deploy.version`, secret needs_value without plaintext, get_manifest unfiltered when a second env exists).
+- [ ] **Required stdio smoke:** mint workspace token; `mcp.CommandTransport{Command: exec.Command(cli, "mcp")}` where `cli = envOr("LAUNCHPAD_E2E_CLI", "./bin/launchpad")`; env `LAUNCHPAD_TOKEN=<minted>` + `LAUNCHPAD_API_URL`; initialize + token-bearing `list_projects`.
 - [ ] Unique project name via `uniqueProjectName()`.
 - [ ] Verify with full e2e at Task 5 (this task adds the file; `mise exec -- go test -C .worktrees/feat-mcp-server -count=1 ./internal/... ./pkg/...` still green).
 - [ ] Commit: `test(e2e): MCP apply and deploy-wait on stub`
