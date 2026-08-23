@@ -86,7 +86,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Portable health / deploy readiness | **Shipped** (ADM #46) |
 | Target extensions (resources, annotations, …) | **Shipped** (ADM #48) |
 | `launchpad.yaml` v1 (current model) | **Shipped** — QUEUE `launchpad-yaml` (`export`/`apply`; not GitOps; not multi-service) |
-| MCP server | **After yaml spec** — QUEUE `mcp-server` (thin OpenAPI/CLI tools) |
+| MCP server | **Next** — QUEUE `mcp-server` (thin OpenAPI/CLI tools, including manifest apply) |
 
 ### Track B — Confidence (engineering)
 
@@ -178,7 +178,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 |------|-------|
 | Problem+json recovery hints | **Shipped** |
 | CLI surfaces hints | **Shipped** |
-| MCP server | After `launchpad.yaml` v1 spec — QUEUE `mcp-server` |
+| MCP server | **Next** — QUEUE `mcp-server` |
 | Idempotency keys | Later |
 | Recipes / templates | **Shipped** — `launchpad new` / `new list` |
 
@@ -235,8 +235,8 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 
 | Work | Spec / queue |
 |------|----------------|
-| **This PR** | QUEUE `launchpad-yaml` — [PR #59](https://github.com/roydq/launchpad/pull/59) — [spec](superpowers/specs/2026-08-22-launchpad-yaml-design.md) |
-| Then | QUEUE `mcp-server` — thin MCP tools over OpenAPI + apply |
+| **Next** | QUEUE `mcp-server` — thin MCP tools over OpenAPI + `apply` |
+| Shipped | `launchpad.yaml` v1 — [PR #59](https://github.com/roydq/launchpad/pull/59) |
 | Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 

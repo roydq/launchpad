@@ -6,8 +6,38 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 BOOTSTRAP="${LAUNCHPAD_BOOTSTRAP_TOKEN:-e2e-bootstrap-token}"
-API_ADDR="${LAUNCHPAD_E2E_API_ADDR:-127.0.0.1:18080}"
-API_URL="${LAUNCHPAD_API_URL:-http://${API_ADDR}}"
+
+port_listening() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -qE ":${port}[[:space:]]"
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
+if [[ -n "${LAUNCHPAD_E2E_API_ADDR:-}" ]]; then
+  API_ADDR="${LAUNCHPAD_E2E_API_ADDR}"
+else
+  API_ADDR=""
+  for p in 18080 18081 18082 18083 18084 18085; do
+    if ! port_listening "$p"; then
+      API_ADDR="127.0.0.1:${p}"
+      break
+    fi
+  done
+  if [[ -z "${API_ADDR}" ]]; then
+    echo "no free e2e port in 18080-18085; set LAUNCHPAD_E2E_API_ADDR" >&2
+    exit 1
+  fi
+fi
+if [[ -n "${LAUNCHPAD_API_URL:-}" && -n "${LAUNCHPAD_E2E_API_ADDR:-}" ]]; then
+  API_URL="${LAUNCHPAD_API_URL}"
+else
+  API_URL="http://${API_ADDR}"
+fi
 WORKDIR="${TMPDIR:-/tmp}/launchpad-e2e-stub-$$"
 DB_FILE="${WORKDIR}/launchpad.db"
 DB_URL="file:${DB_FILE}?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"

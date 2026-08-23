@@ -66,7 +66,7 @@ Include:
 
 **Autonomous mode (when user authorizes ADM):** agent may self-approve the recommended approach after the [spec self-review checklist](AUTONOMOUS-MODE.md#spec-self-review-self-approve-gate) (no open TBDs, single-plan scope, no DOMAIN contradictions, MVP boundary respected). Still write the spec and plan to `docs/superpowers/`. Still open a PR for human dogfood; do not force-merge to **main** unless asked. Named modes (single-feature / integration-stack / queue-drain), worktree isolation, and Definition of Done live in the protocol.
 
-Canonical protocol: [`docs/AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md). Invoke `/launchpad-autonomous`. Helper: `scripts/adm-status`.
+Canonical protocol: [`docs/AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md) (named modes, worktrees, gate wait/path rules). Invoke `/launchpad-autonomous`. Helper: `scripts/adm-status`.
 
 Program files: [`docs/superpowers/program/QUEUE.md`](superpowers/program/QUEUE.md) (work selection), [`IDEAS.md`](superpowers/program/IDEAS.md) (scout), [`PERSONA-SCRIPTS.md`](superpowers/program/PERSONA-SCRIPTS.md) (synthetic user). Brief backlog note: `docs/DX-VISION.md` → *Autonomous feature program*.
 

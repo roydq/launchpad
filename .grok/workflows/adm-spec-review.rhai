@@ -112,7 +112,8 @@ let jobs = [];
 for d in dimensions {
     let prompt = "";
     prompt += "You are an ADM SPEC SELF-REVIEWER for Launchpad.\n";
-    prompt += "Read the REAL files with read_file/grep — do not invent contents.\n\n";
+    prompt += "Read the REAL files with read_file/grep — do not invent contents.\n";
+    prompt += "Paths are relative to the SESSION WORKSPACE ROOT. If a path starts with .worktrees/, read THAT file — do not substitute docs/ on main.\n\n";
     prompt += "Spec path: " + spec_path + "\n";
     prompt += "Plan path (optional): " + plan_note + "\n";
     prompt += "Domain path: " + domain_path + "\n";

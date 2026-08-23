@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Experimental — process protocol (docs + skill + program files + Grok workflows) |
-| **Date** | 2026-07-28 |
+| **Date** | 2026-08-22 |
 | **Related** | `docs/FEATURE-DEVELOPMENT.md`, `docs/DX-VISION.md`, `.grok/skills/launchpad-autonomous/SKILL.md`, `docs/superpowers/program/`, `.grok/workflows/` |
 
 Long-running, low-input agent work: pick recommended paths, implement planned features, keep docs in sync, expand verification when risk warrants it, use subagents **and fixed multi-agent workflows at gates**, and stop cleanly when human judgment is required.
 
-This is **process**, not product code. Refined from real ADM runs (2026-07-18–21); workflows integrated 2026-07-28. Keep experiments cheap while the product is early.
+This is **process**, not product code. Refined from real ADM runs (2026-07-18–21, 2026-08-22 yaml v1); workflows integrated 2026-07-28. Keep experiments cheap while the product is early.
 
 ### Program files (Approach B)
 
@@ -279,7 +279,7 @@ Closeout / QUEUE bulk status updates: commit on the **integration branch** (or a
 | Level | When | What |
 |-------|------|------|
 | **L0** | Every task / commit | `mise exec -- make test && make build && go vet ./...` |
-| **L1** | `internal/service`, `jobs`, `target`, deploy CLI | **`make e2e-stub` required** (not optional) for those surfaces |
+| **L1** | `internal/service`, `jobs`, `target`, deploy CLI | **`make e2e-stub` required** (not optional) for those surfaces. Harness picks a free port if `18080` is busy; override with `LAUNCHPAD_E2E_API_ADDR`. |
 | **L1.5** | Once per integration stack / before final PR to main | Persona **S1** (and S4 if CLI error paths touched); write `program/feedback/` |
 | **L2** | New/changed HTTP routes | Update OpenAPI + `make openapi-check` |
 | **L3** | Multi-env, promote, config resolution, secrets-aware flows | Existing e2e coverage or add cases in the same PR |
@@ -358,6 +358,19 @@ git worktree add .worktrees/feat-<name> -b feat/<name> origin/adm/queue-YYYY-MM-
 
 After the feature PR merges into integration, the orchestrator may remove the worktree. Do not delete a worktree while the implementer is still running.
 
+**Verify from the trusted repo root**, not by assuming `mise` is trusted inside the worktree:
+
+```bash
+# Go 1.20+ -C runs tests in the worktree without a second mise.toml trust:
+mise exec -- go test -C .worktrees/feat-<name> ./internal/domain/...
+mise exec -- go vet -C .worktrees/feat-<name> ./...
+
+# If you must `cd` into the worktree:
+mise trust .worktrees/feat-<name>/mise.toml   # once per machine
+```
+
+`.worktrees/` is gitignored. Session tools (`read_file`, workflow reviewers) still see those paths from the **repo-root workspace**. Gate args must use them (see [Workflows as ADM subroutines](#workflows-as-adm-subroutines)).
+
 ### Task packet (every implementer dispatch)
 
 Give the implementer a **complete packet** — do not make them rediscover the plan:
@@ -366,9 +379,9 @@ Give the implementer a **complete packet** — do not make them rediscover the p
 2. **Worktree path** and **feature branch name** (lease)
 3. **Allowed paths** — packages/files they may edit
 4. **Full plan task text** (or whole plan path + task IDs)
-5. **Verify commands** — at least L0; L1 if deploy path
+5. **Verify commands** — at least L0; L1 if deploy path; prefer `mise exec -- go test -C <worktree>` from repo root
 6. **Commit message(s)** from the plan
-7. **Push checkpoint** — commit and `git push -u origin feat/<name>` after each accepted task
+7. **Push checkpoint** — commit and `git push -u origin feat/<name>` after each accepted task (`gh auth setup-git` if SSH fails)
 8. **PR base** — `adm/…` or `main` per mode
 9. **Forbidden** — other agents’ branches; force-push; `reset --hard` of shared history; editing main
 
@@ -404,21 +417,46 @@ Grok **workflows** (`.grok/workflows/*.rhai`) are deterministic multi-agent scri
 
 | Workflow | When | Args (JSON) | Orchestrator action on result |
 |----------|------|-------------|-------------------------------|
-| **`adm-spec-review`** | After spec (+ plan) drafted; before self-approve | `{"spec_path":"docs/superpowers/specs/….md","plan_path":"…"}` optional `domain_path` | `pass=false` → **hard stop** design gate; `pass=true` → mark `Approved (self-approve — ADM)` and implement |
-| **`adm-review`** | After implementer task / before feature PR | `{"target":"HEAD","base":"origin/main","spec_path":"…","plan_path":"…"}` | `approve=false` → send `must_fix` back to implementer; do not open PR until green. Trivial 1–2 file tasks may skip and use a single combined subagent review |
+| **`adm-spec-review`** | After spec (+ plan) drafted; before self-approve | `spec_path` / `plan_path` / optional `domain_path` as **workspace-readable** paths (worktree-prefixed when leased) | `pass=false` → **hard stop** design gate (fix spec and re-run, or escalate); `pass=true` → mark `Approved (self-approve — ADM)` and implement |
+| **`adm-review`** | After implementer task / before feature PR | `{"target":"feat/<name>","base":"origin/main","spec_path":"…"}` — **not** session `HEAD` if checkout is `main` | `approve=false` → send `must_fix` back to implementer; do not open PR until green. Trivial 1–2 file tasks may skip and use a single combined subagent review |
 | **`project-audit`** | Optional L4 / stack closeout / hygiene | `{"apply_docs":false}` preferred in ADM | Treat report as scout input: same-PR fix / QUEUE / IDEAS only. Prefer **report-only** (`apply_docs=false`); if applying docs, keep edits on a docs or feature branch the orchestrator owns |
+
+### Paths the gates can actually read
+
+Workflow child agents `read_file` from the **session workspace root** (usually the `main` checkout). They do **not** `cd` into the implementer worktree.
+
+| Arg | Wrong (common) | Right when the lease is a worktree |
+|-----|----------------|-------------------------------------|
+| `spec_path` / `plan_path` / `domain_path` | `docs/superpowers/specs/….md` on `main` (stale or missing) | `.worktrees/feat-<name>/docs/superpowers/specs/….md` |
+| `adm-review` `target` | `HEAD` while the session is on `main` (empty or wrong diff) | Feature **branch name** (`feat/<name>`) so reviewers run `git diff origin/main...feat/<name>` |
+
+Commit spec and plan on the feature branch **and** pass the worktree path so reviewers see the same bytes.
 
 ### How to launch
 
 ```text
-/workflow adm-spec-review {"spec_path":"docs/superpowers/specs/2026-07-28-example-design.md","plan_path":"docs/superpowers/plans/2026-07-28-example.md"}
-/workflow adm-review {"target":"HEAD","base":"origin/main","spec_path":"docs/superpowers/specs/….md"}
+/workflow adm-spec-review {"spec_path":".worktrees/feat-<name>/docs/superpowers/specs/YYYY-MM-DD-<name>-design.md","plan_path":".worktrees/feat-<name>/docs/superpowers/plans/YYYY-MM-DD-<name>.md","domain_path":".worktrees/feat-<name>/docs/DOMAIN.md"}
+/workflow adm-review {"target":"feat/<name>","base":"origin/main","spec_path":".worktrees/feat-<name>/docs/superpowers/specs/YYYY-MM-DD-<name>-design.md"}
 /workflow project-audit {"apply_docs":false}
 ```
 
-From the agent tool: `workflow` with `name` + `args` (and an `agent_budget` if the default 128 is too tight or too loose). Progress: `/workflows`.
+From the agent tool: `workflow` with `name` + `args` (and an `agent_budget` if the default 128 is too tight or too loose). Progress: `/workflows`. Record the run id (`wf_…`) in the plan header or SESSION log.
 
 **Trust:** project workflows under `.grok/workflows/` require folder trust (`/hooks-trust` or launch with `--trust`). Without trust, copy or symlink into `~/.grok/workflows/` (user scope). Built-in `/workflow` discovery uses `meta.name` in the script.
+
+### Waiting on a gate (do not sleep-poll)
+
+Observed 2026-08-22 (`launchpad.yaml` ADM): the `workflow` tool returns immediately with a run id. That id is **not** a `get_command_or_subagent_output` task id (the parent sees “not found”). Child agent ids in the workflow journal are also not parent-waitable. Completion may notify later, including as a **resume replay** of an already-handled run.
+
+Orchestrator policy:
+
+1. **Do not `sleep N && cat state.json` loops.** Sleeping burns the turn and often overshoots a finished run.
+2. After launch, either continue **independent** work that does not depend on the gate (scout, read-only prep — **not** implementation if the gate is spec-review), or **end the turn** and wait for the host completion notification.
+3. Completions are **idempotent**. If QUEUE / spec status / git already reflects that `wf_…` (or the must_fix already landed), acknowledge and do not re-run the gate.
+4. If `/workflows` or the launch artifact dir shows `complete` and `scratch/report.md` exists, **read it once** and proceed. That is a status read, not a poll loop.
+5. Artifact dir from the launch tool: `…/workflows/wf_<id>/state.json` and `scratch/report.md`.
+
+Push/PR: prefer `gh` (`gh auth setup-git` if `git push` SSH fails). Do not stall a finished feature on a missing ssh-agent.
 
 ### Budget and failure policy
 
@@ -439,7 +477,7 @@ For multi-hour or multi-session stack/drain runs, write:
 
 `docs/superpowers/program/feedback/SESSION-YYYY-MM-DD.md`
 
-Suggested contents: mode, integration branch, PRs merged, next ready ID, hard stops, deferred decisions. Optional but cheap; pairs with `scripts/adm-status`.
+Suggested contents: mode, integration branch, PRs merged, next ready ID, hard stops, deferred decisions, gate run ids (`wf_…`) already handled. Optional but cheap; pairs with `scripts/adm-status`.
 
 ---
 
@@ -480,9 +518,12 @@ Current = protocol + skill + program files + light status script + **gate workfl
 - Half-shipped surfaces → Definition of Done  
 - Stale QUEUE → update on every merge  
 - Repeated multi-agent review graphs → named workflows at fixed gates  
+- 2026-08-22 yaml run: sleep-polling workflows, `HEAD`/main spec paths, untrusted worktree `mise.toml`, busy e2e port, SSH-only push → wait/path/mise/`gh`/port rules in this file
 
 When runs are boringly useful, consider next:
 
+- Parent-visible wait on workflow run ids (same as background bash `task_id`) so gates do not rely on delayed chat notifications
+- One-shot completion (no resume replay of already-handled `wf_…`)
 - `adm-scout` / `adm-persona` workflows (structured IDEAS rows + PERSONA-SCRIPTS feedback)
 - Scheduler-backed continuation (session ticks, like `/pr-babysit`)
 - Standalone `/launchpad-persona` skill
