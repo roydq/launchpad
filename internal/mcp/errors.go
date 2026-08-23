@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -24,7 +25,7 @@ func jsonAny(v any) (any, error) {
 	return out, nil
 }
 
-func jsonResult(v any, err error) (*mcpsdk.CallToolResult, any, error) {
+func jsonResult(ctx context.Context, cl *apiclient.Client, project string, v any, err error) (*mcpsdk.CallToolResult, any, error) {
 	if err != nil {
 		return nil, nil, wrapErr(err)
 	}
@@ -32,7 +33,7 @@ func jsonResult(v any, err error) (*mcpsdk.CallToolResult, any, error) {
 	if jerr != nil {
 		return nil, nil, wrapErr(jerr)
 	}
-	return nil, redactSecrets(out), nil
+	return nil, redactSecrets(out, liveSecretKeys(ctx, cl, project)), nil
 }
 
 func errMissingToken() error {

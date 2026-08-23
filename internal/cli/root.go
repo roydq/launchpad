@@ -1067,7 +1067,8 @@ Apply never deploys; run launchpad diff && launchpad deploy --wait.`,
 		Short: "Run the Launchpad MCP server on stdio",
 		Long: `Run the Launchpad MCP server on stdin/stdout (JSON-RPC).
 
-Logs go to stderr. Authenticate with LAUNCHPAD_TOKEN (same as the CLI).
+Stdout is the protocol stream; logs go to stderr. Authenticate with
+LAUNCHPAD_TOKEN (same as the CLI). See README.md and docs/DOMAIN.md.
 API URL defaults to LAUNCHPAD_API_URL or http://localhost:8080.
 
 Example host config:

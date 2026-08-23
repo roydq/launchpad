@@ -17,6 +17,9 @@ func TestMCPCommandPresent(t *testing.T) {
 			if !strings.Contains(strings.ToLower(c.Short), "stdio") {
 				t.Fatalf("short %q should mention stdio", c.Short)
 			}
+			if !strings.Contains(c.Long, "README") || !strings.Contains(c.Long, "DOMAIN") {
+				t.Fatalf("long should point at README/DOMAIN: %q", c.Long)
+			}
 			break
 		}
 	}

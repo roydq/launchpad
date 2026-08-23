@@ -331,6 +331,48 @@ func TestSecretConfigNotEchoedInChangesetTools(t *testing.T) {
 	}
 }
 
+func TestStickySecretRotateNotEchoed(t *testing.T) {
+	planted := "rotated-secret-value"
+	stickyCS := map[string]any{
+		"id": "cs",
+		"changes": []any{map[string]any{
+			"id":   "1",
+			"type": "config",
+			"payload": map[string]any{
+				"key":   "DATABASE_URL",
+				"value": planted,
+			},
+		}},
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/config") {
+			_ = json.NewEncoder(w).Encode(map[string]string{"DATABASE_URL": "***", "PORT": "8080"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(stickyCS)
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	stage := callTool(t, cs, "stage_config", map[string]any{
+		"set": map[string]any{"DATABASE_URL": planted},
+	})
+	if stage.IsError {
+		t.Fatalf("stage: %s", toolErrorText(t, stage))
+	}
+	got := callTool(t, cs, "get_changeset", nil)
+	if got.IsError {
+		t.Fatalf("get_changeset: %s", toolErrorText(t, got))
+	}
+	last := callTool(t, cs, "unstage_last", nil)
+	if last.IsError {
+		t.Fatalf("unstage: %s", toolErrorText(t, last))
+	}
+	body := mcpDump(t, stage) + mcpDump(t, got) + mcpDump(t, last)
+	if strings.Contains(body, planted) {
+		t.Fatalf("sticky rotate leaked: %s", body)
+	}
+}
+
 func mcpDump(t *testing.T, res *mcpsdk.CallToolResult) string {
 	t.Helper()
 	b, _ := json.Marshal(toolJSON(t, res))

@@ -215,7 +215,7 @@ func (r *runtime) stageConfig(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 		changes = append(changes, ch)
 	}
 	cs, err := cl.StageChanges(ctx, project, changes)
-	return jsonResult(cs, err)
+	return jsonResult(ctx, cl, project, cs, err)
 }
 
 type processHealthIn struct {
@@ -269,7 +269,7 @@ func (r *runtime) stageProcess(ctx context.Context, _ *mcpsdk.CallToolRequest, i
 		}
 	}
 	cs, err := cl.StageChanges(ctx, project, []map[string]any{ch})
-	return jsonResult(cs, err)
+	return jsonResult(ctx, cl, project, cs, err)
 }
 
 type stageImageIn struct {
@@ -287,7 +287,7 @@ func (r *runtime) stageImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 		return nil, nil, errJSON("image is required", nil)
 	}
 	cs, err := cl.StageChanges(ctx, project, []map[string]any{{"type": "image", "image": in.Image}})
-	return jsonResult(cs, err)
+	return jsonResult(ctx, cl, project, cs, err)
 }
 
 type stageScaleIn struct {
@@ -308,7 +308,7 @@ func (r *runtime) stageScale(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 	cs, err := cl.StageChanges(ctx, project, []map[string]any{
 		{"type": "scale", "process": in.Process, "quantity": in.Quantity},
 	})
-	return jsonResult(cs, err)
+	return jsonResult(ctx, cl, project, cs, err)
 }
 
 func (r *runtime) unstageLast(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, any, error) {
@@ -317,7 +317,7 @@ func (r *runtime) unstageLast(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 		return nil, nil, err
 	}
 	out, err := cl.UnstageLastChange(ctx, project)
-	return jsonResult(out, err)
+	return jsonResult(ctx, cl, project, out, err)
 }
 
 type okOut struct {
