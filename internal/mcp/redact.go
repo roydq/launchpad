@@ -97,7 +97,26 @@ func redactChange(c any, liveSecrets map[string]bool, lookupFailed bool) any {
 	return out
 }
 
+func changesetPin(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+	s, _ := m["environment"].(string)
+	return s
+}
+
+func clientForPin(cl *apiclient.Client, pin string) *apiclient.Client {
+	if cl == nil || pin == "" {
+		return cl
+	}
+	cp := *cl
+	cp.Environment = pin
+	return &cp
+}
+
 func redactWithLive(ctx context.Context, cl *apiclient.Client, project string, v any) any {
-	secrets, err := liveSecretKeys(ctx, cl, project)
+	lookup := clientForPin(cl, changesetPin(v))
+	secrets, err := liveSecretKeys(ctx, lookup, project)
 	return redactSecrets(v, secrets, err != nil)
 }

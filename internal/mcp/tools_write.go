@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/launchpad/launchpad/internal/domain"
@@ -194,7 +195,13 @@ func (r *runtime) stageConfig(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 		return nil, nil, errJSON("stage_config requires set and/or unset", nil)
 	}
 	var changes []map[string]any
-	for k, v := range in.Set {
+	keys := make([]string, 0, len(in.Set))
+	for k := range in.Set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := in.Set[k]
 		ch := map[string]any{"type": "config", "key": k, "value": v}
 		if in.Layer == "shared" {
 			ch["layer"] = "shared"

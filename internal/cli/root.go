@@ -1077,7 +1077,9 @@ Example host config:
   command = "launchpad"
   args = ["mcp"]
   env = { LAUNCHPAD_TOKEN = "${LAUNCHPAD_TOKEN}" }`,
-		Args: cobra.NoArgs,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srv := lpmcp.NewServer(lpmcp.Config{
 				APIURL:      cfg.APIURL,

@@ -236,9 +236,12 @@ func TestGetManifestOmitsDefaultEnvFilter(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotRawQuery = r.URL.RawQuery
+		envs := map[string]any{"dev": map[string]any{}, "staging": map[string]any{}}
+		if r.URL.Query().Get("environment") == "staging" {
+			envs = map[string]any{"staging": map[string]any{}}
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"version": 1, "project": "p",
-			"environments": map[string]any{"dev": map[string]any{}, "staging": map[string]any{}},
+			"version": 1, "project": "p", "environments": envs,
 		})
 	}))
 	t.Cleanup(ts.Close)
@@ -265,6 +268,11 @@ func TestGetManifestOmitsDefaultEnvFilter(t *testing.T) {
 	}
 	if !strings.Contains(gotRawQuery, "environment=staging") {
 		t.Fatalf("expected filter, query %s", gotRawQuery)
+	}
+	out = toolJSON(t, res)
+	envs, _ = out["environments"].(map[string]any)
+	if len(envs) != 1 || envs["staging"] == nil {
+		t.Fatalf("filtered environments=%v", out["environments"])
 	}
 }
 
@@ -309,8 +317,45 @@ func TestInspectJSONShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("last_deploy %T %v", out["last_deploy"], out["last_deploy"])
 	}
-	if ld["version"].(float64) != 3 || ld["artifact_ref"] != "img:v3" {
+	if ld["version"].(float64) != 3 || ld["artifact_ref"] != "img:v3" || ld["status"] != "deployed" {
 		t.Fatalf("last_deploy %v", ld)
+	}
+}
+
+func TestExplicitProjectWinsOverConfig(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "other", "status": "ready"})
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "configured"})
+	res := callTool(t, cs, "get_project", map[string]any{"project": "other"})
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	if gotPath != "/v1/projects/other" {
+		t.Fatalf("path %s", gotPath)
+	}
+}
+
+func TestListProjectsNoProjectContext(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/projects" {
+			t.Errorf("path %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode([]any{map[string]any{"name": "a"}})
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok"})
+	res := callTool(t, cs, "list_projects", nil)
+	if res.IsError {
+		t.Fatalf("%s", toolErrorText(t, res))
+	}
+	out := toolJSON(t, res)
+	ps, _ := out["projects"].([]any)
+	if len(ps) != 1 {
+		t.Fatalf("projects %v", out)
 	}
 }
 

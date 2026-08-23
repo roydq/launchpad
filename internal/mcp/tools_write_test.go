@@ -373,6 +373,46 @@ func TestStickySecretRotateNotEchoed(t *testing.T) {
 	}
 }
 
+func TestStickySecretUsesChangesetPinNotAmbientEnv(t *testing.T) {
+	planted := "staging-only-secret"
+	var configEnv string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/config") {
+			configEnv = r.Header.Get("X-Launchpad-Environment")
+			if configEnv == "staging" {
+				_ = json.NewEncoder(w).Encode(map[string]string{"DATABASE_URL": "***"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"PORT": "8080"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":          "cs",
+			"environment": "staging",
+			"changes": []any{map[string]any{
+				"id":   "1",
+				"type": "config",
+				"payload": map[string]any{
+					"key":   "DATABASE_URL",
+					"value": planted,
+				},
+			}},
+		})
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p", Environment: "dev"})
+	got := callTool(t, cs, "get_changeset", nil)
+	if got.IsError {
+		t.Fatalf("%s", toolErrorText(t, got))
+	}
+	if configEnv != "staging" {
+		t.Fatalf("live config env %q want staging pin", configEnv)
+	}
+	if strings.Contains(mcpDump(t, got), planted) {
+		t.Fatalf("pin mismatch leaked: %s", mcpDump(t, got))
+	}
+}
+
 func TestStickySecretRedactsWhenConfigLookupFails(t *testing.T) {
 	planted := "fail-open-secret"
 	stickyCS := map[string]any{
