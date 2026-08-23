@@ -33,17 +33,18 @@
 - Create: `internal/mcp/server_test.go`, `internal/mcp/tools_read_test.go`
 - Modify: `go.mod` / `go.sum` via `mise exec -- go get github.com/modelcontextprotocol/go-sdk@v1.7.0`
 
-**Allowed paths:** `internal/mcp/**`, `go.mod`, `go.sum`
+**Allowed paths:** `internal/mcp/**`, `pkg/apiclient/client.go` (GetLogs 4xx → `parseAPIError` only), `go.mod`, `go.sum`
 
-- [ ] Add `mcp.Config` with `APIURL`, `Token`, `Project`, `Environment`. Helpers: `ResolveProject(explicit string) (string, error)`, `ResolveEnv(explicit string) string` (default `dev`), `RequireToken() error`, `IsSensitiveEnv(name string) bool` (`prod`/`production`, case-insensitive), `Client() *apiclient.Client` setting `Environment` header from resolved env for the upcoming call (handlers set `client.Environment` from resolved env **per call**).
+- [ ] Add `mcp.Config` with `APIURL`, `Token`, `Project`, `Environment`. Helpers: `ResolveProject(explicit string) (string, error)`, `ResolveEnv(explicit string) string` (default `dev`), `RequireToken() error`, `IsSensitiveEnv(name string) bool` (`prod`/`production`, case-insensitive). Handlers set `client.Environment` from resolved env **per call** on tools that use the ambient header.
 - [ ] `FormatToolError(err error) string` — if `apiclient.APIError`, JSON object with `status`, `code`, `title`, `detail`, `hints`; else `{"detail": err.Error()}`. Never include `Authorization` or raw token.
-- [ ] `NewServer(cfg Config) *mcp.Server` — `Implementation{Name: "launchpad", Version: "v0.1.0"}`, set Instructions per spec, register **all v1 tools** (write tools may stub-panic only if Task 2 lands same PR immediately — prefer register write handlers in Task 2; Task 1 must register the **read** tools plus `healthz`). **This task registers read tools listed in the spec.** Write tools in Task 2. After Task 2 the exact set must match the spec. After Task 1, tests assert the read subset is present.
-- [ ] Read handlers: `healthz`, `list_projects`, `get_project`, `list_environments`, `get_environment`, `get_config`, `list_processes`, `list_releases`, `get_changeset`, `preview`, `get_manifest`, `get_job`, `get_logs`, `inspect`, `target_capabilities` — input structs with json/jsonschema tags; output JSON objects as spec; `healthz` skips token; others RequireToken + ResolveProject except `list_projects` (token only).
+- [ ] Narrow apiclient change: `GetLogs` 4xx returns `parseAPIError(...)` like `do()`, not `fmt.Errorf`.
+- [ ] `NewServer(cfg Config) *mcp.Server` — `Implementation{Name: "launchpad", Version: "v0.1.0"}`, set Instructions per spec. Task 1 registers **read** tools plus `healthz`. After Task 2 the exact set must match the spec.
+- [ ] Read handlers per spec scoping table: `healthz` (no token); `list_projects` (token only); `get_job` (token + `id`, no project); `target_capabilities` (token; project+env only if `type` omitted); `get_manifest` (token + project; **do not** ResolveEnv into envFilter — pass tool arg or `""`); remaining reads RequireToken + ResolveProject and ambient env.
 - [ ] `preview`: error if both release-pair and env-pair set; else pending.
 - [ ] `get_logs`: process default `web`.
-- [ ] `inspect`: compose GetProject, GetChangeset, latest release for env (copy logic from `internal/cli` latestReleaseForEnv — duplicate a small helper in mcp, do not import cli), ListProcesses.
-- [ ] Tests with `mcp.NewInMemoryTransports()` + `httptest.NewServer` mux returning canned JSON for the paths used. Cover: tool names for read tools; missing token; project required; preview conflict; healthz without token; 409 maps to isError with code.
-- [ ] Verify: `mise exec -- go test -C .worktrees/feat-mcp-server ./internal/mcp/...`
+- [ ] `inspect`: compose GetProject, GetChangeset, latest release for env (duplicate a small helper from CLI `latestReleaseForEnv` — do not import cli), ListProcesses. Output JSON **exactly** as spec (`project`/`environment` names; `last_deploy` null or `{version, artifact_ref, status}`).
+- [ ] Tests with `mcp.NewInMemoryTransports()` + `httptest.NewServer`. Cover: read tool names; missing token; project required on get_project but not get_job/list_projects; preview conflict; healthz without token; 409 maps to isError with code; get_logs 4xx includes `code`; get_manifest omit vs explicit filter (GET path query); inspect field types.
+- [ ] Verify: `mise exec -- go test -C .worktrees/feat-mcp-server ./internal/mcp/... ./pkg/apiclient/...`
 - [ ] Commit: `feat(mcp): add stdio server and read tools`
 
 ---
@@ -56,12 +57,14 @@
 
 **Allowed paths:** `internal/mcp/**`
 
-- [ ] Implement write tools from the spec: `create_project`, `create_environment`, `clone_environment`, `apply_manifest`, `stage_config`, `stage_process`, `stage_image`, `stage_scale`, `unstage_last`, `discard_changeset`, `deploy`, `rollback`, `promote`.
-- [ ] `apply_manifest`: require exactly one of `document` (object/`map[string]any` or json.RawMessage) or `yaml` string; parse yaml with `gopkg.in/yaml.v3` into `map[string]any`; call `ApplyManifest`; do not PushChangeset.
+- [ ] Implement write tools from the spec: `create_project`, `create_environment`, `clone_environment`, `apply_manifest`, `stage_config`, `stage_process`, `stage_image`, `stage_scale`, `unstage_last`, `discard_changeset`, `deploy`, `rollback`, `promote`. `create_project` does **not** call ResolveProject.
+- [ ] `apply_manifest`: require exactly one of `document` or `yaml` string; both/neither → MCP `isError` (not HTTP 400); parse yaml with `gopkg.in/yaml.v3` into `map[string]any`; call `ApplyManifest`; do not PushChangeset.
 - [ ] `stage_*`: build the same change maps as `internal/cli` (`type=config|image|scale|process.set|process.unset`) and `StageChanges`.
-- [ ] `deploy`: optional one-shot stage (image / config set / scale); load changeset; if nothing pending → error `nothing to deploy`; `PushChangeset`; if `wait` default true, poll GetJob 500ms until succeeded/failed/dead or `timeout_seconds` (default 300). **No stdout.**
+- [ ] `Wait *bool` on deploy/rollback/promote: nil → true; pointer false → skip poll. **No stdout.**
+- [ ] `deploy`: optional one-shot stage (image / config set / scale); load changeset; if nothing pending → `isError` `nothing to deploy`; `PushChangeset`; if wait, poll GetJob 500ms until succeeded/failed/dead or `timeout_seconds` (default 300). Success body per spec (`wait.status=succeeded` + final job). Timeout isError JSON includes `job_id` and `last_status`.
+- [ ] `promote`: omit/0 version → apiclient `version=0` (running in `from`, not highest).
 - [ ] Sensitive env: `deploy`/`rollback`/`promote` without `confirm` when env is prod/production → error before API call.
-- [ ] Tests: apply yaml vs document vs both; apply does not hit `/releases` or `/changeset/push`; deploy wait pending→succeeded; job failed → isError; production without confirm does not hit push.
+- [ ] Tests: apply yaml vs document vs both (`isError`); apply does not hit `/releases` or `/changeset/push`; **omit** `wait` → polls pending→succeeded and output has `wait.status`; explicit `wait=false` does not poll GetJob after push; job failed → isError with `job_id`; timeout 1s pending → isError `job_id`+`last_status`; production without confirm does not hit push.
 - [ ] After registration, test exact tool name set equals the spec union (read+write). No extra tools (`create_token` forbidden).
 - [ ] Verify: `mise exec -- go test -C .worktrees/feat-mcp-server ./internal/mcp/...`
 - [ ] Commit: `feat(mcp): add apply, stage, and deploy-wait tools`
@@ -91,8 +94,9 @@
 
 **Allowed paths:** `test/e2e/mcp_test.go`
 
-- [ ] `//go:build e2e` package `e2e`. Use `newAuthedClient` + in-process `internal/mcp.NewServer` with `mcp.NewInMemoryTransports()` **or** `CommandTransport` to the built CLI. Prefer in-process against `LAUNCHPAD_API_URL` so the test does not depend on `bin/` path; if using CommandTransport, `exec.Command` the same `launchpadBin` helper other tests use if one exists — otherwise in-process.
-- [ ] Recipe from spec Test strategy e2e bullets 1–7 (create, apply image, no job from apply, deploy wait, inspect/releases, secret needs_value without plaintext).
+- [ ] `//go:build e2e` package `e2e`. In-process `internal/mcp.NewServer` + `mcp.NewInMemoryTransports()` against `LAUNCHPAD_API_URL` for the apply/deploy recipe.
+- [ ] Recipe from spec Test strategy e2e bullets 1–8 (create without project context, apply image, no job from apply, deploy **omitting wait**, inspect `last_deploy.version`, secret needs_value without plaintext, get_manifest unfiltered when a second env exists).
+- [ ] **Required stdio smoke:** `mcp.CommandTransport{Command: exec.Command(cli, "mcp")}` where `cli = envOr("LAUNCHPAD_E2E_CLI", "./bin/launchpad")`; env `LAUNCHPAD_TOKEN` + `LAUNCHPAD_API_URL`; initialize + `healthz`.
 - [ ] Unique project name via `uniqueProjectName()`.
 - [ ] Verify with full e2e at Task 5 (this task adds the file; `mise exec -- go test -C .worktrees/feat-mcp-server -count=1 ./internal/... ./pkg/...` still green).
 - [ ] Commit: `test(e2e): MCP apply and deploy-wait on stub`
