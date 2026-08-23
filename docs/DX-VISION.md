@@ -235,7 +235,7 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 
 | Work | Spec / queue |
 |------|----------------|
-| **Next** | QUEUE `mcp-server` — thin MCP tools over OpenAPI + `apply` |
+| **Next** | QUEUE `mcp-server` — [spec](superpowers/specs/2026-08-23-mcp-server-design.md) (stdio tools + apply; ADM `feat/mcp-server`) |
 | Shipped | `launchpad.yaml` v1 — [PR #59](https://github.com/roydq/launchpad/pull/59) |
 | Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
