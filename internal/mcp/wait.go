@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
@@ -16,14 +17,29 @@ func waitEnabled(wait *bool) bool {
 
 func waitJobErr(detail string, job *apiclient.Job, cause error) error {
 	extra := map[string]any{}
+	var ae *apiclient.APIError
+	if errors.As(cause, &ae) && ae != nil {
+		extra["status"] = ae.Status
+		if ae.Code != "" {
+			extra["code"] = ae.Code
+		}
+		if ae.Title != "" {
+			extra["title"] = ae.Title
+		}
+		if ae.Detail != "" {
+			extra["detail"] = ae.Detail
+		}
+		if len(ae.Hints) > 0 {
+			extra["hints"] = ae.Hints
+		}
+	} else if cause != nil {
+		extra["cause"] = cause.Error()
+	}
 	if job != nil && job.ID != "" {
 		extra["job_id"] = job.ID
 		if job.Status != "" {
 			extra["last_status"] = job.Status
 		}
-	}
-	if cause != nil {
-		extra["cause"] = cause.Error()
 	}
 	return errJSON(detail, extra)
 }

@@ -143,9 +143,6 @@ func (r *runtime) applyManifest(ctx context.Context, _ *mcpsdk.CallToolRequest, 
 		if err := yaml.Unmarshal([]byte(in.YAML), &raw); err != nil {
 			return nil, nil, errJSON("parse yaml: "+err.Error(), nil)
 		}
-		if err := domain.ValidateManifestMap(raw); err != nil {
-			return nil, nil, wrapErr(err)
-		}
 		domain.StringifyConfigMaps(raw)
 		document = raw
 	} else {

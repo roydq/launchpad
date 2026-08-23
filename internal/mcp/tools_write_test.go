@@ -242,6 +242,9 @@ func TestDeployWaitGetJobErrorIncludesJobID(t *testing.T) {
 	if !strings.Contains(text, "j1") {
 		t.Fatalf("wait error missing job_id: %s", text)
 	}
+	if !strings.Contains(text, `"code":"internal"`) && !strings.Contains(text, `"code": "internal"`) {
+		t.Fatalf("wait error missing problem code: %s", text)
+	}
 }
 
 func TestDeployJobFailed(t *testing.T) {
