@@ -64,7 +64,7 @@ type createEnvironmentIn struct {
 	Ephemeral   bool   `json:"ephemeral,omitempty"`
 }
 
-func (r *runtime) createEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest, in createEnvironmentIn) (*mcpsdk.CallToolResult, *apiclient.Environment, error) {
+func (r *runtime) createEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest, in createEnvironmentIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -84,7 +84,11 @@ func (r *runtime) createEnvironment(ctx context.Context, _ *mcpsdk.CallToolReque
 	if err != nil {
 		return nil, nil, wrapErr(err)
 	}
-	return nil, env, nil
+	v, err := jsonAny(env)
+	if err != nil {
+		return nil, nil, wrapErr(err)
+	}
+	return nil, v, nil
 }
 
 type cloneEnvironmentIn struct {
@@ -97,7 +101,7 @@ type cloneEnvironmentIn struct {
 	Ephemeral   bool   `json:"ephemeral,omitempty"`
 }
 
-func (r *runtime) cloneEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest, in cloneEnvironmentIn) (*mcpsdk.CallToolResult, *apiclient.CloneEnvironmentResult, error) {
+func (r *runtime) cloneEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest, in cloneEnvironmentIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -109,7 +113,11 @@ func (r *runtime) cloneEnvironment(ctx context.Context, _ *mcpsdk.CallToolReques
 	if err != nil {
 		return nil, nil, wrapErr(err)
 	}
-	return nil, out, nil
+	v, err := jsonAny(out)
+	if err != nil {
+		return nil, nil, wrapErr(err)
+	}
+	return nil, v, nil
 }
 
 type applyManifestIn struct {
@@ -177,7 +185,7 @@ type stageConfigIn struct {
 	Secret      bool              `json:"secret,omitempty"`
 }
 
-func (r *runtime) stageConfig(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageConfigIn) (*mcpsdk.CallToolResult, *apiclient.Changeset, error) {
+func (r *runtime) stageConfig(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageConfigIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -207,10 +215,7 @@ func (r *runtime) stageConfig(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 		changes = append(changes, ch)
 	}
 	cs, err := cl.StageChanges(ctx, project, changes)
-	if err != nil {
-		return nil, nil, wrapErr(err)
-	}
-	return nil, cs, nil
+	return jsonResult(cs, err)
 }
 
 type processHealthIn struct {
@@ -230,7 +235,7 @@ type stageProcessIn struct {
 	Health      *processHealthIn `json:"health,omitempty"`
 }
 
-func (r *runtime) stageProcess(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageProcessIn) (*mcpsdk.CallToolResult, *apiclient.Changeset, error) {
+func (r *runtime) stageProcess(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageProcessIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -264,10 +269,7 @@ func (r *runtime) stageProcess(ctx context.Context, _ *mcpsdk.CallToolRequest, i
 		}
 	}
 	cs, err := cl.StageChanges(ctx, project, []map[string]any{ch})
-	if err != nil {
-		return nil, nil, wrapErr(err)
-	}
-	return nil, cs, nil
+	return jsonResult(cs, err)
 }
 
 type stageImageIn struct {
@@ -276,7 +278,7 @@ type stageImageIn struct {
 	Image       string `json:"image" jsonschema:"container image ref"`
 }
 
-func (r *runtime) stageImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageImageIn) (*mcpsdk.CallToolResult, *apiclient.Changeset, error) {
+func (r *runtime) stageImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageImageIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -285,10 +287,7 @@ func (r *runtime) stageImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 		return nil, nil, errJSON("image is required", nil)
 	}
 	cs, err := cl.StageChanges(ctx, project, []map[string]any{{"type": "image", "image": in.Image}})
-	if err != nil {
-		return nil, nil, wrapErr(err)
-	}
-	return nil, cs, nil
+	return jsonResult(cs, err)
 }
 
 type stageScaleIn struct {
@@ -298,7 +297,7 @@ type stageScaleIn struct {
 	Quantity    int    `json:"quantity"`
 }
 
-func (r *runtime) stageScale(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageScaleIn) (*mcpsdk.CallToolResult, *apiclient.Changeset, error) {
+func (r *runtime) stageScale(ctx context.Context, _ *mcpsdk.CallToolRequest, in stageScaleIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -309,22 +308,16 @@ func (r *runtime) stageScale(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 	cs, err := cl.StageChanges(ctx, project, []map[string]any{
 		{"type": "scale", "process": in.Process, "quantity": in.Quantity},
 	})
-	if err != nil {
-		return nil, nil, wrapErr(err)
-	}
-	return nil, cs, nil
+	return jsonResult(cs, err)
 }
 
-func (r *runtime) unstageLast(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, *apiclient.UnstageLastResult, error) {
+func (r *runtime) unstageLast(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
 	}
 	out, err := cl.UnstageLastChange(ctx, project)
-	if err != nil {
-		return nil, nil, wrapErr(err)
-	}
-	return nil, out, nil
+	return jsonResult(out, err)
 }
 
 type okOut struct {

@@ -73,19 +73,23 @@ type listEnvironmentsOut struct {
 	Environments []apiclient.Environment `json:"environments"`
 }
 
-func (r *runtime) listEnvironments(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, listEnvironmentsOut, error) {
+func (r *runtime) listEnvironments(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
-		return nil, listEnvironmentsOut{}, err
+		return nil, nil, err
 	}
 	envs, err := cl.ListEnvironments(ctx, project)
 	if err != nil {
-		return nil, listEnvironmentsOut{}, wrapErr(err)
+		return nil, nil, wrapErr(err)
 	}
 	if envs == nil {
 		envs = []apiclient.Environment{}
 	}
-	return nil, listEnvironmentsOut{Environments: envs}, nil
+	v, err := jsonAny(listEnvironmentsOut{Environments: envs})
+	if err != nil {
+		return nil, nil, wrapErr(err)
+	}
+	return nil, v, nil
 }
 
 type getEnvironmentIn struct {
@@ -94,7 +98,7 @@ type getEnvironmentIn struct {
 	Name        string `json:"name,omitempty" jsonschema:"environment name (default resolved env)"`
 }
 
-func (r *runtime) getEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest, in getEnvironmentIn) (*mcpsdk.CallToolResult, *apiclient.Environment, error) {
+func (r *runtime) getEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest, in getEnvironmentIn) (*mcpsdk.CallToolResult, any, error) {
 	project, env, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -107,7 +111,11 @@ func (r *runtime) getEnvironment(ctx context.Context, _ *mcpsdk.CallToolRequest,
 	if err != nil {
 		return nil, nil, wrapErr(err)
 	}
-	return nil, out, nil
+	v, err := jsonAny(out)
+	if err != nil {
+		return nil, nil, wrapErr(err)
+	}
+	return nil, v, nil
 }
 
 type getConfigIn struct {
@@ -169,7 +177,7 @@ func (r *runtime) listReleases(ctx context.Context, _ *mcpsdk.CallToolRequest, i
 	return nil, listReleasesOut{Releases: rels}, nil
 }
 
-func (r *runtime) getChangeset(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, *apiclient.Changeset, error) {
+func (r *runtime) getChangeset(ctx context.Context, _ *mcpsdk.CallToolRequest, in projectIn) (*mcpsdk.CallToolResult, any, error) {
 	project, _, cl, err := r.scoped(in.Project, in.Environment)
 	if err != nil {
 		return nil, nil, err
@@ -178,7 +186,11 @@ func (r *runtime) getChangeset(ctx context.Context, _ *mcpsdk.CallToolRequest, i
 	if err != nil {
 		return nil, nil, wrapErr(err)
 	}
-	return nil, cs, nil
+	v, err := jsonAny(cs)
+	if err != nil {
+		return nil, nil, wrapErr(err)
+	}
+	return nil, v, nil
 }
 
 type previewIn struct {

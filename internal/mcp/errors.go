@@ -5,7 +5,35 @@ import (
 	"errors"
 
 	"github.com/launchpad/launchpad/pkg/apiclient"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// jsonAny re-encodes v so json.RawMessage fields become objects, not byte arrays.
+func jsonAny(v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func jsonResult(v any, err error) (*mcpsdk.CallToolResult, any, error) {
+	if err != nil {
+		return nil, nil, wrapErr(err)
+	}
+	out, jerr := jsonAny(v)
+	if jerr != nil {
+		return nil, nil, wrapErr(jerr)
+	}
+	return nil, out, nil
+}
 
 func errMissingToken() error {
 	b, _ := json.Marshal(map[string]any{
