@@ -190,7 +190,7 @@ func (r *runtime) getChangeset(ctx context.Context, _ *mcpsdk.CallToolRequest, i
 	if err != nil {
 		return nil, nil, wrapErr(err)
 	}
-	return nil, redactSecrets(v, liveSecretKeys(ctx, cl, project)), nil
+	return nil, redactWithLive(ctx, cl, project, v), nil
 }
 
 type previewIn struct {

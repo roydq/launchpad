@@ -7,30 +7,29 @@ import (
 	"github.com/launchpad/launchpad/pkg/apiclient"
 )
 
-func liveSecretKeys(ctx context.Context, cl *apiclient.Client, project string) map[string]bool {
-	out := map[string]bool{}
+func liveSecretKeys(ctx context.Context, cl *apiclient.Client, project string) (map[string]bool, error) {
 	if cl == nil || project == "" {
-		return out
+		return nil, errJSON("cannot load live config to redact secrets", nil)
 	}
-	for _, layer := range []string{"", "shared", "service"} {
-		cfg, err := cl.GetConfigLayer(ctx, project, layer)
-		if err != nil {
-			continue
-		}
-		for k, v := range cfg {
-			if v == domain.SecretSentinel {
-				out[k] = true
-			}
+	cfg, err := cl.GetConfig(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for k, v := range cfg {
+		if v == domain.SecretSentinel {
+			out[k] = true
 		}
 	}
-	return out
+	return out, nil
 }
 
 // redactSecrets walks MCP JSON output and replaces secret config values with the
 // API sentinel. GET /changeset still stores plaintext payloads; MCP must not
 // echo them into agent transcripts. liveSecrets are keys whose live config is
-// already secret (sticky) even when the staged payload omits sensitivity.
-func redactSecrets(v any, liveSecrets map[string]bool) any {
+// already secret (sticky). lookupFailed is fail-closed: omitted sensitivity
+// is treated as secret so a config GET error cannot leak sticky rotates.
+func redactSecrets(v any, liveSecrets map[string]bool, lookupFailed bool) any {
 	if liveSecrets == nil {
 		liveSecrets = map[string]bool{}
 	}
@@ -38,23 +37,23 @@ func redactSecrets(v any, liveSecrets map[string]bool) any {
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, val := range x {
-			out[k] = redactSecrets(val, liveSecrets)
+			out[k] = redactSecrets(val, liveSecrets, lookupFailed)
 		}
 		if changes, ok := out["changes"].([]any); ok {
 			redacted := make([]any, len(changes))
 			for i, c := range changes {
-				redacted[i] = redactChange(c, liveSecrets)
+				redacted[i] = redactChange(c, liveSecrets, lookupFailed)
 			}
 			out["changes"] = redacted
 		}
 		if ch, ok := out["change"]; ok {
-			out["change"] = redactChange(ch, liveSecrets)
+			out["change"] = redactChange(ch, liveSecrets, lookupFailed)
 		}
 		return out
 	case []any:
 		out := make([]any, len(x))
 		for i, e := range x {
-			out[i] = redactSecrets(e, liveSecrets)
+			out[i] = redactSecrets(e, liveSecrets, lookupFailed)
 		}
 		return out
 	default:
@@ -62,7 +61,7 @@ func redactSecrets(v any, liveSecrets map[string]bool) any {
 	}
 }
 
-func redactChange(c any, liveSecrets map[string]bool) any {
+func redactChange(c any, liveSecrets map[string]bool, lookupFailed bool) any {
 	m, ok := c.(map[string]any)
 	if !ok {
 		return c
@@ -80,9 +79,12 @@ func redactChange(c any, liveSecrets map[string]bool) any {
 		return out
 	}
 	sens, _ := payload["sensitivity"].(string)
+	if sens == domain.SensitivityPlain {
+		return out
+	}
 	key, _ := payload["key"].(string)
 	sticky := key != "" && liveSecrets[key]
-	if domain.IsSecret(sens) || (sens == "" && sticky) {
+	if domain.IsSecret(sens) || lookupFailed || sticky {
 		cp := make(map[string]any, len(payload))
 		for k, val := range payload {
 			cp[k] = val
@@ -93,4 +95,9 @@ func redactChange(c any, liveSecrets map[string]bool) any {
 		out["payload"] = cp
 	}
 	return out
+}
+
+func redactWithLive(ctx context.Context, cl *apiclient.Client, project string, v any) any {
+	secrets, err := liveSecretKeys(ctx, cl, project)
+	return redactSecrets(v, secrets, err != nil)
 }

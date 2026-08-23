@@ -373,6 +373,40 @@ func TestStickySecretRotateNotEchoed(t *testing.T) {
 	}
 }
 
+func TestStickySecretRedactsWhenConfigLookupFails(t *testing.T) {
+	planted := "fail-open-secret"
+	stickyCS := map[string]any{
+		"id": "cs",
+		"changes": []any{map[string]any{
+			"id":   "1",
+			"type": "config",
+			"payload": map[string]any{
+				"key":   "DATABASE_URL",
+				"value": planted,
+			},
+		}},
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/config") {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"title": "error", "code": "internal"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(stickyCS)
+	}))
+	t.Cleanup(ts.Close)
+	cs := connectMCP(t, Config{APIURL: ts.URL, Token: "tok", Project: "p"})
+	got := callTool(t, cs, "get_changeset", nil)
+	if got.IsError {
+		t.Fatalf("get_changeset: %s", toolErrorText(t, got))
+	}
+	body := mcpDump(t, got)
+	if strings.Contains(body, planted) {
+		t.Fatalf("config lookup failure leaked sticky secret: %s", body)
+	}
+}
+
 func mcpDump(t *testing.T, res *mcpsdk.CallToolResult) string {
 	t.Helper()
 	b, _ := json.Marshal(toolJSON(t, res))

@@ -33,7 +33,7 @@ func jsonResult(ctx context.Context, cl *apiclient.Client, project string, v any
 	if jerr != nil {
 		return nil, nil, wrapErr(jerr)
 	}
-	return nil, redactSecrets(out, liveSecretKeys(ctx, cl, project)), nil
+	return nil, redactWithLive(ctx, cl, project, out), nil
 }
 
 func errMissingToken() error {

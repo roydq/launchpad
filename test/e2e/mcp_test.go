@@ -216,6 +216,13 @@ func TestMCPApplySecretNeedsValue(t *testing.T) {
 	if !found {
 		t.Fatalf("needs_value %v", out["needs_value"])
 	}
+	blob := mcpText(t, res)
+	if b, err := json.Marshal(out); err == nil {
+		blob += string(b)
+	}
+	if strings.Contains(blob, "postgres://") {
+		t.Fatalf("secret material in apply output: %s", blob)
+	}
 }
 
 func TestMCPStdioListProjects(t *testing.T) {
