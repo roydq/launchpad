@@ -120,7 +120,7 @@ Invoke `/launchpad-feature` at the start of agent-driven feature work.
 
 Invoke via `/launchpad-feature`, `/launchpad-autonomous`, `/launchpad-domain`, `/launchpad-dev`, or let auto-invocation match the skill description.
 
-**ADM protocol:** `docs/AUTONOMOUS-MODE.md` — only when the user explicitly authorizes autonomous mode. Named modes: single-feature (default), integration-stack, queue-drain. Work queue / ideas / persona: `docs/superpowers/program/`. Snapshot helper: `scripts/adm-status`. Gate workflows (prefer at design/review/closeout): `.grok/workflows/` — `adm-spec-review`, `adm-review`, `project-audit` (needs folder trust).
+**ADM protocol:** `docs/AUTONOMOUS-MODE.md` — only when the user explicitly authorizes autonomous mode. Named modes: single-feature (default), integration-stack, queue-drain. Work queue / ideas / persona: `docs/superpowers/program/`. Snapshot helper: `scripts/adm-status`. Gate workflows (prefer at design/review/closeout): `.grok/workflows/` — `adm-spec-review`, `adm-review`, `project-audit` (needs folder trust). Pass **worktree-prefixed** spec/plan paths and `adm-review` `target=feat/<name>` (not session `HEAD`). Do not sleep-poll workflow run ids.
 
 ## Suggested future tooling (not yet implemented)
 

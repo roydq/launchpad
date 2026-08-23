@@ -20,6 +20,15 @@ mise install
 mise exec -- go version
 ```
 
+Git worktrees (`.worktrees/feat-*`) each have a `mise.toml`. Prefer verifying from the **trusted repo root**:
+
+```bash
+mise exec -- go test -C .worktrees/feat-<name> ./...
+mise exec -- go vet -C .worktrees/feat-<name> ./...
+```
+
+Only `mise trust .worktrees/feat-<name>/mise.toml` if you `cd` into that tree.
+
 ## Build and test
 
 ```bash
@@ -88,6 +97,7 @@ Create projects with `--target kubernetes --namespace <ns>`. Resources use prefi
 | `LAUNCHPAD_BOOTSTRAP_TOKEN` | First-run admin bootstrap |
 | `LAUNCHPAD_SECRETS_KEY` | Base64 32-byte AES key for secret config at rest (API **and** worker). Required for `config set --secret`. Generate: `openssl rand -base64 32` |
 | `LAUNCHPAD_API_ADDR` | API listen (default `:8080`) |
+| `LAUNCHPAD_E2E_API_ADDR` | Stub e2e API bind (default: first free port in `18080-18085`) |
 | `LAUNCHPAD_ENABLE_KUBERNETES` | `false` to use stub only |
 
 ## Debugging deploy failures
@@ -102,4 +112,4 @@ Create projects with `--target kubernetes --namespace <ns>`. Resources use prefi
 - [ ] `mise exec -- make test` passes
 - [ ] `mise exec -- make build` passes
 - [ ] Deploy flow verified on stub if worker/service/target/jobs changed
-- [ ] For behavioral deploy-flow changes: `make e2e-stub` (canonical automated path — real API + worker, stub target)
+- [ ] For behavioral deploy-flow changes: `make e2e-stub` (canonical automated path — real API + worker, stub target). If `18080` is already bound, the harness picks another port unless `LAUNCHPAD_E2E_API_ADDR` is set.

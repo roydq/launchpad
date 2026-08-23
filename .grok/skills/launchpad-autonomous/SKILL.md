@@ -29,9 +29,11 @@ description: >
 
 | Workflow | Gate | Example |
 |----------|------|---------|
-| `adm-spec-review` | Before self-approve | `/workflow adm-spec-review {"spec_path":"docs/superpowers/specs/….md"}` |
-| `adm-review` | After implementer / before PR | `/workflow adm-review {"target":"HEAD","base":"origin/main"}` |
+| `adm-spec-review` | Before self-approve | worktree-prefixed `spec_path` / `plan_path` (not `main`'s `docs/`) |
+| `adm-review` | After implementer / before PR | `target` = `feat/<name>` (not session `HEAD`); same worktree spec path |
 | `project-audit` | Optional L4 / stack closeout | `/workflow project-audit {"apply_docs":false}` |
+
+**Do not sleep-poll workflows.** Run ids are not bash `task_id`s; treat delayed/resume completions as idempotent. Verify with `mise exec -- go test -C .worktrees/feat-<name> …` from the trusted repo root.
 
 See `docs/AUTONOMOUS-MODE.md` § **Workflows as ADM subroutines**. Project `.grok/workflows/` needs folder trust (`/hooks-trust`); else install under `~/.grok/workflows/`.
 
@@ -58,10 +60,10 @@ Restate mode + knobs in the first turn.
 1. **Mode + budget** — single-feature | integration-stack | queue-drain; merge policy; stop condition.
 2. **Scope** — user-named feature or top `ready` row in `QUEUE.md` (cross-check DX-VISION); refuse `deferred`/`blocked` without override.
 3. **DoD** — acceptance criteria on the row / plan / spec before code.
-4. **Design** — spec + plan; recommended approach; **prefer `adm-spec-review` workflow**; QUEUE → `designing`. On `pass=false`, hard stop.
-5. **Branch / worktree** — never on `main`; **implementers in `.worktrees/feat-<name>`**; QUEUE Branch column = lease. QUEUE → `implementing`.
-6. **Implement** — plan order; one Go layer per commit; tests with code; **push after each task**.
-7. **Review** — **prefer `adm-review` workflow** (spec + quality + adversarial). Trivial 1–2 file tasks: one combined subagent OK. On `approve=false`, return `must_fix` to implementer.
+4. **Design** — spec + plan; recommended approach; **prefer `adm-spec-review` workflow** with **worktree-prefixed paths**; QUEUE → `designing`. On `pass=false`, hard stop (fix spec and re-run, or escalate). Do not sleep-poll the run.
+5. **Branch / worktree** — never on `main`; **implementers in `.worktrees/feat-<name>`**; QUEUE Branch column = lease. QUEUE → `implementing`. Verify from repo root (`go test -C .worktrees/…`); `mise trust` the worktree toml only if you `cd` into it.
+6. **Implement** — plan order; one Go layer per commit; tests with code; **push after each task** (`gh auth setup-git` if SSH fails).
+7. **Review** — **prefer `adm-review` workflow** with `target=feat/<name>` (not `HEAD` on a `main` checkout). Trivial 1–2 file tasks: one combined subagent OK. On `approve=false`, return `must_fix` to implementer. Delayed completion notifications are idempotent.
 8. **Docs sync** — DOMAIN / OpenAPI / DX-VISION / QUEUE / plan checkboxes.
 9. **Verify** — ladder L0–L4; **L1 e2e-stub required** for service/jobs/target/deploy CLI; always `mise exec --`. Optional L4: `project-audit` report-only.
 10. **Persona** — CLI/deploy UX: PERSONA-SCRIPTS → `feedback/`; stack/drain: S1 once before final PR to main (L1.5).
@@ -98,7 +100,7 @@ ADM authorized: integration-stack — base adm/queue-2026-07-21; merge into adm;
 ADM authorized: queue-drain — remaining ready items; merge into adm/…; stop when only deferred remain
 
 # Gates (from orchestrator after design / implement):
-/workflow adm-spec-review {"spec_path":"docs/superpowers/specs/<name>-design.md","plan_path":"docs/superpowers/plans/<name>.md"}
-/workflow adm-review {"target":"HEAD","base":"origin/main","spec_path":"docs/superpowers/specs/<name>-design.md"}
+/workflow adm-spec-review {"spec_path":".worktrees/feat-<name>/docs/superpowers/specs/<name>-design.md","plan_path":".worktrees/feat-<name>/docs/superpowers/plans/<name>.md"}
+/workflow adm-review {"target":"feat/<name>","base":"origin/main","spec_path":".worktrees/feat-<name>/docs/superpowers/specs/<name>-design.md"}
 /workflow project-audit {"apply_docs":false}
 ```
