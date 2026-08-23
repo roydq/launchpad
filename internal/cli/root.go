@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/launchpad/launchpad/internal/domain"
+	lpmcp "github.com/launchpad/launchpad/internal/mcp"
 	"github.com/launchpad/launchpad/pkg/apiclient"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 )
 
@@ -1059,6 +1061,32 @@ Apply never deploys; run launchpad diff && launchpad deploy --wait.`,
 	applyCmd.Flags().String("env", "", "selected environment (default ambient)")
 	applyCmd.Flags().Bool("use", false, "write project context even if the project already existed")
 	root.AddCommand(applyCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:   "mcp",
+		Short: "Run the Launchpad MCP server on stdio",
+		Long: `Run the Launchpad MCP server on stdin/stdout (JSON-RPC).
+
+Logs go to stderr. Authenticate with LAUNCHPAD_TOKEN (same as the CLI).
+API URL defaults to LAUNCHPAD_API_URL or http://localhost:8080.
+
+Example host config:
+
+  [mcp_servers.launchpad]
+  command = "launchpad"
+  args = ["mcp"]
+  env = { LAUNCHPAD_TOKEN = "${LAUNCHPAD_TOKEN}" }`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			srv := lpmcp.NewServer(lpmcp.Config{
+				APIURL:      cfg.APIURL,
+				Token:       cfg.Token,
+				Project:     cfg.Project,
+				Environment: cfg.Environment,
+			})
+			return srv.Run(cmd.Context(), &mcpsdk.StdioTransport{})
+		},
+	})
 
 	root.AddCommand(&cobra.Command{
 		Use:   "completion [bash|zsh|fish|powershell]",
