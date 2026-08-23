@@ -528,6 +528,45 @@ func (c *Client) UnstageLastChange(ctx context.Context, project string) (*Unstag
 	return &out, nil
 }
 
+// ApplyReport is the POST …/manifest/apply response.
+type ApplyReport struct {
+	Project            string `json:"project"`
+	Environment        string `json:"environment"`
+	CreatedProject     bool   `json:"created_project"`
+	CreatedEnvironment bool   `json:"created_environment"`
+	Staged             []string `json:"staged"`
+	Unchanged          []string `json:"unchanged"`
+	Warnings           []string `json:"warnings"`
+	NeedsValue         []string `json:"needs_value"`
+	Changeset          *struct {
+		ID          string `json:"id"`
+		ChangeCount int    `json:"change_count"`
+	} `json:"changeset"`
+}
+
+func (c *Client) GetManifest(ctx context.Context, project, envFilter string) (map[string]any, error) {
+	path := "/v1/projects/" + project + "/manifest"
+	if envFilter != "" {
+		path += "?environment=" + url.QueryEscape(envFilter)
+	}
+	var out map[string]any
+	_, err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+func (c *Client) ApplyManifest(ctx context.Context, project, env string, document any) (*ApplyReport, error) {
+	body := map[string]any{"document": document}
+	if env != "" {
+		body["environment"] = env
+	}
+	var out ApplyReport
+	_, err := c.do(ctx, http.MethodPost, "/v1/projects/"+project+"/manifest/apply", body, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) GetJob(ctx context.Context, id string) (*Job, error) {
 	var job Job
 	_, err := c.do(ctx, http.MethodGet, "/v1/jobs/"+id, nil, &job)

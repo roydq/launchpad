@@ -55,6 +55,7 @@ func main() {
 	configSvc := service.NewConfigService(st, projectSvc)
 	releaseSvc := service.NewReleaseService(st, projectSvc)
 	changesetSvc := service.NewChangesetService(st, projectSvc, releaseSvc)
+	manifestSvc := service.NewManifestService(st, projectSvc, configSvc, changesetSvc, releaseSvc)
 
 	registry := target.NewRegistry()
 	registry.Register(stub.New())
@@ -68,7 +69,7 @@ func main() {
 	}
 	runtimeSvc := service.NewRuntimeService(st, projectSvc, registry)
 
-	server := api.NewServer(projectSvc, configSvc, releaseSvc, changesetSvc, runtimeSvc, authSvc, st)
+	server := api.NewServer(projectSvc, configSvc, releaseSvc, changesetSvc, manifestSvc, runtimeSvc, authSvc, st)
 
 	addr := envOr("LAUNCHPAD_API_ADDR", ":8080")
 	httpServer := &http.Server{Addr: addr, Handler: server.Routes()}

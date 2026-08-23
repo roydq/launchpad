@@ -48,6 +48,8 @@ launchpad config set PORT=3000
 launchpad config get              # resolved: LOG_LEVEL + PORT
 launchpad diff
 launchpad deploy -m "initial"
+# Optional: check the project file into git
+# launchpad export && launchpad apply -f launchpad.yaml   # stages; then diff && deploy
 
 # Second environment (clone plain config from dev; secrets listed as needs_value)
 launchpad env clone dev staging

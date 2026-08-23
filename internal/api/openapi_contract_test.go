@@ -34,6 +34,8 @@ var expectedOpenAPIPaths = []string{
 	"/v1/projects/{project}/changeset/changes/last",
 	"/v1/projects/{project}/changeset/push",
 	"/v1/projects/{project}/preview",
+	"/v1/projects/{project}/manifest",
+	"/v1/projects/{project}/manifest/apply",
 }
 
 func TestOpenAPIContractCoversRoutes(t *testing.T) {
@@ -105,6 +107,8 @@ func TestHandlersRoutesMentionedInOpenAPIList(t *testing.T) {
 		`"/projects/{project}/changeset/changes/last"`,
 		`"/projects/{project}/changeset/push"`,
 		`"/projects/{project}/preview"`,
+		`"/projects/{project}/manifest"`,
+		`"/projects/{project}/manifest/apply"`,
 		`"/healthz"`,
 	}
 	for _, n := range needles {
