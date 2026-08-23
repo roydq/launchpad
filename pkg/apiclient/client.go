@@ -296,7 +296,7 @@ func (c *Client) GetLogs(ctx context.Context, project, process string) (string, 
 		return "", err
 	}
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("GET %s: status %d: %s", path, resp.StatusCode, truncate(string(data), 200))
+		return "", parseAPIError(http.MethodGet, path, resp.StatusCode, data)
 	}
 	return string(data), nil
 }
