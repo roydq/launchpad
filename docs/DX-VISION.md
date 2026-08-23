@@ -236,7 +236,7 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 | Work | Spec / queue |
 |------|----------------|
 | **Next** | Surfaces (docs site → TUI → dashboard); parked: OIDC, multi-service, bindings |
-| In PR | QUEUE `mcp-server` — [spec](superpowers/specs/2026-08-23-mcp-server-design.md) (`feat/mcp-server`) |
+| In PR | QUEUE `mcp-server` — [PR #61](https://github.com/roydq/launchpad/pull/61) · [spec](superpowers/specs/2026-08-23-mcp-server-design.md) |
 | Shipped | `launchpad.yaml` v1 — [PR #59](https://github.com/roydq/launchpad/pull/59) |
 | Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
