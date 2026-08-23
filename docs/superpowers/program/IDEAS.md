@@ -8,6 +8,9 @@
 
 | Date | Source | Idea / edge case | Severity | Suggested track | Notes |
 |------|--------|------------------|----------|-----------------|-------|
+| 2026-08-23 | adm-mcp | Streamable HTTP MCP in `cmd/api` | P3 | A/C | Spec v1 is stdio only; hosted agents would need this + OAuth |
+| 2026-08-23 | adm-mcp | `process.apply` MCP tool with Procfile text | P3 | A | File path was out of scope; agents could pass contents |
+| 2026-08-23 | adm-mcp | MCP resources for logs / manifest URIs | P3 | C | Tools-only v1; resources later |
 | 2026-07-18 | bootstrap | Seeded from DX-VISION “Later” / non-goals — see backlog rows below as themes, not tickets | — | — | Prefer QUEUE for ordered work |
 | 2026-07-18 | dx-vision | Diff env↔env | P2 | A | Already on QUEUE as `diff-env-env` |
 | 2026-07-18 | dx-vision | Unstage last mutation | P2 | A | QUEUE `unstage-last` |

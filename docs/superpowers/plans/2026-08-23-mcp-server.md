@@ -1,6 +1,6 @@
 # Launchpad MCP server Implementation Plan
 
-> **Status: In Progress** — branch `feat/mcp-server`, started 2026-08-23
+> **Status: Completed (ready for PR)** — branch `feat/mcp-server`
 
 > **For agentic workers:** Read `docs/FEATURE-DEVELOPMENT.md` and `docs/superpowers/specs/2026-08-23-mcp-server-design.md`. Use `/launchpad-dev` for verification (`mise exec --`). Commit after each task with the message specified below. Worktree: `.worktrees/feat-mcp-server`. Do not edit other agents' branches or `main`. Verify from repo root with `mise exec -- go test -C .worktrees/feat-mcp-server …`. Do not `cd` into the worktree without `mise trust` first.
 
