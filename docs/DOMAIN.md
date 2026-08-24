@@ -765,6 +765,7 @@ GET    /healthz
 | `launchpad target capabilities` | Discover health + extension schema for ambient env’s target |
 | `launchpad promote --from … [--to …]` | Cross-env promote; config re-resolved in target |
 | `launchpad export` / `launchpad apply` | `launchpad.yaml` v1: export live state; apply stages (never deploys; secrets as keys only) |
+| `launchpad mcp` | stdio MCP tools over the shipped API (including `apply_manifest`); token via `LAUNCHPAD_TOKEN`; no new REST |
 
 ### Planned (deltas from shipped)
 
@@ -814,7 +815,7 @@ On `POST /v1/projects`:
 | **3** | Planned | Service-aware changeset; ReleaseSet; coordination modes | Multi-service staging and deploy — **parked** until a project needs a second independently versioned artifact ([queue disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md)) |
 | **4** | Planned | Bindings and ref resolution | Service linking — **parked** with phase 3 (not an independent program) |
 | **5** | **Shipped** (primary-service promote) | Promotion API + CLI | staging → production flow |
-| **6** | **Shipped (v1)** | `launchpad.yaml` import/export of the **shipped** model | CI, agent, and tool integration — single primary service, no GitOps reconcile. MCP follows. |
+| **6** | **Shipped (v1)** | `launchpad.yaml` import/export of the **shipped** model; MCP stdio client (`launchpad mcp`) | CI, agent, and tool integration — single primary service, no GitOps reconcile. No new REST for MCP. |
 | **Runtime depth** | **Shipped** | Process commands + Procfile; portable health; immutable config materialization; target extensions + capabilities | Multi-process images, real deploy success, multi-backend power without domain pollution — [spec](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
 Each phase updates API, store, worker, CLI, and target interface together.

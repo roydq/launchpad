@@ -138,10 +138,23 @@ type Process struct {
 	Expose   string `json:"expose"`
 }
 
+type ProcessHealth struct {
+	Type                string `json:"type"`
+	Path                string `json:"path,omitempty"`
+	Port                *int   `json:"port,omitempty"`
+	InitialDelaySeconds int    `json:"initial_delay_seconds,omitempty"`
+	PeriodSeconds       int    `json:"period_seconds,omitempty"`
+	TimeoutSeconds      int    `json:"timeout_seconds,omitempty"`
+	FailureThreshold    int    `json:"failure_threshold,omitempty"`
+	SuccessThreshold    int    `json:"success_threshold,omitempty"`
+}
+
 type ProcessSnapshot struct {
-	Command  string `json:"command"`
-	Quantity int    `json:"quantity"`
-	Expose   string `json:"expose"`
+	Command          string         `json:"command"`
+	Quantity         int            `json:"quantity"`
+	Expose           string         `json:"expose"`
+	Health           *ProcessHealth `json:"health,omitempty"`
+	TargetExtensions map[string]any `json:"target_extensions,omitempty"`
 }
 
 type ReleaseDeployment struct {
@@ -296,7 +309,7 @@ func (c *Client) GetLogs(ctx context.Context, project, process string) (string, 
 		return "", err
 	}
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("GET %s: status %d: %s", path, resp.StatusCode, truncate(string(data), 200))
+		return "", parseAPIError(http.MethodGet, path, resp.StatusCode, data)
 	}
 	return string(data), nil
 }

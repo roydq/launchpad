@@ -12,7 +12,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | mcp-server | Launchpad MCP server | A/C | ready | Yaml v1 shipped (PR #59). Thin tools over existing OpenAPI/CLI including manifest apply; token auth; no new domain entities. DoD: spec with tool list + auth story; no DOMAIN fork. | — |
+| 1 | mcp-server | Launchpad MCP server | A/C | pr-open | Spec: `docs/superpowers/specs/2026-08-23-mcp-server-design.md`. Thin tools over OpenAPI/CLI including apply; token auth; no new entities. DoD: spec success 1–8; L0; L1 e2e-stub. | [PR #61](https://github.com/roydq/launchpad/pull/61) |
 
 ## Parked (not ADM-ready)
 

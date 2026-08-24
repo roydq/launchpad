@@ -27,11 +27,11 @@ The system separates **control plane** (API, auth, persistence, job queue) from 
 - Secret config at rest (AES-256-GCM when `LAUNCHPAD_SECRETS_KEY` is set); OpenAPI contract (`docs/openapi.yaml` + CI check)
 - Stub and Kubernetes targets; process logs via target
 - SQLite + Postgres storage, bootstrap token auth
-- CLI: `projects create`, `use`, `env *`, `config`, `process`, `scale`, `image`, `deploy --wait`, `ps`, `releases`, `diff`, `inspect`, `logs`, `rollback`, `promote`, `target capabilities`, `doctor`, `context`, `export`, `apply`
+- CLI: `projects create`, `use`, `env *`, `config`, `process`, `scale`, `image`, `deploy --wait`, `ps`, `releases`, `diff`, `inspect`, `logs`, `rollback`, `promote`, `target capabilities`, `doctor`, `context`, `export`, `apply`, `mcp`
 
 ### Roadmap
 
-See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Next:** MCP. **Parked:** multi-service ReleaseSet, config bindings, OIDC. **Later:** workspace config layer, scale API, SSE/events, idempotency, builds, Helm. Disposition: [`program/feedback/2026-08-22-queue-disposition.md`](superpowers/program/feedback/2026-08-22-queue-disposition.md).
+See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). **Shipped integrations:** yaml v1 + MCP. **Parked:** multi-service ReleaseSet, config bindings, OIDC. **Later:** workspace config layer, scale API, SSE/events, idempotency, builds, Helm. Disposition: [`program/feedback/2026-08-22-queue-disposition.md`](superpowers/program/feedback/2026-08-22-queue-disposition.md).
 
 ---
 
@@ -41,6 +41,7 @@ See [Phased roadmap](#phased-roadmap) in this doc and [`DOMAIN.md`](DOMAIN.md). 
 flowchart TB
     subgraph clients [Clients]
         CLI[launchpad CLI]
+        MCP[launchpad mcp]
         API_CLIENT[API clients / agents]
     end
 
@@ -66,6 +67,7 @@ flowchart TB
     end
 
     CLI --> API
+    MCP --> API
     API_CLIENT --> API
     API --> AUTH --> SVC --> STORE
     SVC --> Q
@@ -302,6 +304,7 @@ CLI stages mutations into the open changeset; `deploy` calls push. There is no `
 | `launchpad releases` / `rollback` / `promote` | `GET /releases`; `POST …/rollback`; `POST …/promote` |
 | `launchpad target capabilities` | `GET /v1/targets/{type}/capabilities` |
 | `launchpad export` / `apply` | `GET …/manifest`; `POST …/manifest/apply` (stage only) |
+| `launchpad mcp` | stdio MCP tools over existing REST (`pkg/apiclient`); no new routes |
 
 Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API_URL`. Primary service is still implicit.
 
@@ -318,7 +321,7 @@ Context: `LAUNCHPAD_PROJECT`, `LAUNCHPAD_ENV`, `LAUNCHPAD_TOKEN`, `LAUNCHPAD_API
 | **3 — Multi-service** | Parked | Multiple services, ReleaseSet, coordination modes |
 | **4 — Bindings** | Parked with phase 3 | `${{ ref }}` config linking between services |
 | **5 — Promotion** | **Shipped** (primary service) | `promote` across environments |
-| **6 — Integrations** | **Shipped (v1 yaml)** | `launchpad.yaml` import/export of shipped model; MCP next |
+| **6 — Integrations** | **Shipped (v1 yaml + MCP)** | `launchpad.yaml` import/export; `launchpad mcp` stdio tools over OpenAPI |
 
 Each phase updates domain → store → service → worker → api → cli → target together. Canonical phase narrative: [`DOMAIN.md`](DOMAIN.md).
 

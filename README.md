@@ -50,6 +50,7 @@ launchpad diff
 launchpad deploy -m "initial"
 # Optional: check the project file into git
 # launchpad export && launchpad apply -f launchpad.yaml   # stages; then diff && deploy
+# Agents: launchpad mcp  (stdio; LAUNCHPAD_TOKEN + LAUNCHPAD_API_URL)
 
 # Second environment (clone plain config from dev; secrets listed as needs_value)
 launchpad env clone dev staging

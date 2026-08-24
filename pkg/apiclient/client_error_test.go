@@ -1,8 +1,11 @@
 package apiclient
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -30,6 +33,26 @@ func TestParseAPIErrorPreservesHints(t *testing.T) {
 	}
 	if msg := ae.Error(); msg == "" || !contains(msg, "try: launchpad deploy --wait") {
 		t.Fatalf("Error(): %s", msg)
+	}
+}
+
+func TestGetLogsFourOhFourIsAPIError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"title": "Not Found", "detail": "no logs", "code": "not_found",
+		})
+	}))
+	t.Cleanup(ts.Close)
+	cl := New(ts.URL, "tok")
+	_, err := cl.GetLogs(context.Background(), "p", "web")
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("want *APIError, got %T %v", err, err)
+	}
+	if ae.Code != "not_found" || ae.Status != http.StatusNotFound {
+		t.Fatalf("got status=%d code=%s", ae.Status, ae.Code)
 	}
 }
 

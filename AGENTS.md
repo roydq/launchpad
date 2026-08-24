@@ -126,10 +126,9 @@ Invoke via `/launchpad-feature`, `/launchpad-autonomous`, `/launchpad-domain`, `
 
 | Tool | Value |
 |------|-------|
-| **Launchpad MCP server** | Agents call the REST API (create project, push changeset) without shell curl |
 | **`launchpad-target` skill** | Checklist for adding Nomad/ECS backends to `internal/target/` |
 
-**Implemented:** CI on PRs (`.github/workflows/ci.yml` — unit tests + `make e2e-stub`); kind e2e nightly/label (`.github/workflows/e2e-kind.yml`); e2e harness (`make e2e-stub` / `make e2e-kind`, `test/e2e`, `scripts/e2e-*.sh`).
+**Implemented:** CI on PRs (`.github/workflows/ci.yml` — unit tests + `make e2e-stub`); kind e2e nightly/label (`.github/workflows/e2e-kind.yml`); e2e harness (`make e2e-stub` / `make e2e-kind`, `test/e2e`, `scripts/e2e-*.sh`); **MCP** (`launchpad mcp` stdio tools over OpenAPI, spec `docs/superpowers/specs/2026-08-23-mcp-server-design.md`).
 
 ## What not to do
 
