@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Experimental — process protocol (docs + skill + program files + Grok workflows) |
-| **Date** | 2026-08-22 |
+| **Date** | 2026-08-26 |
 | **Related** | `docs/FEATURE-DEVELOPMENT.md`, `docs/DX-VISION.md`, `.grok/skills/launchpad-autonomous/SKILL.md`, `docs/superpowers/program/`, `.grok/workflows/` |
 
 Long-running, low-input agent work: pick recommended paths, implement planned features, keep docs in sync, expand verification when risk warrants it, use subagents **and fixed multi-agent workflows at gates**, and stop cleanly when human judgment is required.
@@ -337,9 +337,12 @@ If dogfood cannot run, record `blocked` + reason in feedback — do not fake a p
 
 After a green feature slice (or at session end):
 
-1. Append rows for edge cases, doc gaps, and follow-ups (date, source, severity, track).
+1. Add a row to the **Open** table in `IDEAS.md` (that table is the last section — append at end of file). Include date, source, severity, track. Do not paste rows under the severity/append guide or other headings.
 2. Mention notable P0/P1 items in the PR body.
 3. Promote to `QUEUE.md` only if human asked, pre-authorized class (e.g. auto-queue P0s), or the idea unblocks current dogfood **and** fits MVP.
+4. Do not re-log items already in Open, Resolved, QUEUE, or DX-VISION Later / deferred DOMAIN.
+
+`IDEAS.md` is a **working set**. Scouts append; they do not rewrite other rows. Housekeeping (prune shipped / promoted / duplicate / wontfix into Resolved) is allowed when the log is bloated or corrupted.
 
 Do **not** silently implement scout ideas.
 

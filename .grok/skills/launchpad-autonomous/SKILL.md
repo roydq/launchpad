@@ -19,7 +19,7 @@ description: >
 | File | Use |
 |------|-----|
 | `docs/superpowers/program/QUEUE.md` | Pick next work; update status **on every merge** |
-| `docs/superpowers/program/IDEAS.md` | Scout append-only; no silent builds |
+| `docs/superpowers/program/IDEAS.md` | Scout working set (Open table last); no silent builds |
 | `docs/superpowers/program/PERSONA-SCRIPTS.md` | Persona user scripts |
 | `docs/superpowers/program/feedback/` | Persona write-ups + optional `SESSION-*.md` |
 
@@ -67,7 +67,7 @@ Restate mode + knobs in the first turn.
 8. **Docs sync** — DOMAIN / OpenAPI / DX-VISION / QUEUE / plan checkboxes.
 9. **Verify** — ladder L0–L4; **L1 e2e-stub required** for service/jobs/target/deploy CLI; always `mise exec --`. Optional L4: `project-audit` report-only.
 10. **Persona** — CLI/deploy UX: PERSONA-SCRIPTS → `feedback/`; stack/drain: S1 once before final PR to main (L1.5).
-11. **Scout** — append IDEAS; promote only per protocol (same-PR fix / QUEUE / IDEAS only).
+11. **Scout** — add a row to the IDEAS Open table (end of file); promote only per protocol (same-PR fix / QUEUE / IDEAS only).
 12. **Integrate** — push + `gh pr create`; QUEUE → `pr-open`. Stack/drain: merge into **integration only**; update QUEUE on that merge. Final PR integration → main; **no force-merge to main**.
 13. **Stop** — mode stop (budget, drain complete = only deferred/blocked), or hard stop → report decision needed; leave trees intact.
 

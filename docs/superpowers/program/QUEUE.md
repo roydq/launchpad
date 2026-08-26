@@ -12,7 +12,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | mcp-server | Launchpad MCP server | A/C | pr-open | Spec: `docs/superpowers/specs/2026-08-23-mcp-server-design.md`. Thin tools over OpenAPI/CLI including apply; token auth; no new entities. DoD: spec success 1–8; L0; L1 e2e-stub. | [PR #61](https://github.com/roydq/launchpad/pull/61) |
+| 1 | preview-process-fold | Fold `process.set`/`unset`/`apply` in pending preview | A | ready | **Promoted** from IDEAS (2026-08-22 yaml scout). `FoldChanges` 400s on unknown types, so `GET /preview` and `launchpad diff` break once a process definition is staged (image/config-only pending still works). DoD: FoldChanges accepts process.set/unset/apply (no 400); preview/diff show process definition deltas vs last deploy (command, quantity, expose, health, extensions — not scale-only); unit tests; OpenAPI if preview schema grows; L0; L1 e2e-stub. No new entities. | — |
 
 ## Parked (not ADM-ready)
 
@@ -28,6 +28,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | ID | Item | Spec / PR |
 |----|------|-----------|
+| mcp-server | Launchpad MCP server (`launchpad mcp`) | [PR #61](https://github.com/roydq/launchpad/pull/61) · [spec](../specs/2026-08-23-mcp-server-design.md) |
 | launchpad-yaml | `launchpad.yaml` v1 export/apply | PR #59 (ADM 2026-08-22) |
 | completions-man | Shell completion | PR #51 (ADM 2026-07-20) |
 | audit-config-keys | Audit config.set key+sensitivity | PR #50 |

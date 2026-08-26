@@ -86,7 +86,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 | Portable health / deploy readiness | **Shipped** (ADM #46) |
 | Target extensions (resources, annotations, …) | **Shipped** (ADM #48) |
 | `launchpad.yaml` v1 (current model) | **Shipped** — QUEUE `launchpad-yaml` (`export`/`apply`; not GitOps; not multi-service) |
-| MCP server | **Shipped** (this PR) — [spec](superpowers/specs/2026-08-23-mcp-server-design.md) (`launchpad mcp`; apply + deploy-wait) |
+| MCP server | **Shipped** — [PR #61](https://github.com/roydq/launchpad/pull/61) · [spec](superpowers/specs/2026-08-23-mcp-server-design.md) (`launchpad mcp`; apply + deploy-wait) |
 
 ### Track B — Confidence (engineering)
 
@@ -178,7 +178,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 |------|-------|
 | Problem+json recovery hints | **Shipped** |
 | CLI surfaces hints | **Shipped** |
-| MCP server | **Shipped** (this PR) — `launchpad mcp` |
+| MCP server | **Shipped** — [PR #61](https://github.com/roydq/launchpad/pull/61) · `launchpad mcp` |
 | Idempotency keys | Later |
 | Recipes / templates | **Shipped** — `launchpad new` / `new list` |
 
@@ -200,7 +200,7 @@ Four parallel tracks. **A + B lead** until daily dogfood is boring. Surfaces and
 4. ~~Failure-path e2e + OpenAPI contract + examples/60s~~ (**Shipped**)
 5. Secrets S1+S2 — **shipped** (PRs #28, #29) — [spec](superpowers/specs/2026-07-18-secrets-typed-config-design.md)
 6. ~~ADM remaining ready queue~~ (**Shipped** — recipes, shell-prompt, Track B, env-clone, runtime depth, polish)
-7. **Integrations:** `launchpad.yaml` v1 **shipped**; MCP **shipped** (this PR) — [spec](superpowers/specs/2026-08-23-mcp-server-design.md)
+7. **Integrations:** `launchpad.yaml` v1 **shipped** ([PR #59](https://github.com/roydq/launchpad/pull/59)); MCP **shipped** ([PR #61](https://github.com/roydq/launchpad/pull/61)) — [spec](superpowers/specs/2026-08-23-mcp-server-design.md)
 8. Surfaces (docs site → TUI → dashboard) after the project file + MCP exist
 9. OIDC **parked** until a second human user or hosted control-plane spike; generic OIDC first
 10. **Multi-service + bindings parked** until a project needs a second independently versioned artifact
@@ -235,9 +235,8 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 
 | Work | Spec / queue |
 |------|----------------|
-| **Next** | Surfaces (docs site → TUI → dashboard); parked: OIDC, multi-service, bindings |
-| In PR | QUEUE `mcp-server` — [PR #61](https://github.com/roydq/launchpad/pull/61) · [spec](superpowers/specs/2026-08-23-mcp-server-design.md) |
-| Shipped | `launchpad.yaml` v1 — [PR #59](https://github.com/roydq/launchpad/pull/59) |
+| **Next** | QUEUE `preview-process-fold` — pending `process.set` 400s `GET /preview`; then surfaces (docs site → TUI → dashboard) |
+| Shipped | MCP server — [PR #61](https://github.com/roydq/launchpad/pull/61) · `launchpad.yaml` v1 — [PR #59](https://github.com/roydq/launchpad/pull/59) |
 | Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |
 
