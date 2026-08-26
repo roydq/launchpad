@@ -1,66 +1,12 @@
 # Ideas and edge cases
 
-> **Not a commitment to build.** Scout, persona user, and humans append here.
+> **Not a commitment to build.** Scout, persona user, and humans add rows here.
 > **Promote to work:** move a row into `QUEUE.md` (or get human promotion). ADM must not silently implement ideas from this file.
 > **Protocol:** `docs/AUTONOMOUS-MODE.md`
+>
+> This is a **working set**, not a transcript. Shipped / promoted / wontfix / DX-VISION-duplicate rows are pruned into [Resolved](#resolved). New scout rows go at the **bottom of the Open table** (last section of this file) so end-of-file appends stay in the table.
 
-## Log
-
-| Date | Source | Idea / edge case | Severity | Suggested track | Notes |
-|------|--------|------------------|----------|-----------------|-------|
-| 2026-08-23 | adm-mcp | Streamable HTTP MCP in `cmd/api` | P3 | A/C | Spec v1 is stdio only; hosted agents would need this + OAuth |
-| 2026-08-23 | adm-mcp | `process.apply` MCP tool with Procfile text | P3 | A | File path was out of scope; agents could pass contents |
-| 2026-08-23 | adm-mcp | MCP resources for logs / manifest URIs | P3 | C | Tools-only v1; resources later |
-| 2026-07-18 | bootstrap | Seeded from DX-VISION “Later” / non-goals — see backlog rows below as themes, not tickets | — | — | Prefer QUEUE for ordered work |
-| 2026-07-18 | dx-vision | Diff env↔env | P2 | A | Already on QUEUE as `diff-env-env` |
-| 2026-07-18 | dx-vision | Unstage last mutation | P2 | A | QUEUE `unstage-last` |
-| 2026-07-18 | dx-vision | `launchpad run` / env pull (local parity) | P3 | A | Local env injection without full deploy |
-| 2026-07-18 | dx-vision | Ephemeral / PR environments | P3 | A/D | Needs identity + lifecycle; after secrets |
-| 2026-07-18 | dx-vision | Completions / man pages | P3 | C | Surface polish |
-| 2026-07-18 | dx-vision | TUI (inspect / deploy / releases) | P3 | C | Same apiclient as CLI |
-| 2026-07-18 | dx-vision | Docs site (get-started + mental model) | P3 | C | After API stable |
-| 2026-07-18 | dx-vision | Web dashboard MVP | P3 | C | OpenAPI + auth first |
-| 2026-07-18 | dx-vision | Idempotency keys | P2 | D | Agent-friendly retries |
-| 2026-07-18 | dx-vision | Deployment events / SSE | P2 | D | Live job progress beyond poll |
-| 2026-07-18 | dx-vision | HA workers / packaging | P3 | D | Hosted readiness |
-| 2026-07-18 | dx-vision | Richer RBAC / env policy | P2 | D | After roles + OIDC |
-| 2026-07-18 | dx-vision | Hosted control plane (BYO data plane) | P3 | D | Future; same binary |
-| 2026-07-18 | domain | Workspace config layer | P2 | domain | Deferred above service/shared |
-| 2026-07-18 | agents | Scale API (target-side) | P3 | B | Deferred; target may already scale |
-| 2026-07-18 | agents | Builds / image factory | P3 | A | Image-only releases for now |
-| 2026-07-18 | non-goal | Continuous GitOps reconciliation | — | — | Explicit non-goal |
-| 2026-07-18 | non-goal | Helm as primary UX | — | — | Explicit non-goal |
-| 2026-07-18 | adm-design | Persona finds unclear recovery on pin mismatch | P2 | B | Validate on next persona run; add e2e if real |
-| 2026-07-19 | adm-diff-env | Live layer env↔env (resolved live, not last deploy) | P3 | A | Distinct from shipped deploy archaeology |
-| 2026-07-19 | adm-diff-env | Improve release↔release to full snapshot union (removes) | P3 | A | Pending-style BuildDiff misses keys only on from |
-| 2026-07-19 | adm-unstage | `unstage --key FOO` / interactive pick | P3 | A | Last-only is enough for now |
-| 2026-07-19 | adm-unstage | Status help line mention `unstage` next to reset | P3 | A | Polish |
-| 2026-07-18 | adm-design | Program SESSION run logs under `program/feedback/` | P3 | process | Optional; create when first ADM feature run needs them |
-| 2026-07-18 | secrets-design | `secret_ref` / external SM (Vault, AWS SM) as future value kind | P2 | D | After S1/S2; do not block typing+redaction |
-| 2026-07-18 | secrets-design | Dual-key secret re-encrypt / rotation job | P3 | D | S2 notes `key_id` prefix; implement when needed |
-| 2026-07-18 | secrets-design | Optional `--include-secrets` on env clone (break-glass) | P2 | D | Default clone must not copy secret material |
-| 2026-07-18 | secrets-design | Forbid plain service override of shared secret without `--force` | P3 | A | Spec allows total service win; policy later |
-| 2026-07-18 | secrets-design | QUEUE rows `secrets-s1` / `secrets-s2` after human accepts model | P1 | D | **Promoted** to QUEUE (ready) after model accept |
-| 2026-07-18 | secrets-s1 | CLI `config get --typed` pretty printer for agents | P3 | A | After S1; default map + sentinel is enough for humans |
-| 2026-07-18 | secrets-s1 | Reject staging sensitivity without value on demote | P3 | D | Explicit plain demote already requires a value via KEY=VAL |
-| 2026-07-18 | secrets-s1 | Audit events for config set: key + sensitivity only | P2 | D | Not wired this PR; keys already not logging values |
-| 2026-07-18 | secrets-s2 | Dual-key rotation job + `key_id` beyond `v1:` prefix | P3 | D | Spec notes dual-key re-encrypt; single key is enough for now |
-| 2026-07-18 | secrets-s2 | Auto-reencrypt legacy plaintext secrets on list | P3 | D | Currently open-as-plaintext until next write seals |
-| 2026-07-18 | secrets-s2 | Dev convenience: generate+persist key under `.launchpad/` | P3 | A | Spec optional; env-only for S2 |
-| 2026-07-19 | adm-smoke | Project-local env shadowed `env use` after `launchpad new` | P1 | A | **Fixed** PR #38 (`saveActiveContext`) |
-| 2026-07-19 | adm-smoke | Clone reports needs_value but no sticky secret rows for set | P2 | D | Promoted QUEUE `clone-secret-placeholder` |
-| 2026-07-19 | adm-smoke | `launchpad new` not covered by e2e-stub / example-60s | P2 | B | Promoted QUEUE `e2e-recipes-new` |
-| 2026-07-19 | adm-smoke | env clone not in e2e-stub | P2 | B | Promoted QUEUE `e2e-env-clone` |
-| 2026-07-19 | adm-smoke | Doctor still helpful; prompt/shell-init local-only ✓ | P3 | A | No action |
-| 2026-07-19 | adm-postgres | Postgres Open used wrong sql driver name (`postgres` vs `pgx`) | P0 | B | **Fixed** in PR #34 |
-| 2026-07-19 | adm-scout | Fish shell-init | P3 | C | bash/zsh only for now |
-| 2026-07-19 | adm-scout | Recipe `web-k8s` with namespace defaults | P3 | A | After k8s dogfood |
-| 2026-07-19 | adm-scout | Concurrent lease stress on Postgres CI job | P3 | B | Optional extend test-postgres |
-| 2026-07-20 | human-design | Process commands, Procfile, deploy health, immutable config Secrets, target extensions | P1 | A/runtime | **Promoted** to QUEUE (`process-commands`, `deploy-health`, `release-config-materialization`, `target-extensions`); end-state design approved |
-| 2026-07-20 | human-design | Optional `command_argv` exec form (no shell) | P3 | A | Shell form is end-state v1; add if users need no `/bin/sh` |
-| 2026-07-20 | human-design | Liveness probes separate from readiness | P3 | A/runtime | Readiness-only until dogfood demands restarts |
-| 2026-07-20 | human-design | ConfigMap (plain) + Secret (sensitive) cluster split | P3 | B/runtime | Single immutable Secret is end-state v1 |
-| 2026-07-20 | human-design | Control-plane HTTP health poll after target ready | P3 | B | Rejected as primary; keep target readiness |
+Housekeeping: 2026-08-26 — recovered rows that had been pasted after the severity guide; dropped shipped, promoted, and DX-VISION/DOMAIN duplicates. Promoted preview FoldChanges 400 → QUEUE `preview-process-fold`.
 
 ## Severity guide
 
@@ -73,17 +19,64 @@
 
 ## Append format
 
-When scouting or running persona dogfood, append a row (do not rewrite history). Example:
+Add **one table row** to **Open** (end of this file). Do not paste rows under this heading. Do not re-log something already in Open, Resolved, QUEUE, or DX-VISION Later / deferred DOMAIN.
 
 ```markdown
 | 2026-07-20 | persona-user | `deploy --wait` silent on worker down | P1 | B | Repro: stop worker, deploy; want hint to start worker |
 ```
 
 If severity is **P0** and the user pre-authorized “queue P0s from persona,” add a `ready` fix row to `QUEUE.md` and mention it in the PR.
+
+Scouts do not edit other rows. Housekeeping (human or explicit “trim IDEAS”) may prune into Resolved.
+
+## Resolved
+
+Do not re-open without new evidence. History lives in QUEUE, DX-VISION, and git.
+
+**Fixed / promoted then shipped**
+
+- Project-local `env use` after `launchpad new` — PR #38
+- Postgres Open used driver name `postgres` instead of `pgx` — PR #34
+- Secrets S1/S2; clone secret placeholders (#49); audit `config.set` key+sensitivity (#50)
+- e2e coverage for `launchpad new` and env clone — PR #44
+- Status help mentions `unstage` — PR #43
+- Diff env↔env; unstage last mutation; env clone; recipes/`launchpad new`
+- Runtime depth: process commands, deploy health, immutable config Secrets, target extensions
+- Completions (man pages remain a DX-VISION Track C later item)
+- `launchpad.yaml` v1; MCP stdio v1 ([PR #61](https://github.com/roydq/launchpad/pull/61))
+- **Promoted** pending preview FoldChanges 400 on `process.set` → QUEUE `preview-process-fold`
+- Worker concurrent lease + reclaim (ADM #36) covers the Postgres lease-stress scout note
+
+**Wontfix / no action**
+
+- Control-plane HTTP health poll after target ready — rejected as primary; keep target readiness
+- Doctor + prompt/shell-init — local-only, still helpful
+- Optional `program/feedback/SESSION-*.md` — already in the ADM protocol; create when a run needs them
+
+**Themes that belong in DX-VISION / DOMAIN (not this log)**
+
+`launchpad run` / env pull · ephemeral/PR envs · TUI · docs site · web dashboard · man pages · idempotency keys · deployment events/SSE · HA workers · richer RBAC · hosted control plane · workspace config layer · scale API · builds / image factory · GitOps reconciliation and Helm-as-UX (explicit non-goals)
+
+## Open
+
+| Date | Source | Idea / edge case | Severity | Suggested track | Notes |
+|------|--------|------------------|----------|-----------------|-------|
+| 2026-07-18 | adm-design | Persona finds unclear recovery on pin mismatch | P2 | B | Validate on next persona run; add e2e if real |
+| 2026-07-18 | secrets | External `secret_ref` (Vault, AWS SM) | P2 | D | After S1/S2; do not block typing+redaction |
+| 2026-07-18 | secrets | Dual-key rotation + auto-reencrypt legacy plaintext on list | P3 | D | Single `v1:` key is enough for now |
+| 2026-07-18 | secrets | Clone `--include-secrets`; `--force` to override shared secret with plain | P2 | D/A | Default clone must not copy secrets; spec allows total service win |
+| 2026-07-18 | secrets | `config get --typed`; persist generated key under `.launchpad/`; reject sensitivity-only demote | P3 | A | Map+sentinel is enough for humans; explicit `KEY=VAL` demote already required |
+| 2026-07-19 | adm-diff-env | Live layer env↔env (resolved live, not last deploy) | P3 | A | Distinct from shipped deploy archaeology |
+| 2026-07-19 | adm-diff-env | Release↔release full snapshot union (removes) | P3 | A | Pending-style BuildDiff misses keys only on from |
+| 2026-07-19 | adm-unstage | `unstage --key FOO` / interactive pick | P3 | A | Last-only is enough for now |
+| 2026-07-19 | adm-scout | Fish shell-init | P3 | C | bash/zsh only for now |
+| 2026-07-19 | adm-scout | Recipe `web-k8s` with namespace defaults | P3 | A | After k8s dogfood |
+| 2026-07-20 | runtime | Out of v1: `command_argv` exec form; liveness≠readiness; ConfigMap+Secret split | P3 | A | Shell form, readiness-only, single immutable Secret |
 | 2026-07-20 | adm-runtime | Extension validation reject unknown keys at stage | P2 | A | Slice 4 shipped soft-apply; strict validate later |
 | 2026-07-20 | adm-runtime | Config Secret GC of unreferenced hashes | P3 | B | Destroy cleans all; janitor optional |
-| 2026-07-20 | adm-runtime | process set --target-ext CLI sugar | P3 | A | API map works via stage; CLI sugar later |
-| 2026-07-20 | adm-runtime | Man page generation (go generate) | P3 | C | Completions shipped; man optional |
-| 2026-07-20 | adm-runtime | Kind e2e for probes/resources/immutable secrets | P2 | B | Stub CI green; kind optional |
-| 2026-08-22 | adm-yaml | `process.set` rows make `GET /preview` FoldChanges 400 | P2 | A | Diff after apply is fine when only image/config staged; process.set still a preview hole |
+| 2026-07-20 | adm-runtime | `process set --target-ext` CLI sugar | P3 | A | API map works via stage |
+| 2026-07-20 | adm-runtime | Kind e2e for probes / resources / immutable secrets | P2 | B | Stub CI green; kind optional |
 | 2026-08-22 | adm-yaml | `launchpad apply --project` retarget without editing yaml | P3 | A | e2e rewrites `project:`; no CLI flag in v1 |
+| 2026-08-23 | adm-mcp | Streamable HTTP MCP in `cmd/api` | P3 | A/C | Spec v1 is stdio only; hosted agents would need this + OAuth |
+| 2026-08-23 | adm-mcp | `process.apply` MCP tool with Procfile text | P3 | A | File path was out of scope; agents could pass contents |
+| 2026-08-23 | adm-mcp | MCP resources for logs / manifest URIs | P3 | C | Tools-only v1; resources later |
