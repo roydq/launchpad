@@ -12,7 +12,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | preview-process-fold | Fold `process.set`/`unset`/`apply` in pending preview | A | ready | **Promoted** from IDEAS (2026-08-22 yaml scout). `FoldChanges` 400s on unknown types, so `GET /preview` and `launchpad diff` break once a process definition is staged (image/config-only pending still works). DoD: FoldChanges accepts process.set/unset/apply (no 400); preview/diff show process definition deltas vs last deploy (command, quantity, expose, health, extensions — not scale-only); unit tests; OpenAPI if preview schema grows; L0; L1 e2e-stub. No new entities. | — |
+| 1 | preview-process-fold | Fold `process.set`/`unset`/`apply` in pending preview | A | pr-open | Spec: `docs/superpowers/specs/2026-09-13-preview-process-fold-design.md` (Approved self-approve — ADM). Plan: `docs/superpowers/plans/2026-09-13-preview-process-fold.md`. DoD: FoldChanges accepts process.set/unset/apply (no 400); preview/diff show process definition deltas vs last deploy (command, quantity, expose, health, extensions — not scale-only); unit tests; OpenAPI if preview schema grows; L0; L1 e2e-stub. No new entities. | `feat/preview-process-fold` · [PR #63](https://github.com/roydq/launchpad/pull/63) |
 
 ## Parked (not ADM-ready)
 

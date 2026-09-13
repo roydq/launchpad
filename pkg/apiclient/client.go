@@ -445,9 +445,11 @@ type Preview struct {
 	HasPending      bool   `json:"has_pending"`
 	MatchesBaseline bool   `json:"matches_baseline"`
 	Pending *struct {
-		Image  string             `json:"image,omitempty"`
-		Config map[string]*string `json:"config,omitempty"`
-		Scales map[string]int     `json:"scales,omitempty"`
+		Image             string                      `json:"image,omitempty"`
+		Config            map[string]*string          `json:"config,omitempty"`
+		ConfigSensitivity map[string]string           `json:"config_sensitivity,omitempty"`
+		Scales            map[string]int              `json:"scales,omitempty"`
+		Processes         map[string]*ProcessSnapshot `json:"processes,omitempty"`
 	} `json:"pending,omitempty"`
 	Diff struct {
 		Image *struct {
@@ -465,6 +467,13 @@ type Preview struct {
 			From    *int   `json:"from,omitempty"`
 			To      int    `json:"to"`
 		} `json:"scale,omitempty"`
+		Process []struct {
+			Op     string           `json:"op"`
+			Name   string           `json:"name"`
+			From   *ProcessSnapshot `json:"from,omitempty"`
+			To     *ProcessSnapshot `json:"to,omitempty"`
+			Fields []string         `json:"fields,omitempty"`
+		} `json:"process,omitempty"`
 	} `json:"diff"`
 	Summary string `json:"summary"`
 }

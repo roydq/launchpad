@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -18,10 +19,20 @@ type FoldedPending struct {
 	// ConfigSensitivity maps keys to plain|secret for staged config (when known).
 	ConfigSensitivity map[string]string `json:"config_sensitivity,omitempty"`
 	Scales            map[string]int    `json:"scales,omitempty"`
+	// Processes is API overlay only (pending sparse / release full to-map). Not BuildDiff input.
+	Processes map[string]*domain.ProcessSnapshot `json:"processes,omitempty"`
+
+	processApply  *domain.ProcessApplyPayload
+	processSets   []domain.ProcessSetPayload
+	processUnsets []string
+}
+
+func (f FoldedPending) hasProcessOps() bool {
+	return f.processApply != nil || len(f.processSets) > 0 || len(f.processUnsets) > 0
 }
 
 func (f FoldedPending) IsEmpty() bool {
-	return f.Image == "" && len(f.Config) == 0 && len(f.Scales) == 0
+	return f.Image == "" && len(f.Config) == 0 && len(f.Scales) == 0 && !f.hasProcessOps()
 }
 
 // ConfigDiffOp is one effective config delta.
@@ -46,31 +57,41 @@ type ImageDiff struct {
 	To   string `json:"to"`
 }
 
+// ProcessDiffOp is one effective process-definition delta.
+type ProcessDiffOp struct {
+	Op     string                  `json:"op"` // add | change | remove
+	Name   string                  `json:"name"`
+	From   *domain.ProcessSnapshot `json:"from,omitempty"`
+	To     *domain.ProcessSnapshot `json:"to,omitempty"`
+	Fields []string                `json:"fields,omitempty"`
+}
+
 // EffectiveDiff is structured delta of pending (or target release) vs baseline.
 type EffectiveDiff struct {
-	Image  *ImageDiff     `json:"image,omitempty"`
-	Config []ConfigDiffOp `json:"config,omitempty"`
-	Scale  []ScaleDiffOp  `json:"scale,omitempty"`
+	Image   *ImageDiff      `json:"image,omitempty"`
+	Config  []ConfigDiffOp  `json:"config,omitempty"`
+	Scale   []ScaleDiffOp   `json:"scale,omitempty"`
+	Process []ProcessDiffOp `json:"process,omitempty"`
 }
 
 func (d EffectiveDiff) IsEmpty() bool {
-	return d.Image == nil && len(d.Config) == 0 && len(d.Scale) == 0
+	return d.Image == nil && len(d.Config) == 0 && len(d.Scale) == 0 && len(d.Process) == 0
 }
 
 // PreviewResult is the API shape for server-side diff preview.
 type PreviewResult struct {
-	Mode             string         `json:"mode"` // pending | releases | environments
-	Environment      string         `json:"environment,omitempty"`
-	FromEnvironment  string         `json:"from_environment,omitempty"`
-	ToEnvironment    string         `json:"to_environment,omitempty"`
-	BaselineVersion  *int           `json:"baseline_version,omitempty"`
-	FromVersion      *int           `json:"from_version,omitempty"`
-	ToVersion        *int           `json:"to_version,omitempty"`
-	HasPending       bool           `json:"has_pending"`
-	MatchesBaseline  bool           `json:"matches_baseline"`
-	Pending          *FoldedPending `json:"pending,omitempty"`
-	Diff             EffectiveDiff  `json:"diff"`
-	Summary          string         `json:"summary"`
+	Mode            string         `json:"mode"` // pending | releases | environments
+	Environment     string         `json:"environment,omitempty"`
+	FromEnvironment string         `json:"from_environment,omitempty"`
+	ToEnvironment   string         `json:"to_environment,omitempty"`
+	BaselineVersion *int           `json:"baseline_version,omitempty"`
+	FromVersion     *int           `json:"from_version,omitempty"`
+	ToVersion       *int           `json:"to_version,omitempty"`
+	HasPending      bool           `json:"has_pending"`
+	MatchesBaseline bool           `json:"matches_baseline"`
+	Pending         *FoldedPending `json:"pending,omitempty"`
+	Diff            EffectiveDiff  `json:"diff"`
+	Summary         string         `json:"summary"`
 }
 
 // FoldChanges applies last-write-wins over changeset rows (shared_config treated as config for preview).
@@ -114,6 +135,37 @@ func FoldChanges(changes []domain.ChangesetChange) (FoldedPending, error) {
 				return FoldedPending{}, fmt.Errorf("%w: image change missing artifact_ref", launchpad.ErrBadRequest)
 			}
 			out.Image = p.ArtifactRef
+		case domain.ChangeTypeProcessSet:
+			var p domain.ProcessSetPayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return FoldedPending{}, fmt.Errorf("%w: process.set payload", launchpad.ErrBadRequest)
+			}
+			if p.Name == "" {
+				return FoldedPending{}, fmt.Errorf("%w: process.set missing name", launchpad.ErrBadRequest)
+			}
+			out.processSets = append(out.processSets, p)
+		case domain.ChangeTypeProcessUnset:
+			var p domain.ProcessUnsetPayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return FoldedPending{}, fmt.Errorf("%w: process.unset payload", launchpad.ErrBadRequest)
+			}
+			if p.Name == "" {
+				return FoldedPending{}, fmt.Errorf("%w: process.unset missing name", launchpad.ErrBadRequest)
+			}
+			out.processUnsets = append(out.processUnsets, p.Name)
+		case domain.ChangeTypeProcessApply:
+			var p domain.ProcessApplyPayload
+			if err := json.Unmarshal(c.Payload, &p); err != nil {
+				return FoldedPending{}, fmt.Errorf("%w: process.apply payload", launchpad.ErrBadRequest)
+			}
+			if p.Procfile == "" {
+				return FoldedPending{}, fmt.Errorf("%w: process.apply missing procfile", launchpad.ErrBadRequest)
+			}
+			if _, err := domain.ParseProcfile(p.Procfile); err != nil {
+				return FoldedPending{}, fmt.Errorf("%w: %v", launchpad.ErrBadRequest, err)
+			}
+			cp := p
+			out.processApply = &cp
 		default:
 			return FoldedPending{}, fmt.Errorf("%w: unknown change type %q", launchpad.ErrBadRequest, c.Type)
 		}
@@ -268,6 +320,19 @@ func BuildSnapshotDiff(from, to *domain.Release) EffectiveDiff {
 			diff.Scale = append(diff.Scale, ScaleDiffOp{Process: proc, From: &o, To: qty})
 		}
 	}
+
+	var fromSnap, toSnap map[string]domain.ProcessSnapshot
+	if from != nil {
+		fromSnap = from.ProcessSnapshot
+	}
+	if to != nil {
+		toSnap = to.ProcessSnapshot
+	}
+	scaleNames := make(map[string]bool, len(diff.Scale))
+	for _, s := range diff.Scale {
+		scaleNames[s.Process] = true
+	}
+	diff.Process = diffProcessSnapshots(fromSnap, toSnap, scaleNames)
 	return diff
 }
 
@@ -348,6 +413,32 @@ func formatEffectiveDiff(diff EffectiveDiff) string {
 			}
 		}
 	}
+	if len(diff.Process) > 0 {
+		b.WriteString("## Process\n")
+		for _, p := range diff.Process {
+			switch p.Op {
+			case "add":
+				to := domain.ProcessSnapshot{}
+				if p.To != nil {
+					to = *p.To
+				}
+				fmt.Fprintf(&b, "  + %s command=%q quantity=%d expose=%s\n", p.Name, to.Command, to.Quantity, to.Expose)
+			case "remove":
+				fmt.Fprintf(&b, "  - %s\n", p.Name)
+			case "change":
+				from, to := domain.ProcessSnapshot{}, domain.ProcessSnapshot{}
+				if p.From != nil {
+					from = *p.From
+				}
+				if p.To != nil {
+					to = *p.To
+				}
+				for _, field := range p.Fields {
+					fmt.Fprintf(&b, "  ~ %s %s: %s → %s\n", p.Name, field, processFieldDisplay(from, field), processFieldDisplay(to, field))
+				}
+			}
+		}
+	}
 	return b.String()
 }
 
@@ -381,15 +472,17 @@ func configDiffSensitivity(baseline, pending string) string {
 
 // redactFoldedPending replaces secret values with the sentinel for API responses.
 func redactFoldedPending(p FoldedPending) FoldedPending {
-	if len(p.Config) == 0 {
-		return p
-	}
 	out := FoldedPending{
 		Image:             p.Image,
-		Config:            make(map[string]*string, len(p.Config)),
+		Config:            p.Config,
 		ConfigSensitivity: p.ConfigSensitivity,
 		Scales:            p.Scales,
+		Processes:         p.Processes,
 	}
+	if len(p.Config) == 0 {
+		return out
+	}
+	out.Config = make(map[string]*string, len(p.Config))
 	sens := p.ConfigSensitivity
 	if sens == nil {
 		sens = map[string]string{}
@@ -438,8 +531,21 @@ func (s *ChangesetService) PreviewPending(ctx context.Context, projectName, envN
 			}
 		}
 	}
+	var baselineSnap map[string]domain.ProcessSnapshot
+	if baseline != nil {
+		baselineSnap = baseline.ProcessSnapshot
+	}
+	effective := applyProcessOpsToSnapshot(baselineSnap, folded)
 	diff := BuildDiff(folded, baseline)
+	diff.Process = diffProcessSnapshots(baselineSnap, effective, scaleNameSet(folded.Scales))
+	folded.Processes = sparseProcessOverlay(folded, baselineSnap, effective)
 	redacted := redactFoldedPending(folded)
+	summary := formatEffectiveDiff(diff)
+	if folded.IsEmpty() {
+		summary = "No pending changes\n"
+	} else if diff.IsEmpty() {
+		summary = "Staged changes match last release (no effective delta)\n"
+	}
 	res := &PreviewResult{
 		Mode:            "pending",
 		Environment:     envLabel,
@@ -447,7 +553,7 @@ func (s *ChangesetService) PreviewPending(ctx context.Context, projectName, envN
 		MatchesBaseline: !folded.IsEmpty() && diff.IsEmpty(),
 		Pending:         &redacted,
 		Diff:            diff,
-		Summary:         FormatDiffSummary(folded, baseline),
+		Summary:         summary,
 	}
 	if baseline != nil {
 		v := baseline.Version
@@ -479,7 +585,19 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 	// Treat "to" as folded pending against "from" baseline.
 	pending := foldedFromRelease(to)
 	diff := BuildDiff(pending, from)
+	var fromSnap, toSnap map[string]domain.ProcessSnapshot
+	if from != nil {
+		fromSnap = from.ProcessSnapshot
+	}
+	if to != nil {
+		toSnap = to.ProcessSnapshot
+	}
+	diff.Process = diffProcessSnapshots(fromSnap, toSnap, scaleNameSet(pending.Scales))
 	redacted := redactFoldedPending(pending)
+	summary := formatEffectiveDiff(diff)
+	if diff.IsEmpty() {
+		summary = "No differences\n"
+	}
 	return &PreviewResult{
 		Mode:            "releases",
 		FromVersion:     &fromV,
@@ -488,7 +606,7 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 		MatchesBaseline: diff.IsEmpty(),
 		Pending:         &redacted,
 		Diff:            diff,
-		Summary:         FormatDiffSummary(pending, from),
+		Summary:         summary,
 	}, nil
 }
 
@@ -557,8 +675,260 @@ func foldedFromRelease(r *domain.Release) FoldedPending {
 			out.ConfigSensitivity[k] = s
 		}
 	}
+	if len(r.ProcessSnapshot) > 0 {
+		out.Processes = make(map[string]*domain.ProcessSnapshot, len(r.ProcessSnapshot))
+	}
 	for name, snap := range r.ProcessSnapshot {
 		out.Scales[name] = snap.Quantity
+		s := snap
+		out.Processes[name] = &s
 	}
 	return out
+}
+
+func scaleNameSet(scales map[string]int) map[string]bool {
+	out := make(map[string]bool, len(scales))
+	for name := range scales {
+		out[name] = true
+	}
+	return out
+}
+
+func applyProcessOpsToSnapshot(baseline map[string]domain.ProcessSnapshot, folded FoldedPending) map[string]domain.ProcessSnapshot {
+	cur := copyProcessSnapshotMap(baseline)
+	if folded.processApply != nil {
+		if entries, err := domain.ParseProcfile(folded.processApply.Procfile); err == nil {
+			cur = make(map[string]domain.ProcessSnapshot, len(entries))
+			for _, e := range entries {
+				cur[e.Name] = domain.ProcessSnapshot{
+					Command:  e.Command,
+					Quantity: e.Quantity,
+					Expose:   e.Expose,
+				}
+			}
+		}
+	}
+	for _, set := range folded.processSets {
+		mergeProcessSet(cur, set)
+	}
+	for _, name := range folded.processUnsets {
+		delete(cur, name)
+	}
+	for name, qty := range folded.Scales {
+		if snap, ok := cur[name]; ok {
+			snap.Quantity = qty
+			cur[name] = snap
+		}
+	}
+	return cur
+}
+
+func copyProcessSnapshotMap(in map[string]domain.ProcessSnapshot) map[string]domain.ProcessSnapshot {
+	out := make(map[string]domain.ProcessSnapshot, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func mergeProcessSet(cur map[string]domain.ProcessSnapshot, set domain.ProcessSetPayload) {
+	snap, ok := cur[set.Name]
+	if !ok {
+		snap = domain.ProcessSnapshot{Quantity: 1, Expose: "none"}
+		if set.Name == "web" {
+			snap.Expose = "http"
+		}
+	}
+	if set.Command != nil {
+		snap.Command = *set.Command
+	}
+	if set.Quantity != nil {
+		snap.Quantity = *set.Quantity
+	}
+	if set.Expose != nil {
+		snap.Expose = *set.Expose
+	}
+	if set.Health != nil {
+		if set.Health.Type == "none" || set.Health.Type == "" {
+			snap.Health = nil
+		} else {
+			h := *set.Health
+			if h.Type == "http" && h.Path == "" {
+				h.Path = "/healthz"
+			}
+			snap.Health = &h
+		}
+	}
+	if set.TargetExtensions != nil {
+		snap.TargetExtensions = set.TargetExtensions
+	}
+	cur[set.Name] = snap
+}
+
+func sparseProcessOverlay(folded FoldedPending, baseline, effective map[string]domain.ProcessSnapshot) map[string]*domain.ProcessSnapshot {
+	if !folded.hasProcessOps() {
+		return nil
+	}
+	keys := map[string]struct{}{}
+	for _, set := range folded.processSets {
+		keys[set.Name] = struct{}{}
+	}
+	for _, name := range folded.processUnsets {
+		keys[name] = struct{}{}
+	}
+	if folded.processApply != nil {
+		for name := range effective {
+			keys[name] = struct{}{}
+		}
+		for name := range baseline {
+			if _, ok := effective[name]; !ok {
+				keys[name] = struct{}{}
+			}
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	out := make(map[string]*domain.ProcessSnapshot, len(keys))
+	for name := range keys {
+		if snap, ok := effective[name]; ok {
+			s := snap
+			out[name] = &s
+		} else {
+			out[name] = nil
+		}
+	}
+	return out
+}
+
+func diffProcessSnapshots(from, to map[string]domain.ProcessSnapshot, scaleNames map[string]bool) []ProcessDiffOp {
+	names := map[string]struct{}{}
+	for name := range from {
+		names[name] = struct{}{}
+	}
+	for name := range to {
+		names[name] = struct{}{}
+	}
+	ordered := make([]string, 0, len(names))
+	for name := range names {
+		ordered = append(ordered, name)
+	}
+	sort.Strings(ordered)
+
+	var ops []ProcessDiffOp
+	for _, name := range ordered {
+		f, hadFrom := from[name]
+		t, hadTo := to[name]
+		switch {
+		case !hadFrom && hadTo:
+			toSnap := t
+			ops = append(ops, ProcessDiffOp{Op: "add", Name: name, To: &toSnap})
+		case hadFrom && !hadTo:
+			fromSnap := f
+			ops = append(ops, ProcessDiffOp{Op: "remove", Name: name, From: &fromSnap})
+		case hadFrom && hadTo:
+			fields := processSnapshotDiffFields(f, t)
+			if len(fields) == 0 {
+				continue
+			}
+			if len(fields) == 1 && fields[0] == "quantity" && scaleNames[name] {
+				continue
+			}
+			fromSnap, toSnap := f, t
+			ops = append(ops, ProcessDiffOp{Op: "change", Name: name, From: &fromSnap, To: &toSnap, Fields: fields})
+		}
+	}
+	return ops
+}
+
+func processSnapshotDiffFields(a, b domain.ProcessSnapshot) []string {
+	var fields []string
+	if a.Command != b.Command {
+		fields = append(fields, "command")
+	}
+	if a.Quantity != b.Quantity {
+		fields = append(fields, "quantity")
+	}
+	if a.Expose != b.Expose {
+		fields = append(fields, "expose")
+	}
+	if !healthEqual(a.Health, b.Health) {
+		fields = append(fields, "health")
+	}
+	if !processExtensionsEqual(a.TargetExtensions, b.TargetExtensions) {
+		fields = append(fields, "target_extensions")
+	}
+	return fields
+}
+
+func healthIsNone(h *domain.ProcessHealth) bool {
+	return h == nil || h.Type == "" || h.Type == "none"
+}
+
+func processExtensionsEqual(a, b map[string]json.RawMessage) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	toAny := func(m map[string]json.RawMessage) (map[string]any, bool) {
+		out := make(map[string]any, len(m))
+		for k, raw := range m {
+			if len(raw) == 0 {
+				out[k] = nil
+				continue
+			}
+			var v any
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, false
+			}
+			out[k] = v
+		}
+		return out, true
+	}
+	ma, ok1 := toAny(a)
+	mb, ok2 := toAny(b)
+	if !ok1 || !ok2 {
+		return false
+	}
+	return reflect.DeepEqual(ma, mb)
+}
+
+func processFieldDisplay(snap domain.ProcessSnapshot, field string) string {
+	switch field {
+	case "command":
+		return fmt.Sprintf("%q", snap.Command)
+	case "quantity":
+		return fmt.Sprintf("%d", snap.Quantity)
+	case "expose":
+		return snap.Expose
+	case "health":
+		return formatHealthValue(snap.Health)
+	case "target_extensions":
+		return formatExtensionsValue(snap.TargetExtensions)
+	default:
+		return ""
+	}
+}
+
+func formatHealthValue(h *domain.ProcessHealth) string {
+	if healthIsNone(h) {
+		return "(none)"
+	}
+	if h.Type == "http" {
+		if h.Path != "" {
+			return "http " + h.Path
+		}
+		return "http"
+	}
+	return h.Type
+}
+
+func formatExtensionsValue(m map[string]json.RawMessage) string {
+	if len(m) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }

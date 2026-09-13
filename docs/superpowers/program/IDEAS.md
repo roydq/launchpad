@@ -80,3 +80,4 @@ Do not re-open without new evidence. History lives in QUEUE, DX-VISION, and git.
 | 2026-08-23 | adm-mcp | Streamable HTTP MCP in `cmd/api` | P3 | A/C | Spec v1 is stdio only; hosted agents would need this + OAuth |
 | 2026-08-23 | adm-mcp | `process.apply` MCP tool with Procfile text | P3 | A | File path was out of scope; agents could pass contents |
 | 2026-08-23 | adm-mcp | MCP resources for logs / manifest URIs | P3 | C | Tools-only v1; resources later |
+| 2026-09-13 | adm-preview-process-fold | Preview shows last-process unset as `diff.process` remove; push still 400s “cannot remove the last process” | P3 | A | Spec left push rule unchanged; CLI may look deployable until push |

@@ -696,6 +696,28 @@ components:
           type: object
           additionalProperties: { type: string }
         created_at: { type: string, format: date-time }
+    ProcessHealth:
+      type: object
+      properties:
+        type: { type: string }
+        path: { type: string }
+        port: { type: integer }
+        initial_delay_seconds: { type: integer }
+        period_seconds: { type: integer }
+        timeout_seconds: { type: integer }
+        failure_threshold: { type: integer }
+        success_threshold: { type: integer }
+    ProcessSnapshot:
+      type: object
+      properties:
+        command: { type: string }
+        quantity: { type: integer }
+        expose: { type: string }
+        health:
+          $ref: "#/components/schemas/ProcessHealth"
+        target_extensions:
+          type: object
+          additionalProperties: true
     Preview:
       type: object
       properties:
@@ -709,4 +731,69 @@ components:
         has_pending: { type: boolean }
         matches_baseline: { type: boolean }
         summary: { type: string }
-        diff: { type: object }
+        pending:
+          type: object
+          properties:
+            image: { type: string }
+            config:
+              type: object
+              additionalProperties:
+                type: string
+                nullable: true
+            config_sensitivity:
+              type: object
+              additionalProperties: { type: string }
+            scales:
+              type: object
+              additionalProperties: { type: integer }
+            processes:
+              type: object
+              description: Sparse overlay (pending) or full to-map (releases); null value means unset
+              additionalProperties:
+                nullable: true
+                allOf:
+                  - $ref: "#/components/schemas/ProcessSnapshot"
+        diff:
+          type: object
+          properties:
+            image:
+              type: object
+              properties:
+                from: { type: string }
+                to: { type: string }
+            config:
+              type: array
+              items:
+                type: object
+                properties:
+                  op: { type: string, enum: [add, change, remove] }
+                  key: { type: string }
+                  from: { type: string, nullable: true }
+                  to: { type: string, nullable: true }
+                  sensitivity: { type: string }
+            scale:
+              type: array
+              items:
+                type: object
+                properties:
+                  process: { type: string }
+                  from: { type: integer, nullable: true }
+                  to: { type: integer }
+            process:
+              type: array
+              items:
+                type: object
+                properties:
+                  op: { type: string, enum: [add, change, remove] }
+                  name: { type: string }
+                  from:
+                    nullable: true
+                    allOf:
+                      - $ref: "#/components/schemas/ProcessSnapshot"
+                  to:
+                    nullable: true
+                    allOf:
+                      - $ref: "#/components/schemas/ProcessSnapshot"
+                  fields:
+                    type: array
+                    items: { type: string }

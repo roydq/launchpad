@@ -350,7 +350,9 @@ Each change targets a specific service:
 | `image` | `{ artifact_ref }` | `api:v2.1.0` |
 | `binding` | `{ key, ref }` | `DATABASE_URL → services.postgres.config.DATABASE_URL` |
 
-Changes accumulate in order; later changes to the same key override earlier ones.
+Config, image, and scale accumulate in order; later changes to the same key override earlier ones. `process.set` / `process.unset` / `process.apply` **materialize (and preview) in push buckets**, not sequential last-write-wins: last `process.apply` (Procfile replace), then every `process.set` in changeset order, then every `process.unset` in changeset order, then `scale` quantity on **existing** process names only (`scale` does not create a process definition; missing name 404s on push).
+
+`GET /v1/projects/{project}/preview` (pending) folds those process types and diffs **definition** fields (command, quantity, expose, health, `target_extensions`) against the last **deploy** `process_snapshot` in the ambient env — not quantity-only scale lines. Preview is that fold vs last deploy; it is not a guarantee of bit-identical push (push still 400s on removing the last process; live-table drift is out of scope).
 
 ### ReleaseSet
 
@@ -708,7 +710,7 @@ POST   /v1/projects/{project}/changeset/changes
 DELETE /v1/projects/{project}/changeset/changes/last
 DELETE /v1/projects/{project}/changeset
 POST   /v1/projects/{project}/changeset/push
-GET    /v1/projects/{project}/preview   # pending vs baseline; ?from_release=&to_release=
+GET    /v1/projects/{project}/preview   # pending vs last deploy (folds process.set/unset/apply); ?from_release=&to_release=
 GET    /v1/projects/{project}/manifest  # live export; query environment= filters; ignores env header
 POST   /v1/projects/{project}/manifest/apply  # stage only; does not deploy
 GET    /v1/jobs/{id}
@@ -744,7 +746,7 @@ GET    /healthz
 | `launchpad env list/create/use/current/clone` | Environments; sticky env (default `dev`); dirty batch blocks switch; clone copies plain config only |
 | `launchpad config get/set/unset` | Live get; set/unset stage by default (`--now` for immediate) |
 | `launchpad scale` / `image` | Stage scale or image (`--now` for immediate) |
-| `launchpad diff` / `status` / `reset` / `unstage` | Review pending vs last deploy **in current env**; discard all staging, or unstage last mutation |
+| `launchpad diff` / `status` / `reset` / `unstage` | Review pending vs last deploy **in current env** (including process definition deltas); discard all staging, or unstage last mutation |
 | `launchpad deploy` | Submit staged batch; optional one-shot mutations (`--image`, `KEY=VAL`, `--scale`) |
 | `launchpad ps` | Process definitions |
 | `launchpad releases` | Release history with per-env deployment annotations |
