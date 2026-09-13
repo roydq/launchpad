@@ -41,21 +41,14 @@ Domain, store, target, worker: N/A.
 - Modify: `internal/service/preview.go`
 - Modify: `internal/service/preview_test.go`
 
-- [ ] Add types and fold collection per spec (`ProcessDiffOp`; `FoldedPending.Processes`; unexported apply/sets/unsets/replace; `IsEmpty` includes process ops; `EffectiveDiff.Process` in `IsEmpty`).
-- [ ] `FoldChanges` handles `process.set` / `unset` / `apply` (validate name / Procfile via `domain.ParseProcfile`); unknown types still 400.
-- [ ] Apply ops onto baseline with `upsertProcessSet` / Procfile defaults; scale quantity overlay.
-- [ ] `BuildDiff` emits `diff.process` with quantity-suppression rule vs `diff.scale`.
-- [ ] `BuildSnapshotDiff` and `foldedFromRelease` use the same process field compare (full snapshots; replace semantics for release `to`).
+- [ ] Add types and fold collection per spec (`ProcessDiffOp`; unexported apply/sets/unsets; `IsEmpty` includes process ops; `EffectiveDiff.Process` in `IsEmpty`). `FoldedPending.Processes` is API overlay only — not BuildDiff pending-side input.
+- [ ] `FoldChanges` handles `process.set` / `unset` / `apply` (validate name / Procfile via `domain.ParseProcfile`); unknown types still 400; invalid payloads 400.
+- [ ] `applyProcessOpsToSnapshot`: Procfile replace, then sets, then unsets, then scale quantity **only on names already in the topology**. Never invent a process from a scale row.
+- [ ] Pending `diff.process` = `diffProcessSnapshots(baseline, effective, scaleNames)` with quantity-suppression vs `diff.scale`. Untouched baseline processes (e.g. web when only worker is set) must not appear as remove.
+- [ ] Release/env: `diffProcessSnapshots(fromSnap, toSnap, scaleNames)` — do not run apply-ops. `foldedFromRelease` may copy full `to` snapshots into `pending.processes` for display only.
 - [ ] `formatEffectiveDiff` appends `## Process` lines; `redactFoldedPending` copies `Processes`.
-- [ ] `PreviewPending` populates `pending.processes` for affected names (null = unset) after applying ops to baseline.
-- [ ] Tests in `preview_test.go` (fail first if following TDD):
-  - `TestFoldChangesAcceptsProcessTypes` — set/unset/apply succeed; garbage type errors.
-  - `TestBuildDiffProcessSetAddsWorker` — baseline web-only snapshot; process.set worker command; `op=add`.
-  - `TestBuildDiffProcessFieldChanges` — command, expose, health, extensions on existing web.
-  - `TestBuildDiffScaleQuantityOnlyNoProcessOp` — scale web=3 → scale row, no process op.
-  - `TestBuildDiffProcessSetQuantityOnly` — process.set quantity without scale type → process `fields=["quantity"]`.
-  - `TestBuildDiffProcessUnsetAndApply` — unset remove; apply Procfile drops names not in file.
-  - `TestPreviewPendingProcessSet` — StageChanges process.set worker; PreviewPending has process add and `## Process` in summary.
+- [ ] `PreviewPending` populates sparse `pending.processes` for names touched by process ops only (null = unset). Scale-only / unknown-scale names stay out.
+- [ ] Tests in `preview_test.go` (fail first if following TDD) — names and assertions as in the spec Test strategy (including `TestFoldChangesInvalidProcessPayloads`, `TestBuildDiffScaleUnknownProcessNoProcessAdd`, `TestPreviewReleasesProcessCommandChange`, `TestBuildSnapshotDiffProcessCommand`). JSON asserts `op`/`name`/`to.command`; do not pass on summary substring alone.
 - [ ] Verify: `mise exec -- go test -C .worktrees/feat-preview-process-fold ./internal/service/...`
 - [ ] Commit: `feat(service): fold process mutations in pending preview`
 
@@ -71,7 +64,7 @@ func processSnapshotsEqual(a, b domain.ProcessSnapshot) (fields []string)
 
 Health/extensions equality as in the spec. Sort process op names and `fields`.
 
-When `PreviewPending` builds the API `pending.processes` map: include names touched by process ops only (set names, unset names, apply result names, apply-removed baseline names). Scale-only names stay out of that map.
+When `PreviewPending` builds the API `pending.processes` map: include names touched by process ops only (set names, unset names, apply result names, apply-removed baseline names). Scale-only names stay out of that map. Scale overlay inside `applyProcessOpsToSnapshot` must skip names missing from the topology (push `UpdateProcessQuantity` 404s).
 
 ---
 
@@ -107,7 +100,7 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 
 - [ ] `TestPreviewPendingProcessSet` using existing helpers (`requireE2E`, `newAuthedClient`, `CreateProject`, `StageChanges`, `PreviewPending`).
 - [ ] Stage `{"type":"process.set","name":"worker","command":"run-worker"}`.
-- [ ] Assert preview err is nil, `HasPending`, and either a process add named worker or `Summary` contains `worker` and `Process`.
+- [ ] Assert preview err is nil, `HasPending`, and JSON `Diff.Process` contains `op=add`, `name=worker`, `to.command=run-worker`. Do not pass on `Summary` substring alone.
 - [ ] Verify with L1 (orchestrator): `mise exec -- make e2e-stub` from repo root **after** worktree changes are the ones under test. If Make always tests the main checkout, run e2e from the worktree directory (`cd .worktrees/feat-preview-process-fold` + `mise trust` once) so the feature binary is built.
 - [ ] Commit: `test(e2e): preview process.set does not 400`
 
@@ -121,7 +114,7 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 - Modify: `docs/superpowers/program/QUEUE.md` (status implementing / later pr-open)
 - Modify: this plan checkboxes + status
 
-- [ ] DOMAIN: pending preview folds `process.set`/`unset`/`apply` and diffs definition fields vs last deploy.
+- [ ] DOMAIN: pending preview folds `process.set`/`unset`/`apply` and diffs definition fields vs last deploy. Qualify ChangesetChange accumulation: config/image/scale are per-key last-write-wins; process definition types materialize (and preview) in push buckets; `scale` updates quantity on an existing process only (does not create a definition).
 - [ ] DX-VISION Active/next links this spec.
 - [ ] QUEUE Branch = `feat/preview-process-fold`; status `implementing` until PR, then `pr-open` + PR link.
 - [ ] Verify: docs-only; L0 still green.

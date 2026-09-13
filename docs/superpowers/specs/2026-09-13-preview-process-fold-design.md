@@ -25,11 +25,11 @@ launchpad diff
 **Success criteria (DoD):**
 
 1. `FoldChanges` accepts `process.set` / `process.unset` / `process.apply` and returns no error for valid payloads.
-2. Invalid process payloads (missing name, empty/invalid Procfile JSON) still return `ErrBadRequest` (400).
+2. Invalid process payloads still return `ErrBadRequest` (400): `process.set`/`unset` missing name; `process.apply` missing/empty `procfile` string, or Procfile **text** that fails `domain.ParseProcfile`.
 3. Other unknown change types still 400.
-4. `GET …/preview` (pending) after `process.set worker --command run-worker` returns 200, `has_pending=true`, and `diff.process` contains `op=add` (or `change` if worker already exists) with command `run-worker`.
+4. `GET …/preview` (pending) after `process.set worker --command run-worker` returns 200, `has_pending=true`, and `diff.process` contains an entry with `op=add` (or `change` if worker already exists), `name=worker`, and `to.command=run-worker`. Unit and e2e assert this JSON — not merely that `summary` contains the word `worker`.
 5. `launchpad diff` prints a `## Process` section for that case (CLI uses `summary` from the API).
-6. Preview shows command, quantity, expose, health, and `target_extensions` when those fields differ from the last succeeded deploy snapshot — not scale-only.
+6. Preview shows command, quantity, expose, health, and `target_extensions` when those fields differ from the last **deploy** snapshot (same baseline as today’s `PreviewPending`: latest deployment for the env, any status) — not scale-only.
 7. `process.unset` appears as `op=remove`; `process.apply` Procfile is a replace (names in the Procfile vs baseline: add/change; baseline names absent from the result: remove).
 8. Scale-type quantity changes stay under `diff.scale` / `## Scale` (existing tests keep passing).
 9. Unit tests cover fold, field-level process diffs, apply/unset, and PreviewPending with staged process.set.
@@ -115,8 +115,8 @@ No new entities. Changeset types `process.set` / `process.unset` / `process.appl
 **Invariants to add:**
 
 - Pending preview fold must accept every change type the changeset API can stage today (`config`, `shared_config`, `scale`, `image`, `process.set`, `process.unset`, `process.apply`).
-- Process definition preview applies ops in **push order**, not sequential last-write-wins: last `process.apply` (replace from Procfile), then every `process.set` in changeset order, then every `process.unset` in changeset order, then `scale` quantity overrides. This matches `materializeChanges` + `applyProcessOps` so preview is “what push will materialize.”
-- `BuildDiff` process ops compare against the last succeeded release `process_snapshot` for the ambient environment (empty snapshot if never deployed).
+- Process definition preview applies ops in **push order**, not sequential last-write-wins: last `process.apply` (replace from Procfile), then every `process.set` in changeset order, then every `process.unset` in changeset order, then `scale` quantity overrides **only on names that still exist** in that topology. This matches `materializeChanges` + `applyProcessOps` + `UpdateProcessQuantity` so preview is “what push will materialize.” `scale` never creates a process (push 404s via `UpdateProcessQuantity` if the name is missing). DOMAIN changeset LWW (“later changes to the same key override”) continues to apply to config/image/scale keys; process definition types are the documented exception (bucketed, same as push).
+- Process diffs compare against the last **deploy** `process_snapshot` for the ambient environment (empty snapshot if never deployed) — same `GetLatestReleaseForEnvironment` as today’s pending preview.
 
 ---
 
@@ -136,18 +136,20 @@ On each change, in list order:
 
 `FoldedPending.IsEmpty()` is true only when image, config, scales, and process ops (apply/sets/unsets) are all empty.
 
-### Apply onto baseline (PreviewPending / BuildDiff)
+### Apply onto baseline (pending preview only)
 
-Start from `baseline.ProcessSnapshot` (or empty map).
+`PreviewPending` computes an **effective topology** with a pure function, e.g. `applyProcessOpsToSnapshot(baseline.ProcessSnapshot, folded)`. It starts from `baseline.ProcessSnapshot` (or empty map). It reads **unexported fold ops**, not `FoldedPending.Processes`.
 
 1. **Apply (if present):** parse Procfile; result topology is **only** Procfile entries. Defaults match `ParseProcfile` + `applyProcessOps`: quantity 1 (release → 0), expose `http` for `web` else `none`, empty health/extensions. Baseline names not in the Procfile are gone (unless a later set re-adds them).
 2. **Sets (all, in order):** merge onto current topology. New process defaults match `upsertProcessSet`: quantity 1; expose `http` if name is `web` else `none`. Pointer fields overlay. Health `type=none` or empty type clears health (`nil`). `target_extensions` replaced when the payload key is non-nil (including empty map).
 3. **Unsets (all, in order):** delete name from topology. Preview does **not** enforce “cannot remove the last process.”
-4. **Scale map:** for each `pending.Scales[name]`, set that process’s quantity (create the process with set-defaults if missing, quantity from scale).
+4. **Scale map:** for each `pending.Scales[name]`, if that name **already exists** in the topology after steps 1–3, set its quantity. If the name is missing, **do nothing to the topology** (do not invent a process with set-defaults). The scale row still appears in `pending.scales` / `diff.scale` as today. Push would 404 on `UpdateProcessQuantity` for that name.
+
+`diff.process` for pending mode is `diffProcessSnapshots(baseline, effective, scaleNames)` — union of baseline names and this effective map. Untouched processes (e.g. `web` when only `worker` is set) are identical on both sides and omitted. `FoldedPending.Processes` is **not** the pending-side input to this union.
 
 ### `diff.process`
 
-Each process name in the union of baseline names and effective topology:
+Each process name in the union of **from** snapshots and **to** snapshots (pending: baseline vs effective topology; releases: from vs to snapshots; env: both latest snapshots):
 
 | Situation | `op` |
 |-----------|------|
@@ -171,10 +173,12 @@ Each process name in the union of baseline names and effective topology:
 
 ### Release and env preview
 
-Same `EffectiveDiff.process` schema.
+Same `EffectiveDiff.process` schema. **Do not** run `applyProcessOpsToSnapshot` here (there is no changeset).
 
-- `foldedFromRelease`: copy full `to` process snapshots into `pending.processes` (non-null) and keep existing `scales` from quantities. Treat as complete topology (`process_replace` internal flag true) so names only on `from` become removes.
-- `BuildSnapshotDiff` (env↔env): union of both snapshots’ process names; emit process ops for add/remove and non-suppressed field changes; keep existing scale quantity lines.
+- **Releases (`PreviewReleases`):** `diff.process = diffProcessSnapshots(from.ProcessSnapshot, to.ProcessSnapshot, scaleNames)` where `scaleNames` is every process name whose quantity is listed in `foldedFromRelease` scales (all names on `to`, matching today’s quantity copy). Quantity-only changes stay in `diff.scale` via the suppression rule. Command/expose/health/extensions and add/remove emit `diff.process`. `foldedFromRelease` may copy snapshots into `pending.processes` as a **complete non-null `to` map** for the API; that map is display of `to` topology, not a sparse overlay, and must not be fed to the pending apply-ops path.
+- **Environments (`PreviewEnvironments`):** `BuildSnapshotDiff` already unions config/scale; extend it to call the same `diffProcessSnapshots(from.ProcessSnapshot, to.ProcessSnapshot, scaleNames)` (scaleNames = names that already produce `diff.scale` quantity rows). Keep existing scale quantity lines.
+
+Internal `processReplace` is **not** required if release/env always pass two complete snapshots into `diffProcessSnapshots`. Prefer that over overloading `FoldedPending.Processes` as BuildDiff input.
 
 ### Summary text
 
@@ -204,7 +208,13 @@ One line per op. `change` may use one line per changed field (`~ name field: fro
 }
 ```
 
-`processes` keys are names **affected** by process ops (sets, unsets, apply result + apply removals). Values are the **effective** snapshot after fold; `null` means unset. Scale-only names stay in `scales`, not duplicated into `processes` unless a process op also touched that name.
+**Pending mode (`mode=pending`)** — `processes` is a **sparse overlay**, not the full topology and not BuildDiff’s input:
+
+- Keys = names **affected by process ops only** (set names, unset names, apply result names, plus baseline names removed by apply).
+- Values = snapshot from the effective topology after apply-ops; `null` means unset/removed.
+- Scale-only names stay in `scales` only. A scale row for an unknown process does **not** add a `processes` key.
+
+**Release mode** — `pending.processes` is the full non-null `to` process snapshot map (same completeness as today’s `pending.scales` copy of `to` quantities). Do not use `null` tombstones here; names only on `from` appear as `diff.process` `remove` via snapshot union.
 
 `has_pending` is true when fold is non-empty, including process-only staging.
 
@@ -236,13 +246,16 @@ type FoldedPending struct {
     Config            map[string]*string `json:"config,omitempty"`
     ConfigSensitivity map[string]string  `json:"config_sensitivity,omitempty"`
     Scales            map[string]int     `json:"scales,omitempty"`
-    Processes         map[string]*domain.ProcessSnapshot `json:"processes,omitempty"` // null value = unset; API
-    // unexported collection used during fold:
+    Processes         map[string]*domain.ProcessSnapshot `json:"processes,omitempty"` // API overlay only (see pending JSON rules)
+    // unexported collection used during fold (pending path only):
     // processApply *domain.ProcessApplyPayload
     // processSets  []domain.ProcessSetPayload
     // processUnsets []string
-    // processReplace bool // true after apply or foldedFromRelease
 }
+
+// Pending BuildDiff must not treat Processes as a complete topology.
+// Pending process diffs: diffProcessSnapshots(baseline, applyProcessOpsToSnapshot(...), scaleNames).
+// Release/env: diffProcessSnapshots(fromSnap, toSnap, scaleNames).
 
 type ProcessDiffOp struct {
     Op     string                   `json:"op"` // add | change | remove
@@ -273,16 +286,20 @@ None. Preview is control-plane read-only.
 ## Test strategy
 
 - **Unit (`internal/service/preview_test.go`):**
-  - `FoldChanges` on `process.set` / `unset` / `apply` does not error; last apply stored; unknown type still errors.
-  - `BuildDiff` add worker from `process.set` vs default web-only baseline.
-  - `BuildDiff` command/expose/health/extensions change on existing `web`.
-  - Quantity-only `scale` → `diff.scale` only (no process op).
-  - Quantity-only `process.set` → `diff.process` change with `fields=["quantity"]`.
-  - `process.unset` → remove; `process.apply` Procfile replace removes names not in the file.
-  - `PreviewPending` after `StageChanges` process.set + image (or process.set alone) returns 200-shaped result with process add and non-empty summary containing `## Process`.
+  - `TestFoldChangesAcceptsProcessTypes` — set/unset/apply succeed; unknown type errors.
+  - `TestFoldChangesInvalidProcessPayloads` — set/unset missing name; apply empty procfile; apply text that fails `ParseProcfile` → `ErrBadRequest`.
+  - `TestBuildDiffProcessSetAddsWorker` — baseline web-only; process.set worker command; `diff.process` `op=add` `name=worker` `to.command=run-worker`; **no** `remove` for `web`.
+  - `TestBuildDiffProcessFieldChanges` — command, expose, health, extensions on existing `web`.
+  - `TestBuildDiffScaleQuantityOnlyNoProcessOp` — scale web=3 → `diff.scale` only (no process op).
+  - `TestBuildDiffScaleUnknownProcessNoProcessAdd` — scale `worker=3` with baseline web-only (no process.set) → `diff.scale` for worker, **no** `diff.process` add.
+  - `TestBuildDiffProcessSetQuantityOnly` — process.set quantity without scale type → process `fields=["quantity"]`.
+  - `TestBuildDiffProcessUnsetAndApply` — unset remove; apply Procfile replace removes names not in the file (`diff.process` `op=remove`).
+  - `TestPreviewPendingProcessSet` — StageChanges process.set worker; assert JSON `diff.process` add + `to.command`; summary contains `## Process`.
+  - `TestPreviewReleasesProcessCommandChange` — two releases, command differs, quantity same → `diff.process` change `fields` includes `command`.
+  - `TestBuildSnapshotDiffProcessCommand` — env-style snapshot diff emits process command change (not scale-only).
   - Existing fold/diff/env tests still pass.
 - **Integration:** none beyond existing in-memory store PreviewPending test.
-- **e2e-stub:** create project, `StageChanges` `process.set` worker command, `PreviewPending` succeeds, `HasPending`, process add present (or summary contains worker). Does not require a successful deploy first (empty baseline → add).
+- **e2e-stub:** create project, `StageChanges` `{"type":"process.set","name":"worker","command":"run-worker"}`, `PreviewPending` succeeds, `HasPending`, and **JSON** `diff.process` has `op=add`, `name=worker`, `to.command=run-worker`. Do not pass L1 on summary substring alone. Empty baseline (no prior deploy) is fine.
 - **OpenAPI:** `make openapi-check` after schema update.
 - **Persona (CLI UX):** after L1, S1-style: `process set` then `launchpad diff` shows Process; write `docs/superpowers/program/feedback/2026-09-13-preview-process-fold.md` if dogfood runs. If e2e already covers the API, a short CLI invocation against the e2e API is enough.
 
@@ -290,7 +307,7 @@ None. Preview is control-plane read-only.
 
 ## Docs
 
-- `docs/DOMAIN.md` — Changeset workflow / preview: pending preview folds process.set/unset/apply and diffs definition fields vs last deploy.
+- `docs/DOMAIN.md` — (1) pending preview folds process.set/unset/apply and diffs definition fields vs last deploy; (2) qualify ChangesetChange accumulation: config/image/scale are per-key last-write-wins; `process.set`/`unset`/`apply` materialize (and preview) in push buckets — last apply, then all sets in order, then all unsets in order, then scale quantity on **existing** process names only.
 - `docs/openapi.yaml` — `Preview` properties for `pending.processes` and `diff.process`.
 - `docs/DX-VISION.md` — Active/next points at this spec while in PR; shipped row when merged.
 - `docs/superpowers/program/QUEUE.md` — `implementing` / `pr-open` with branch lease.
@@ -299,10 +316,12 @@ None. Preview is control-plane read-only.
 
 ## Open questions
 
-None — fold order matches existing push materialize; quantity suppression rule is specified; last-process unset remains a push-time 400.
+None — scale does not invent processes (matches push 404); pending `processes` overlay vs release full-snapshot maps are specified separately; process diffs for pending use apply-ops topology, not `FoldedPending.Processes` as a union input.
 
 ---
 
 ## Approval
 
 - [ ] Design reviewed and approved (ADM spec self-review / self-approve)
+
+First `adm-spec-review` (`pass=false`): blocker `scale-invents-process` — spec previously created a process from a scale row. Fixed: overlay quantity only on names present after apply/set/unset. Warnings addressed in this revision (pending vs release maps, JSON DoD, invalid-payload tests, last-deploy baseline, DOMAIN LWW qualifier).
