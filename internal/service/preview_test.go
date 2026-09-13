@@ -625,6 +625,61 @@ func TestPreviewReleasesProcessCommandChange(t *testing.T) {
 	}
 }
 
+func TestPreviewReleasesIdenticalCompare(t *testing.T) {
+	ctx, st, csSvc, releaseSvc := setupPreviewProject(t, "prev-rel-same")
+	r1, err := releaseSvc.CreateRelease(ctx, "prev-rel-same", "dev", CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "app:v1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	markDeploySucceeded(t, ctx, st, r1.Deployment)
+
+	prev, err := csSvc.PreviewReleases(ctx, "prev-rel-same", "dev", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prev.Diff.IsEmpty() {
+		t.Fatalf("expected empty diff: %+v", prev.Diff)
+	}
+	if prev.Summary == "" {
+		t.Fatal("identical release preview must not drop summary")
+	}
+	if !strings.Contains(prev.Summary, "No differences") {
+		t.Fatalf("summary: %q", prev.Summary)
+	}
+}
+
+func TestPreviewPendingScaleQuantityOnly(t *testing.T) {
+	ctx, st, csSvc, releaseSvc := setupPreviewProject(t, "prev-scale-only")
+	r1, err := releaseSvc.CreateRelease(ctx, "prev-scale-only", "dev", CreateReleaseInput{
+		Source: SourceInput{Type: "image", Image: "app:v1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	markDeploySucceeded(t, ctx, st, r1.Deployment)
+
+	qty := 3
+	if _, err := csSvc.StageChanges(ctx, "prev-scale-only", "dev", StageChangesInput{
+		Changes: []StageChangeInput{
+			{Type: "scale", Process: "web", Quantity: &qty},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prev, err := csSvc.PreviewPending(ctx, "prev-scale-only", "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prev.Diff.Process) != 0 {
+		t.Fatalf("process: %+v", prev.Diff.Process)
+	}
+	if len(prev.Diff.Scale) != 1 || prev.Diff.Scale[0].Process != "web" || prev.Diff.Scale[0].To != 3 {
+		t.Fatalf("scale: %+v", prev.Diff.Scale)
+	}
+}
+
 func TestBuildSnapshotDiffProcessCommand(t *testing.T) {
 	from := &domain.Release{
 		ProcessSnapshot: map[string]domain.ProcessSnapshot{
@@ -652,6 +707,34 @@ func TestBuildSnapshotDiffProcessCommand(t *testing.T) {
 	}
 	if !foundCmd {
 		t.Fatalf("fields: %v", op.Fields)
+	}
+}
+
+func TestBuildSnapshotDiffProcessRemoveKeepsScaleToZero(t *testing.T) {
+	from := &domain.Release{
+		ProcessSnapshot: map[string]domain.ProcessSnapshot{
+			"web":    {Quantity: 1, Expose: "http"},
+			"worker": {Command: "run-worker", Quantity: 1, Expose: "none"},
+		},
+	}
+	to := &domain.Release{
+		ProcessSnapshot: map[string]domain.ProcessSnapshot{
+			"web": {Quantity: 1, Expose: "http"},
+		},
+	}
+	diff := BuildSnapshotDiff(from, to)
+	foundScale := false
+	for _, s := range diff.Scale {
+		if s.Process == "worker" && s.To == 0 && s.From != nil && *s.From == 1 {
+			foundScale = true
+		}
+	}
+	if !foundScale {
+		t.Fatalf("want scale To:0 for worker: %+v", diff.Scale)
+	}
+	op := processOpByName(t, diff, "worker")
+	if op.Op != "remove" {
+		t.Fatalf("op: %+v", op)
 	}
 }
 

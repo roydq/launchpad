@@ -594,6 +594,10 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 	}
 	diff.Process = diffProcessSnapshots(fromSnap, toSnap, scaleNameSet(pending.Scales))
 	redacted := redactFoldedPending(pending)
+	summary := formatEffectiveDiff(diff)
+	if diff.IsEmpty() {
+		summary = "No differences\n"
+	}
 	return &PreviewResult{
 		Mode:            "releases",
 		FromVersion:     &fromV,
@@ -602,7 +606,7 @@ func (s *ChangesetService) PreviewReleases(ctx context.Context, projectName, env
 		MatchesBaseline: diff.IsEmpty(),
 		Pending:         &redacted,
 		Diff:            diff,
-		Summary:         formatEffectiveDiff(diff),
+		Summary:         summary,
 	}, nil
 }
 
