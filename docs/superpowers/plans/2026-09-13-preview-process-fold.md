@@ -1,6 +1,6 @@
 # Fold process mutations in pending preview — Implementation Plan
 
-> **Status: In Progress** — branch `feat/preview-process-fold`, started 2026-09-13
+> **Status: Completed** — ready for PR, branch `feat/preview-process-fold`
 
 > **For agentic workers:** Read `docs/FEATURE-DEVELOPMENT.md`. Use `/launchpad-dev` for verification. Commit after each task with the message specified below. Verify from the trusted repo root: `mise exec -- go test -C .worktrees/feat-preview-process-fold <pkgs>`. Do not edit other agents’ branches. Push `feat/preview-process-fold` after each accepted task.
 
@@ -129,8 +129,8 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 - [x] L1 e2e-stub as in Task 3 (`TestPreviewPendingProcessSet` PASS)
 - [x] Persona: S1-equivalent `process set` + `launchpad diff` if a stub API is up from e2e or local run; write `docs/superpowers/program/feedback/2026-09-13-preview-process-fold.md`. If dogfood cannot run, record `blocked` + reason — do not fake a pass.
 - [x] Scout: append one row to the **Open** table at the end of `docs/superpowers/program/IDEAS.md` (e.g. materialize process ops are bucketed not sequential — only if not already logged).
-- [ ] Plan status → Completed (ready for PR) when tasks 1–4 are checked.
-- [ ] Commit remaining docs/feedback if any: `docs: preview-process-fold closeout notes`
+- [x] Plan status → Completed (ready for PR) when tasks 1–4 are checked.
+- [x] Commit remaining docs/feedback if any: `docs: preview-process-fold closeout notes`
 
 ---
 
@@ -147,9 +147,9 @@ If `18080` is busy, harness picks another port unless `LAUNCHPAD_E2E_API_ADDR` i
 
 ## PR checklist
 
-- [ ] All tasks checked off
-- [ ] Plan status updated to Completed
+- [x] All tasks checked off
+- [x] Plan status updated to Completed
 - [ ] Spec linked in PR description
 - [ ] DoD bullets from the spec in the PR test plan
-- [ ] No `*.db`, `.env`, or `bin/` committed
+- [x] No `*.db`, `.env`, or `bin/` committed
 - [ ] QUEUE `pr-open` with PR link

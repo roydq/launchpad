@@ -575,6 +575,46 @@ func TestPreviewPendingProcessUnsetOverlay(t *testing.T) {
 	}
 }
 
+func TestPreviewPendingProcessApplyOverlay(t *testing.T) {
+	ctx, st, csSvc, _ := setupPreviewProject(t, "prev-proc-apply")
+	cmd := "run-worker"
+	if _, err := csSvc.StageChanges(ctx, "prev-proc-apply", "dev", StageChangesInput{
+		Changes: []StageChangeInput{
+			{Type: "process.set", Name: "worker", Command: &cmd},
+			{Type: "image", Image: "app:v1"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := csSvc.PushChangeset(ctx, "prev-proc-apply", "dev", PushChangesetInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	markDeploySucceeded(t, ctx, st, pushed.Deployment)
+
+	if _, err := csSvc.StageChanges(ctx, "prev-proc-apply", "dev", StageChangesInput{
+		Changes: []StageChangeInput{
+			{Type: "process.apply", Procfile: "web: serve\n"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prev, err := csSvc.PreviewPending(ctx, "prev-proc-apply", "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prev.Pending == nil {
+		t.Fatal("pending overlay missing")
+	}
+	if v, ok := prev.Pending.Processes["worker"]; !ok || v != nil {
+		t.Fatalf("want worker overlay nil tombstone, got ok=%v v=%+v map=%+v", ok, v, prev.Pending.Processes)
+	}
+	web, ok := prev.Pending.Processes["web"]
+	if !ok || web == nil || web.Command != "serve" {
+		t.Fatalf("web overlay: ok=%v %+v", ok, web)
+	}
+}
+
 func TestPreviewReleasesProcessCommandChange(t *testing.T) {
 	ctx, st, csSvc, releaseSvc := setupPreviewProject(t, "prev-rel-cmd")
 	r1, err := releaseSvc.CreateRelease(ctx, "prev-rel-cmd", "dev", CreateReleaseInput{
