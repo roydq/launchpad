@@ -235,7 +235,7 @@ Experimental while the project is early; protocol updated from real runs (2026-0
 
 | Work | Spec / queue |
 |------|----------------|
-| **Next** | QUEUE `preview-process-fold` (implementing, `feat/preview-process-fold`) — [spec](superpowers/specs/2026-09-13-preview-process-fold-design.md); then surfaces (docs site → TUI → dashboard) |
+| **Next** | QUEUE `preview-process-fold` ([PR #63](https://github.com/roydq/launchpad/pull/63)) — [spec](superpowers/specs/2026-09-13-preview-process-fold-design.md); then surfaces (docs site → TUI → dashboard) |
 | Shipped | MCP server — [PR #61](https://github.com/roydq/launchpad/pull/61) · `launchpad.yaml` v1 — [PR #59](https://github.com/roydq/launchpad/pull/59) |
 | Parked | OIDC, multi-service, bindings — [disposition](superpowers/program/feedback/2026-08-22-queue-disposition.md) |
 | Runtime target depth | **Shipped** slices 1–4 — [design](superpowers/specs/2026-07-20-runtime-target-depth-design.md) |

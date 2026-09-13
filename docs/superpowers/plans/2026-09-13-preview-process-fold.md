@@ -149,7 +149,7 @@ If `18080` is busy, harness picks another port unless `LAUNCHPAD_E2E_API_ADDR` i
 
 - [x] All tasks checked off
 - [x] Plan status updated to Completed
-- [ ] Spec linked in PR description
-- [ ] DoD bullets from the spec in the PR test plan
+- [x] Spec linked in PR description
+- [x] DoD bullets from the spec in the PR test plan
 - [x] No `*.db`, `.env`, or `bin/` committed
-- [ ] QUEUE `pr-open` with PR link
+- [x] QUEUE `pr-open` with PR link
