@@ -41,17 +41,17 @@ Domain, store, target, worker: N/A.
 - Modify: `internal/service/preview.go`
 - Modify: `internal/service/preview_test.go`
 
-- [ ] Add types and fold collection per spec (`ProcessDiffOp`; unexported apply/sets/unsets; `IsEmpty` includes process ops; `EffectiveDiff.Process` in `IsEmpty`). `FoldedPending.Processes` is API overlay only — not BuildDiff pending-side input.
-- [ ] `FoldChanges` handles `process.set` / `unset` / `apply` (validate name / Procfile via `domain.ParseProcfile`); unknown types still 400; invalid payloads 400.
-- [ ] `applyProcessOpsToSnapshot`: Procfile replace, then sets, then unsets, then scale quantity **only on names already in the topology**. Never invent a process from a scale row.
-- [ ] Pending `diff.process` = `diffProcessSnapshots(baseline, effective, scaleNames)` with quantity-suppression vs `diff.scale`. Untouched baseline processes (e.g. web when only worker is set) must not appear as remove.
-- [ ] Release/env: `diffProcessSnapshots(fromSnap, toSnap, scaleNames)` — do not run apply-ops. `foldedFromRelease` may copy full `to` snapshots into `pending.processes` for display only.
-- [ ] `formatEffectiveDiff` appends `## Process` lines; `redactFoldedPending` copies `Processes`.
-- [ ] `PreviewPending` populates sparse `pending.processes` for names touched by process ops only (null = unset). Scale-only / unknown-scale names stay out. Summary = `formatEffectiveDiff` on the combined diff (process included).
-- [ ] `PreviewReleases` attaches `diff.process` from snapshot compare; **Summary = `formatEffectiveDiff(diff)`** on that combined diff (not `FormatDiffSummary`).
-- [ ] Tests in `preview_test.go` (fail first if following TDD) — names and assertions as in the spec Test strategy (including `TestFoldChangesInvalidProcessPayloads`, `TestBuildDiffScaleUnknownProcessNoProcessAdd`, `TestPreviewPendingProcessUnsetOverlay`, `TestPreviewReleasesProcessCommandChange` with `## Process` in Summary, `TestBuildSnapshotDiffProcessCommand`, `TestProcessSnapshotEqualityAliases`). JSON asserts `op`/`name`/`to.command` and overlay keys; do not pass on summary substring alone.
-- [ ] Verify: `mise exec -- go test -C .worktrees/feat-preview-process-fold ./internal/service/...`
-- [ ] Commit: `feat(service): fold process mutations in pending preview`
+- [x] Add types and fold collection per spec (`ProcessDiffOp`; unexported apply/sets/unsets; `IsEmpty` includes process ops; `EffectiveDiff.Process` in `IsEmpty`). `FoldedPending.Processes` is API overlay only — not BuildDiff pending-side input.
+- [x] `FoldChanges` handles `process.set` / `unset` / `apply` (validate name / Procfile via `domain.ParseProcfile`); unknown types still 400; invalid payloads 400.
+- [x] `applyProcessOpsToSnapshot`: Procfile replace, then sets, then unsets, then scale quantity **only on names already in the topology**. Never invent a process from a scale row.
+- [x] Pending `diff.process` = `diffProcessSnapshots(baseline, effective, scaleNames)` with quantity-suppression vs `diff.scale`. Untouched baseline processes (e.g. web when only worker is set) must not appear as remove.
+- [x] Release/env: `diffProcessSnapshots(fromSnap, toSnap, scaleNames)` — do not run apply-ops. `foldedFromRelease` may copy full `to` snapshots into `pending.processes` for display only.
+- [x] `formatEffectiveDiff` appends `## Process` lines; `redactFoldedPending` copies `Processes`.
+- [x] `PreviewPending` populates sparse `pending.processes` for names touched by process ops only (null = unset). Scale-only / unknown-scale names stay out. Summary = `formatEffectiveDiff` on the combined diff (process included).
+- [x] `PreviewReleases` attaches `diff.process` from snapshot compare; **Summary = `formatEffectiveDiff(diff)`** on that combined diff (not `FormatDiffSummary`).
+- [x] Tests in `preview_test.go` (fail first if following TDD) — names and assertions as in the spec Test strategy (including `TestFoldChangesInvalidProcessPayloads`, `TestBuildDiffScaleUnknownProcessNoProcessAdd`, `TestPreviewPendingProcessUnsetOverlay`, `TestPreviewReleasesProcessCommandChange` with `## Process` in Summary, `TestBuildSnapshotDiffProcessCommand`, `TestProcessSnapshotEqualityAliases`). JSON asserts `op`/`name`/`to.command` and overlay keys; do not pass on summary substring alone.
+- [x] Verify: `mise exec -- go test -C .worktrees/feat-preview-process-fold ./internal/service/...`
+- [x] Commit: `feat(service): fold process mutations in pending preview`
 
 ### Apply-ops sketch (preview.go)
 
@@ -75,10 +75,10 @@ When `PreviewPending` builds the API `pending.processes` map: include names touc
 - Modify: `docs/openapi.yaml` (`components.schemas.Preview`)
 - Modify: `pkg/apiclient/client.go` (`Preview` struct)
 
-- [ ] Document `pending` (`image`, `config`, `config_sensitivity`, `scales`, `processes` additionalProperties nullable process snapshot) and `diff` (`image`, `config`, `scale`, `process` with `op`/`name`/`from`/`to`/`fields`).
-- [ ] Extend `apiclient.Preview` so e2e can assert `Diff.Process` and `Pending.Processes`. Keep existing fields. JSON names: `process` (array), `processes` (map).
-- [ ] Verify: `mise exec -- make -C .worktrees/feat-preview-process-fold openapi-check` and `mise exec -- go test -C .worktrees/feat-preview-process-fold ./pkg/apiclient/... ./internal/api/...`
-- [ ] Commit: `feat(api): document preview process diff contract`
+- [x] Document `pending` (`image`, `config`, `config_sensitivity`, `scales`, `processes` additionalProperties nullable process snapshot) and `diff` (`image`, `config`, `scale`, `process` with `op`/`name`/`from`/`to`/`fields`).
+- [x] Extend `apiclient.Preview` so e2e can assert `Diff.Process` and `Pending.Processes`. Keep existing fields. JSON names: `process` (array), `processes` (map).
+- [x] Verify: `mise exec -- make -C .worktrees/feat-preview-process-fold openapi-check` and `mise exec -- go test -C .worktrees/feat-preview-process-fold ./pkg/apiclient/... ./internal/api/...`
+- [x] Commit: `feat(api): document preview process diff contract`
 
 If `make openapi-check` is not valid with `-C`, run from worktree after `mise trust` **or** from repo root:
 
@@ -99,11 +99,11 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 **Files:**
 - Create: `test/e2e/preview_process_test.go` (`//go:build e2e`)
 
-- [ ] `TestPreviewPendingProcessSet` using existing helpers (`requireE2E`, `newAuthedClient`, `CreateProject`, `StageChanges`, `PreviewPending`).
-- [ ] Stage `{"type":"process.set","name":"worker","command":"run-worker"}`.
-- [ ] Assert preview err is nil, `HasPending`, and JSON `Diff.Process` contains `op=add`, `name=worker`, `to.command=run-worker`. Do not pass on `Summary` substring alone.
+- [x] `TestPreviewPendingProcessSet` using existing helpers (`requireE2E`, `newAuthedClient`, `CreateProject`, `StageChanges`, `PreviewPending`).
+- [x] Stage `{"type":"process.set","name":"worker","command":"run-worker"}`.
+- [x] Assert preview err is nil, `HasPending`, and JSON `Diff.Process` contains `op=add`, `name=worker`, `to.command=run-worker`. Do not pass on `Summary` substring alone.
 - [ ] Verify with L1 (orchestrator): `mise exec -- make e2e-stub` from repo root **after** worktree changes are the ones under test. If Make always tests the main checkout, run e2e from the worktree directory (`cd .worktrees/feat-preview-process-fold` + `mise trust` once) so the feature binary is built.
-- [ ] Commit: `test(e2e): preview process.set does not 400`
+- [x] Commit: `test(e2e): preview process.set does not 400`
 
 ---
 
@@ -115,8 +115,8 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 - Modify: `docs/superpowers/program/QUEUE.md` (status implementing / later pr-open)
 - Modify: this plan checkboxes + status
 
-- [ ] DOMAIN: pending preview folds `process.set`/`unset`/`apply` and diffs definition fields vs last deploy. Qualify ChangesetChange accumulation: config/image/scale are per-key last-write-wins; process definition types materialize (and preview) in push buckets; `scale` updates quantity on an existing process only (does not create a definition).
-- [ ] DX-VISION Active/next links this spec.
+- [x] DOMAIN: pending preview folds `process.set`/`unset`/`apply` and diffs definition fields vs last deploy. Qualify ChangesetChange accumulation: config/image/scale are per-key last-write-wins; process definition types materialize (and preview) in push buckets; `scale` updates quantity on an existing process only (does not create a definition).
+- [x] DX-VISION Active/next links this spec.
 - [ ] QUEUE Branch = `feat/preview-process-fold`; status `implementing` until PR, then `pr-open` + PR link.
 - [ ] Verify: docs-only; L0 still green.
 - [ ] Commit: `docs: preview folds process definition changes`
