@@ -102,7 +102,7 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 - [x] `TestPreviewPendingProcessSet` using existing helpers (`requireE2E`, `newAuthedClient`, `CreateProject`, `StageChanges`, `PreviewPending`).
 - [x] Stage `{"type":"process.set","name":"worker","command":"run-worker"}`.
 - [x] Assert preview err is nil, `HasPending`, and JSON `Diff.Process` contains `op=add`, `name=worker`, `to.command=run-worker`. Do not pass on `Summary` substring alone.
-- [ ] Verify with L1 (orchestrator): `mise exec -- make e2e-stub` from repo root **after** worktree changes are the ones under test. If Make always tests the main checkout, run e2e from the worktree directory (`cd .worktrees/feat-preview-process-fold` + `mise trust` once) so the feature binary is built.
+- [x] Verify with L1 (orchestrator): `mise exec -- make e2e-stub` from repo root **after** worktree changes are the ones under test. If Make always tests the main checkout, run e2e from the worktree directory (`cd .worktrees/feat-preview-process-fold` + `mise trust` once) so the feature binary is built.
 - [x] Commit: `test(e2e): preview process.set does not 400`
 
 ---
@@ -118,17 +118,17 @@ Canonical: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold 
 - [x] DOMAIN: pending preview folds `process.set`/`unset`/`apply` and diffs definition fields vs last deploy. Qualify ChangesetChange accumulation: config/image/scale are per-key last-write-wins; process definition types materialize (and preview) in push buckets; `scale` updates quantity on an existing process only (does not create a definition).
 - [x] DX-VISION Active/next links this spec.
 - [ ] QUEUE Branch = `feat/preview-process-fold`; status `implementing` until PR, then `pr-open` + PR link.
-- [ ] Verify: docs-only; L0 still green.
-- [ ] Commit: `docs: preview folds process definition changes`
+- [x] Verify: docs-only; L0 still green.
+- [x] Commit: `docs: preview folds process definition changes`
 
 ---
 
 ## Task 5: Cleanup, persona, scout
 
-- [ ] L0 from repo root: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold test && make -C .worktrees/feat-preview-process-fold build && go vet -C .worktrees/feat-preview-process-fold ./...'`
-- [ ] L1 e2e-stub as in Task 3
-- [ ] Persona: S1-equivalent `process set` + `launchpad diff` if a stub API is up from e2e or local run; write `docs/superpowers/program/feedback/2026-09-13-preview-process-fold.md`. If dogfood cannot run, record `blocked` + reason — do not fake a pass.
-- [ ] Scout: append one row to the **Open** table at the end of `docs/superpowers/program/IDEAS.md` (e.g. materialize process ops are bucketed not sequential — only if not already logged).
+- [x] L0 from repo root: `mise exec -- bash -lc 'make -C .worktrees/feat-preview-process-fold test && make -C .worktrees/feat-preview-process-fold build && go vet -C .worktrees/feat-preview-process-fold ./...'`
+- [x] L1 e2e-stub as in Task 3 (`TestPreviewPendingProcessSet` PASS)
+- [x] Persona: S1-equivalent `process set` + `launchpad diff` if a stub API is up from e2e or local run; write `docs/superpowers/program/feedback/2026-09-13-preview-process-fold.md`. If dogfood cannot run, record `blocked` + reason — do not fake a pass.
+- [x] Scout: append one row to the **Open** table at the end of `docs/superpowers/program/IDEAS.md` (e.g. materialize process ops are bucketed not sequential — only if not already logged).
 - [ ] Plan status → Completed (ready for PR) when tasks 1–4 are checked.
 - [ ] Commit remaining docs/feedback if any: `docs: preview-process-fold closeout notes`
 
