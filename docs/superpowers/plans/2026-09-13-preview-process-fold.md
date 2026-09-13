@@ -47,8 +47,9 @@ Domain, store, target, worker: N/A.
 - [ ] Pending `diff.process` = `diffProcessSnapshots(baseline, effective, scaleNames)` with quantity-suppression vs `diff.scale`. Untouched baseline processes (e.g. web when only worker is set) must not appear as remove.
 - [ ] Release/env: `diffProcessSnapshots(fromSnap, toSnap, scaleNames)` — do not run apply-ops. `foldedFromRelease` may copy full `to` snapshots into `pending.processes` for display only.
 - [ ] `formatEffectiveDiff` appends `## Process` lines; `redactFoldedPending` copies `Processes`.
-- [ ] `PreviewPending` populates sparse `pending.processes` for names touched by process ops only (null = unset). Scale-only / unknown-scale names stay out.
-- [ ] Tests in `preview_test.go` (fail first if following TDD) — names and assertions as in the spec Test strategy (including `TestFoldChangesInvalidProcessPayloads`, `TestBuildDiffScaleUnknownProcessNoProcessAdd`, `TestPreviewReleasesProcessCommandChange`, `TestBuildSnapshotDiffProcessCommand`). JSON asserts `op`/`name`/`to.command`; do not pass on summary substring alone.
+- [ ] `PreviewPending` populates sparse `pending.processes` for names touched by process ops only (null = unset). Scale-only / unknown-scale names stay out. Summary = `formatEffectiveDiff` on the combined diff (process included).
+- [ ] `PreviewReleases` attaches `diff.process` from snapshot compare; **Summary = `formatEffectiveDiff(diff)`** on that combined diff (not `FormatDiffSummary`).
+- [ ] Tests in `preview_test.go` (fail first if following TDD) — names and assertions as in the spec Test strategy (including `TestFoldChangesInvalidProcessPayloads`, `TestBuildDiffScaleUnknownProcessNoProcessAdd`, `TestPreviewPendingProcessUnsetOverlay`, `TestPreviewReleasesProcessCommandChange` with `## Process` in Summary, `TestBuildSnapshotDiffProcessCommand`, `TestProcessSnapshotEqualityAliases`). JSON asserts `op`/`name`/`to.command` and overlay keys; do not pass on summary substring alone.
 - [ ] Verify: `mise exec -- go test -C .worktrees/feat-preview-process-fold ./internal/service/...`
 - [ ] Commit: `feat(service): fold process mutations in pending preview`
 

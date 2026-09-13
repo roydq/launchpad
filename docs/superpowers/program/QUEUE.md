@@ -12,7 +12,7 @@ Statuses: `ready` → `designing` → `implementing` → `pr-open` → `shipped`
 
 | Pri | ID | Item | Track | Status | Spec / notes | Branch / PR |
 |-----|-----|------|-------|--------|--------------|-------------|
-| 1 | preview-process-fold | Fold `process.set`/`unset`/`apply` in pending preview | A | designing | Spec: `docs/superpowers/specs/2026-09-13-preview-process-fold-design.md`. Plan: `docs/superpowers/plans/2026-09-13-preview-process-fold.md`. DoD: FoldChanges accepts process.set/unset/apply (no 400); preview/diff show process definition deltas vs last deploy (command, quantity, expose, health, extensions — not scale-only); unit tests; OpenAPI if preview schema grows; L0; L1 e2e-stub. No new entities. | `feat/preview-process-fold` |
+| 1 | preview-process-fold | Fold `process.set`/`unset`/`apply` in pending preview | A | implementing | Spec: `docs/superpowers/specs/2026-09-13-preview-process-fold-design.md` (Approved self-approve — ADM). Plan: `docs/superpowers/plans/2026-09-13-preview-process-fold.md`. DoD: FoldChanges accepts process.set/unset/apply (no 400); preview/diff show process definition deltas vs last deploy (command, quantity, expose, health, extensions — not scale-only); unit tests; OpenAPI if preview schema grows; L0; L1 e2e-stub. No new entities. | `feat/preview-process-fold` |
 
 ## Parked (not ADM-ready)
 

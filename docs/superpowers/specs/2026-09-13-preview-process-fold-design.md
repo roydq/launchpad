@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft |
+| **Status** | Approved (self-approve — ADM) |
 | **Date** | 2026-09-13 |
 | **Domain spec** | `docs/DOMAIN.md` — ChangesetChange types; GET `/preview` |
 | **Scope** | Fold `process.set` / `process.unset` / `process.apply` in server-side preview so `GET /preview` and `launchpad diff` work after staging process definitions |
@@ -71,7 +71,7 @@ CLI skips the preview API when process changes are present and prints a local su
 
 ### In scope
 
-- `FoldChanges` / `FoldedPending` / `BuildDiff` / `BuildSnapshotDiff` / `FormatDiffSummary` / `PreviewPending` / `foldedFromRelease` in `internal/service/preview.go`
+- `FoldChanges` / `FoldedPending` / `BuildDiff` / `BuildSnapshotDiff` / `FormatDiffSummary` / `formatEffectiveDiff` / `PreviewPending` / `PreviewReleases` / `PreviewEnvironments` / `foldedFromRelease` in `internal/service/preview.go`
 - `pending.processes` and `diff.process` on the preview JSON
 - OpenAPI `Preview` schema
 - `pkg/apiclient` Preview structs (e2e + typed clients)
@@ -115,7 +115,7 @@ No new entities. Changeset types `process.set` / `process.unset` / `process.appl
 **Invariants to add:**
 
 - Pending preview fold must accept every change type the changeset API can stage today (`config`, `shared_config`, `scale`, `image`, `process.set`, `process.unset`, `process.apply`).
-- Process definition preview applies ops in **push order**, not sequential last-write-wins: last `process.apply` (replace from Procfile), then every `process.set` in changeset order, then every `process.unset` in changeset order, then `scale` quantity overrides **only on names that still exist** in that topology. This matches `materializeChanges` + `applyProcessOps` + `UpdateProcessQuantity` so preview is “what push will materialize.” `scale` never creates a process (push 404s via `UpdateProcessQuantity` if the name is missing). DOMAIN changeset LWW (“later changes to the same key override”) continues to apply to config/image/scale keys; process definition types are the documented exception (bucketed, same as push).
+- Process definition preview applies ops in **push buckets** (not sequential last-write-wins): last `process.apply` (replace from Procfile), then every `process.set` in changeset order, then every `process.unset` in changeset order, then `scale` quantity overrides **only on names that still exist** in that topology. Those buckets match `materializeChanges` + `applyProcessOps` + `UpdateProcessQuantity`. Preview **diffs that result against the last-deploy `process_snapshot`** (empty if never deployed) — it is not a guarantee of bit-identical push materialization (push writes the live `processes` table, still 400s on last-process unset, and live-table drift is out of scope). `scale` never creates a process (push 404s via `UpdateProcessQuantity` if the name is missing). DOMAIN changeset LWW (“later changes to the same key override”) continues to apply to config/image/scale keys; process definition types are the documented exception (bucketed, same as push).
 - Process diffs compare against the last **deploy** `process_snapshot` for the ambient environment (empty snapshot if never deployed) — same `GetLatestReleaseForEnvironment` as today’s pending preview.
 
 ---
@@ -164,7 +164,8 @@ Each process name in the union of **from** snapshots and **to** snapshots (pendi
 
 - `diff.scale` continues to list `ChangeTypeScale` (and snapshot quantity-only compares) exactly as today.
 - Omit a `change` process op when `fields == ["quantity"]` **and** that process already has a `diff.scale` row. Quantity-only `process.set` (not in `pending.scales`) **keeps** the process op.
-- `add` / `remove` always emit process ops (quantity lives on the snapshot objects).
+- `add` / `remove` always emit process ops (quantity lives on the snapshot objects). Keep **both** `## Scale` and `## Process` when an add/remove also has a scale row (env/release snapshot union). Do not drop the process add/remove to satisfy “no double-count.”
+- Env snapshot diffs already encode from-only names as `diff.scale` `To:0` (quantity 0 still means “defined, not deployed” in DOMAIN). That line **stays**. A process `remove` for the same name is additive dual encoding — document in tests, do not suppress `To:0`.
 
 ### Health and extensions equality
 
@@ -175,7 +176,7 @@ Each process name in the union of **from** snapshots and **to** snapshots (pendi
 
 Same `EffectiveDiff.process` schema. **Do not** run `applyProcessOpsToSnapshot` here (there is no changeset).
 
-- **Releases (`PreviewReleases`):** `diff.process = diffProcessSnapshots(from.ProcessSnapshot, to.ProcessSnapshot, scaleNames)` where `scaleNames` is every process name whose quantity is listed in `foldedFromRelease` scales (all names on `to`, matching today’s quantity copy). Quantity-only changes stay in `diff.scale` via the suppression rule. Command/expose/health/extensions and add/remove emit `diff.process`. `foldedFromRelease` may copy snapshots into `pending.processes` as a **complete non-null `to` map** for the API; that map is display of `to` topology, not a sparse overlay, and must not be fed to the pending apply-ops path.
+- **Releases (`PreviewReleases`):** Build image/config/scale as today (`BuildDiff(foldedFromRelease(to), from)`). Then set `diff.process = diffProcessSnapshots(from.ProcessSnapshot, to.ProcessSnapshot, scaleNames)` where `scaleNames` is every process name in `foldedFromRelease` scales (all names on `to`). Quantity-only changes stay in `diff.scale` via the suppression rule. Command/expose/health/extensions and add/remove emit `diff.process`. Set `Summary` from `formatEffectiveDiff(diff)` on **that combined** `EffectiveDiff` — do **not** call `FormatDiffSummary` (it re-runs `BuildDiff` and would drop process-only command changes, so JSON and CLI `--from-release` would disagree). `foldedFromRelease` may copy snapshots into `pending.processes` as a **complete non-null `to` map** for the API; that map is display of `to` topology, not a sparse overlay, and must not be fed to the pending apply-ops path.
 - **Environments (`PreviewEnvironments`):** `BuildSnapshotDiff` already unions config/scale; extend it to call the same `diffProcessSnapshots(from.ProcessSnapshot, to.ProcessSnapshot, scaleNames)` (scaleNames = names that already produce `diff.scale` quantity rows). Keep existing scale quantity lines.
 
 Internal `processReplace` is **not** required if release/env always pass two complete snapshots into `diffProcessSnapshots`. Prefer that over overloading `FoldedPending.Processes` as BuildDiff input.
@@ -294,9 +295,11 @@ None. Preview is control-plane read-only.
   - `TestBuildDiffScaleUnknownProcessNoProcessAdd` — scale `worker=3` with baseline web-only (no process.set) → `diff.scale` for worker, **no** `diff.process` add.
   - `TestBuildDiffProcessSetQuantityOnly` — process.set quantity without scale type → process `fields=["quantity"]`.
   - `TestBuildDiffProcessUnsetAndApply` — unset remove; apply Procfile replace removes names not in the file (`diff.process` `op=remove`).
-  - `TestPreviewPendingProcessSet` — StageChanges process.set worker; assert JSON `diff.process` add + `to.command`; summary contains `## Process`.
-  - `TestPreviewReleasesProcessCommandChange` — two releases, command differs, quantity same → `diff.process` change `fields` includes `command`.
+  - `TestPreviewPendingProcessSet` — StageChanges process.set worker; assert JSON `diff.process` add + `to.command`; summary contains `## Process`; assert `pending.processes["worker"].command == run-worker` (sparse overlay).
+  - `TestPreviewPendingProcessUnsetOverlay` — unset a baseline process → `pending.processes[name] == nil` and `diff.process` `op=remove`.
+  - `TestPreviewReleasesProcessCommandChange` — two releases, command differs, quantity same → `diff.process` change `fields` includes `command`; **`Summary` contains `## Process`** (not “no effective delta”).
   - `TestBuildSnapshotDiffProcessCommand` — env-style snapshot diff emits process command change (not scale-only).
+  - `TestProcessSnapshotEqualityAliases` — health `nil` vs `{type:none}` / empty type omit; extensions `nil` vs empty map omit.
   - Existing fold/diff/env tests still pass.
 - **Integration:** none beyond existing in-memory store PreviewPending test.
 - **e2e-stub:** create project, `StageChanges` `{"type":"process.set","name":"worker","command":"run-worker"}`, `PreviewPending` succeeds, `HasPending`, and **JSON** `diff.process` has `op=add`, `name=worker`, `to.command=run-worker`. Do not pass L1 on summary substring alone. Empty baseline (no prior deploy) is fine.
@@ -322,6 +325,16 @@ None — scale does not invent processes (matches push 404); pending `processes`
 
 ## Approval
 
-- [ ] Design reviewed and approved (ADM spec self-review / self-approve)
+- [x] Design reviewed and approved (self-approve — ADM)
 
-First `adm-spec-review` (`pass=false`): blocker `scale-invents-process` — spec previously created a process from a scale row. Fixed: overlay quantity only on names present after apply/set/unset. Warnings addressed in this revision (pending vs release maps, JSON DoD, invalid-payload tests, last-deploy baseline, DOMAIN LWW qualifier).
+First `adm-spec-review` (`pass=false`): blocker `scale-invents-process`. Fixed before re-review.
+
+Second `adm-spec-review` (`pass=true`, 0 blockers, 7 warnings). Warnings pinned as implementer rules:
+
+1. **Release summary** — `PreviewReleases.Summary` = `formatEffectiveDiff` on the combined diff (includes `diff.process`). Never `FormatDiffSummary` → `BuildDiff` for that path.
+2. **Add/remove dual sections** — keep both `## Scale` and `## Process` when both rows exist; do not drop process add/remove.
+3. **Overlay asserts** — unit-test `pending.processes` keys/nulls; `redactFoldedPending` copies `Processes`.
+4. **DOMAIN wording** — same buckets, **diffed vs last-deploy snapshot**, not push-materialization equality.
+5. **Env scale To:0** — keep existing `diff.scale` To:0 for from-only names; process `remove` is additive dual encoding.
+6. **Overlay untested** — covered by pin 3 tests.
+7. **Equality omit** — `TestProcessSnapshotEqualityAliases` for health/extensions aliases.
